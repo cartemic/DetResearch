@@ -85,7 +85,7 @@ def _velocity_calculator(
         Array of inter-diode velocities in m/s, calculated using the
         maximum gradient.
     """
-    diode_dataframe = _load_diode_data(
+    diode_dataframe = load_diode_data(
         diode_data_file,
         apply_lowpass
     )
@@ -116,7 +116,7 @@ def _velocity_calculator(
         return calculated_velocity
 
 
-def _load_diode_data(
+def load_diode_data(
         diode_data_file,
         apply_lowpass
 ):

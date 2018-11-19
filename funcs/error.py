@@ -12,6 +12,7 @@ CREATED BY:
 
 import numpy as np
 import warnings
+from typing import Tuple, Dict, Union, Iterable
 
 
 class ErrorAnalysis:
