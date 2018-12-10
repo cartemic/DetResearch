@@ -1,8 +1,16 @@
-from matplotlib import pyplot as plt
-import palettable                           # remove when externalized
+# -*- coding: utf-8 -*-
+"""
+PURPOSE:
+    Generates a pretty plot for use in tube design documentation
 
-# defines a figure function, which should be externalized later to ensure
-# uniformity across all plots
+CREATED BY:
+    Mick Carter
+    Oregon State University
+    CIRE and Propulsion Lab
+    cartemic@oregonstate.edu
+"""
+from matplotlib import pyplot as plt
+import palettable
 
 
 def figure(
@@ -56,3 +64,4 @@ def figure(
     plt.tight_layout()
 
     return [fig, axes]
+

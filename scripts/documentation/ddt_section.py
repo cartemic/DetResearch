@@ -1,4 +1,23 @@
-# calculate the diameter of a Shchelkin spiral (part of tube documentation)
+# -*- coding: utf-8 -*-
+"""
+PURPOSE:
+    This script performs the following tasks as part of the tube documentation:
+       - calculates diameter for a Shchelkin spiral to achieve a desired
+       blockage ratio (too big for practical manufacture)
+       - calculates the diameter required for OSU-style blockage apparatus
+       - rounds OSU blockage diameter to the nearest 1/4 inch (for washer
+        availability)
+       - calculates the resulting blockage ratio
+       - uses this blockage ratio to calculate run-up distances for methane- and
+       propane-nitrous mixtures over a range of equivalence ratios
+       - saves a plot of run-up distance vs. blockage ratio as .pdf
+
+CREATED BY:
+    Mick Carter
+    Oregon State University
+    CIRE and Propulsion Lab
+    cartemic@oregonstate.edu
+"""
 import beaverdet as bd
 import pint
 import numpy as np
@@ -23,7 +42,7 @@ equivs = np.linspace(
     0.4,
     1.0,
     20
-)                     # desired equivalence ratios
+)                                           # desired equivalence ratios
 fuels = ['CH4', 'C3H8']                     # fuels to test with
 fuel_names = {
     'CH4': 'Methane',
@@ -67,8 +86,8 @@ actual_br = num_struts * (washer_diam.to('m') / tube_diam.to('m')).magnitude**2
 print(
     'Actual blockage ratio: {:.2f}%'.format(
         actual_br * 100
-                                            )
-      )
+    )
+)
 
 # calculate run-up distance as a function of equivalence for each mixture
 axis_color = '#333333'
