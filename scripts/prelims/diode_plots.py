@@ -41,7 +41,7 @@ def figure(
 
     # format axes
     axes.tick_params(labelsize=axis_font_size)
-    axes.set_color_cycle(bmap.mpl_colors)
+    axes.set_prop_cycle('color', bmap.mpl_colors)
 
     # set labels
     plt.xlabel(xlabel,
