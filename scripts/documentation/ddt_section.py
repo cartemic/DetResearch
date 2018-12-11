@@ -22,7 +22,7 @@ import beaverdet as bd
 import pint
 import numpy as np
 import cantera as ct
-from matplotlib import pyplot as plt        # externalize plotting later!
+from matplotlib import pyplot as plt
 from plotting import figure
 
 # initialize unit registry

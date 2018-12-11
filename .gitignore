@@ -162,7 +162,7 @@ $RECYCLE.BIN/
 *.aux
 *.bcf
 *.nlo
-*.pdf
+# *.pdf
 *.run.xml
 *.synctex.gz
 *.toc
