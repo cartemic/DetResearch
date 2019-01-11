@@ -17,6 +17,7 @@ from tkinter import filedialog as fd
 from tkinter import Tk
 import scipy.signal as signal
 
+
 def find_diode_data(
         data_directory='',
         base_file_name='diodes.tdms'
@@ -142,8 +143,8 @@ def load_diode_data(
         if 'diode' not in key.replace('diodes', '').lower():
             data = data.drop(key, axis=1)
 
-        if apply_lowpass:
-            data = data.apply(_diode_filter)
+    if apply_lowpass:
+        data = data.apply(_diode_filter)
 
     return data
 
