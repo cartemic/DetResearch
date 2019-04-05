@@ -22,7 +22,7 @@ import warnings
 ureg = pint.UnitRegistry()
 quant = ureg.Quantity
 
-mech = 'gri30.cti'
+mechanisms = ['gri30-x.cti', 'mevel2015.cti']
 
 
 def quantity_remover(my_thing):
@@ -124,7 +124,7 @@ def run_studies(
         #     '#333333'
         # )
 
-        for current_fuel in fuels:
+        for current_fuel, mech in zip(fuels, mechanisms):
             equivalence = 1
             gas = ct.Solution(mech)
             gas.set_equivalence_ratio(
@@ -134,7 +134,9 @@ def run_studies(
             )
             species = gas.mole_fraction_dict()
 
+            print(current_fuel)
             for temp in initial_temps:
+                print(temp)
                 my_tube = bd.tube.Tube(
                     material,
                     schedule,
@@ -167,7 +169,7 @@ def run_studies(
         pressures['sizes'] = pipe_sizes
 
         data_out = quantity_remover(pressures)
-        with open('pipe_size.json', 'w') as file:
+        with open('temperature.json', 'w') as file:
             json.dump(data_out, file)
 
     if 'equiv' in studies:
@@ -187,10 +189,12 @@ def run_studies(
         #     '#333333'
         # )
 
-        for current_fuel in fuels:
+        for current_fuel, mech in zip(fuels, mechanisms):
             temp = quant(20, 'degC')
+            print(current_fuel)
 
             for phi in equivalence_ratios:
+                print(phi)
                 # build gas object
                 gas = ct.Solution(mech)
                 gas.set_equivalence_ratio(
@@ -233,7 +237,7 @@ def run_studies(
         pressures['sizes'] = pipe_sizes
 
         data_out = quantity_remover(pressures)
-        with open('pipe_size.json', 'w') as file:
+        with open('equivalence.json', 'w') as file:
             json.dump(data_out, file)
 
     if 'size' in studies:
@@ -253,7 +257,7 @@ def run_studies(
         #     '#333333'
         # )
 
-        for current_fuel in fuels:
+        for current_fuel, mech in zip(fuels, mechanisms):
             temp = quant(20, 'degC')
 
             for size in pipe_sizes:
@@ -320,7 +324,7 @@ def run_studies(
         #     '#333333'
         # )
 
-        for current_fuel in fuels:
+        for current_fuel, mech in zip(fuels, mechanisms):
             temp = quant(20, 'degC')
 
             for schedule in pipe_schedules:
@@ -366,15 +370,15 @@ def run_studies(
         pressures['sizes'] = pipe_sizes
 
         data_out = quantity_remover(pressures)
-        with open('pipe_size.json', 'w') as file:
+        with open('schedule.json', 'w') as file:
             json.dump(data_out, file)
 
 
 if __name__ == '__main__':
     # set varied properties
-    fuel_list = ['CH4', 'C3H8']
-    temps = np.linspace(0.1, 200, 20)
-    equivs = np.linspace(0.4, 1.0, 20)
+    fuel_list = ['C3H8']  # ['CH4', 'C3H8']
+    temps = np.linspace(10, 200, 10)
+    equivs = [0.4, 0.7, 1.0]  # np.linspace(0.4, 1.0, 10)
     size_list = ['1', '2', '3', '4', '5', '6']
     sched_list = ['5', '10', '40', '80', '160', 'XXH']
 
@@ -382,13 +386,13 @@ if __name__ == '__main__':
     ox = 'N2O'
 
     # pick studies to run
-    # desired_studies = ['size']
+    desired_studies = ['temp']
     run_studies(
         fuel_list,
         ox,
         temps,
         equivs,
         size_list,
-        sched_list  #,
-        # desired_studies
+        sched_list,
+        desired_studies
     )
