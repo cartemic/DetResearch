@@ -51,6 +51,40 @@ def _check_output_filetype(fname, extension):
     return fname
 
 
+def _enforce_species_list(species):
+    if isinstance(species, str):
+        species = [species.upper()]
+    elif hasattr(species, '__iter__'):
+        species = [s.upper() for s in species]
+    else:
+        raise TypeError('Bad species type: %s' % type(species))
+
+    return species
+
+
+def _get_file_locations(mech, out_file):
+    mech_dir = os.path.join(
+        os.path.split(ct.__file__)[0],
+        'data'
+    )
+    in_loc = os.path.join(
+        mech_dir,
+        mech
+    )
+    out_loc = os.path.join(
+        mech_dir,
+        out_file
+    )
+
+    if not os.path.exists(in_loc):
+        raise FileNotFoundError(
+            '%s not found in cantera data directory' % mech
+        )
+
+    return[mech_dir, in_loc, out_loc]
+
+
+
 def get_species_reactions(gas_object, species):
     """
     Finds all reactions in a cantera gas object containing the desired species
@@ -86,7 +120,7 @@ def get_species_reactions(gas_object, species):
     return reaction_keys
 
 
-def make_inert_cti(mech, species, out_name):
+def make_inert_cti(mech, species, out_file):
     """
     Parses a .cti mechanism file to find the location of desired chemical
     species, turns them inert, and saves the inert mechanism with the desired
@@ -95,9 +129,9 @@ def make_inert_cti(mech, species, out_name):
     ----------
     mech : str
         name of mechanism to search, e.g. `gri30.cti`
-    species : str or iterable
+    species : str or iterable[str]
         specie(s) to search for
-    out_name : str
+    out_file : str
         name of output file, e.g. `gri30_inert_co.cti
 
     Returns
@@ -106,26 +140,11 @@ def make_inert_cti(mech, species, out_name):
     """
     file_type = '.cti'
     _check_input_filetype(mech, file_type)
-    out_name = _check_output_filetype(out_name, file_type)
+    out_file = _check_output_filetype(out_file, file_type)
+    species = _enforce_species_list(species)
+    mech_dir, in_loc, out_loc = _get_file_locations(mech, out_file)
 
-    if isinstance(species, str):
-        # we are gonna treat this like a list
-        species = [species.upper()]
-    else:
-        # make sure everything is upper case to make cantera happy
-        species = [s.upper() for s in species]
-
-    mech_loc = os.path.join(
-        os.path.split(ct.__file__)[0],
-        'data',
-        mech
-    )
-    if not os.path.exists(mech_loc):
-        raise FileNotFoundError(
-            '%s not found in cantera data directory' % mech
-        )
-
-    with open(mech_loc, 'r') as f:
+    with open(in_loc, 'r') as f:
         data_in = f.read()
 
     data_header_length = 97
@@ -175,7 +194,7 @@ def make_inert_cti(mech, species, out_name):
                 print(new_rxn)
 
 
-def make_inert_xml(mech, species, out_name):
+def make_inert_xml(mech, species, out_file):
     """
     Parses an .xml mechanism file to find the location of desired chemical
     species so they can be turned off
@@ -185,19 +204,22 @@ def make_inert_xml(mech, species, out_name):
         name of mechanism to search, e.g. `gri30.xml`
     species : str or iterable
         specie(s) to search for
-    out_name : str
+    out_file : str
         name of output file, e.g. `gri30_inert_co.xml
 
     Returns
     -------
 
     """
-    # todo: need soup!
     file_type = '.xml'
     _check_input_filetype(mech, file_type)
-    out_name = _check_output_filetype(out_name, file_type)
+    out_file = _check_output_filetype(out_file, file_type)
+    species = _enforce_species_list(species)
+    mech_dir, in_loc, out_loc = _get_file_locations(mech, out_file)
+
+    # todo: need soup!
     pass
 
 
 if __name__ == '__main__':
-    find_in_cti('air.cti', 'N2')
+    make_inert_cti('air.cti', 'N2')
