@@ -23,7 +23,7 @@ import pint
 import numpy as np
 import cantera as ct
 from matplotlib import pyplot as plt
-from plotting import figure
+from .plotting import figure
 
 # initialize unit registry
 ureg = pint.UnitRegistry()
