@@ -147,8 +147,9 @@ def make_inert_cti(mech, species, out_file):
         data_in = f.read()
 
     data_header_length = 97
-    start_loc = data_in.find('#  Reaction')
-    start_loc = data_in[start_loc + data_header_length:].find('# Reaction') + \
+    rxn_indicator = '#  Reaction'
+    start_loc = data_in.find(rxn_indicator)
+    start_loc = data_in[start_loc + data_header_length:].find(rxn_indicator) + \
         start_loc + data_header_length + 1
     header = data_in[:start_loc]
     to_scan = data_in[start_loc:]
@@ -194,39 +195,49 @@ def make_inert_xml(mech, species, out_file):
     species = _enforce_species_list(species)
     mech_dir, in_loc, out_loc = _get_file_locations(mech, out_file)
 
-    # todo: need soup!
-    pass
+    with open(in_loc, 'r') as f:
+        data_in = f.read()
+
+    indicator = '<reactionData id="reaction_data">'
+    start_loc = data_in.find(indicator) + len(indicator) + 1
+    header = data_in[:start_loc]
+    to_scan = data_in[start_loc:]
+    rxn_indicator = '<!-- reaction'
+    scanned = to_scan.split(rxn_indicator)[1:]
+    print(scanned[0])
 
 
 if __name__ == '__main__':
     # build a test mechanism with inert oxygen
-    base_mech = 'gri30.cti'
-    test_mech = 'test_mech.cti'
-    inert_species = ['O2']
-    init_temp = 1000
-    init_press = ct.one_atm
-    mechs = [base_mech, test_mech]
-    _, _, cti_out = _get_file_locations(base_mech, test_mech)
+    # base_mech = 'gri30.cti'
+    # test_mech = 'test_mech.cti'
+    # inert_species = ['O2']
+    # init_temp = 1000
+    # init_press = ct.one_atm
+    # mechs = [base_mech, test_mech]
+    # _, _, cti_out = _get_file_locations(base_mech, test_mech)
+    #
+    # make_inert_cti(base_mech, inert_species, test_mech)
+    # gases = [ct.Solution(m) for m in mechs]
+    # for idx, g in enumerate(gases):
+    #     g.set_equivalence_ratio(1, 'H2', 'O2')
+    #     init_mf = g.mole_fraction_dict()['O2']
+    #     g.TP = init_temp, init_press
+    #     r = ct.Reactor(g)
+    #     n = ct.ReactorNet([r])
+    #     n.advance_to_steady_state()
+    #     print(mechs[idx])
+    #     print('-'*len(mechs[idx]))
+    #     print('# reactions:     {:1.0f}'.format(len(g.reaction_equations())))
+    #     print('final temp:      {:1.0f} K'.format(r.thermo.TP[0]))
+    #     print('final pressure:  {:1.0f} atm'.format(r.thermo.TP[1]/ct.one_atm))
+    #     print('Y_02 init/final: {:0.3f} / {:0.3f}'.format(
+    #         init_mf,
+    #         r.thermo.mole_fraction_dict()['O2']
+    #     ))
+    #     print()
+    #
+    # # clean up
+    # os.remove(cti_out)
 
-    make_inert_cti(base_mech, inert_species, test_mech)
-    gases = [ct.Solution(m) for m in mechs]
-    for idx, g in enumerate(gases):
-        g.set_equivalence_ratio(1, 'H2', 'O2')
-        init_mf = g.mole_fraction_dict()['O2']
-        g.TP = init_temp, init_press
-        r = ct.Reactor(g)
-        n = ct.ReactorNet([r])
-        n.advance_to_steady_state()
-        print(mechs[idx])
-        print('-'*len(mechs[idx]))
-        print('# reactions:     {:1.0f}'.format(len(g.reaction_equations())))
-        print('final temp:      {:1.0f} K'.format(r.thermo.TP[0]))
-        print('final pressure:  {:1.0f} atm'.format(r.thermo.TP[1]/ct.one_atm))
-        print('Y_02 init/final: {:0.3f} / {:0.3f}'.format(
-            init_mf,
-            r.thermo.mole_fraction_dict()['O2']
-        ))
-        print()
-
-    # clean up
-    os.remove(cti_out)
+    make_inert_xml('air.xml', '', '')
