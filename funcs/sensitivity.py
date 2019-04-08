@@ -35,7 +35,7 @@ def _find_specie_in_str(specie, equation_str):
     check_length = len(specie) + 1
     found_specie = ' %s ' % specie in equation_str \
         or equation_str[:check_length] == '%s ' % specie \
-        or equation_str[-check_length:] == ' %s' % specie
+        or equation_str[-check_length:] == ' %s' % specie \
 
     return found_specie
 
@@ -82,7 +82,6 @@ def _get_file_locations(mech, out_file):
         )
 
     return[mech_dir, in_loc, out_loc]
-
 
 
 def get_species_reactions(gas_object, species):
@@ -154,44 +153,22 @@ def make_inert_cti(mech, species, out_file):
     header = data_in[:start_loc]
     to_scan = data_in[start_loc:]
     scanned = to_scan.split('#')[1:]
+    new_rxns = ''
 
     for loc, rxn in enumerate(scanned):
+        # if any of the desired species are in the current reaction, delete
+        # it from the mechanism
         rxn = '#' + rxn
-        if any([_find_specie_in_str(s, rxn) for s in species]):
-            if 'falloff' in rxn:
-                # todo: figure out falloff reactions
-                rxn_data = []
-                pass
-            else:
-                # this search method will work for three body and regular
-                # reactions. Three body needs its own sub-case to handle the
-                # efficiency term.
-                rxn_data_loc = [
-                    rxn.find('[')+1,
-                    rxn.find(']')
-                ]
-                rxn_start = rxn[:rxn_data_loc[0]]
-                rxn_end = rxn[rxn_data_loc[1]:]
-                rxn_data = [
-                    item for item
-                    in rxn[rxn_data_loc[0]: rxn_data_loc[1]].split(',')
-                ]
-                # reaction data is in the form [A, b, E]
-                # todo: zero all three?
-                rxn_data[0] = ' 0'
-                if 'three_body' in rxn:
-                    # todo: figure out three body reactions
-                    pass
+        eqn_start = rxn.find('\"')+1
+        eqn_end = rxn[eqn_start:].find('\"') + eqn_start
+        eqn = rxn[eqn_start:eqn_end]
+        if not any([_find_specie_in_str(s, eqn) for s in species]):
+            new_rxns += rxn
 
-            if loc == 1:
-                print(rxn)
-                print()
-                new_rxn = '{0:s}{1:s},{2:s},{3:s}{4:s}'.format(
-                    rxn_start,
-                    *rxn_data,
-                    rxn_end
-                )
-                print(new_rxn)
+    new_mech = header + '\n\n' + new_rxns
+    with open(out_loc, 'w') as f:
+        f.writelines(new_mech)
+        f.flush()
 
 
 def make_inert_xml(mech, species, out_file):
@@ -222,4 +199,34 @@ def make_inert_xml(mech, species, out_file):
 
 
 if __name__ == '__main__':
-    make_inert_cti('air.cti', 'N2')
+    # build a test mechanism with inert oxygen
+    base_mech = 'gri30.cti'
+    test_mech = 'test_mech.cti'
+    inert_species = ['O2']
+    init_temp = 1000
+    init_press = ct.one_atm
+    mechs = [base_mech, test_mech]
+    _, _, cti_out = _get_file_locations(base_mech, test_mech)
+
+    make_inert_cti(base_mech, inert_species, test_mech)
+    gases = [ct.Solution(m) for m in mechs]
+    for idx, g in enumerate(gases):
+        g.set_equivalence_ratio(1, 'H2', 'O2')
+        init_mf = g.mole_fraction_dict()['O2']
+        g.TP = init_temp, init_press
+        r = ct.Reactor(g)
+        n = ct.ReactorNet([r])
+        n.advance_to_steady_state()
+        print(mechs[idx])
+        print('-'*len(mechs[idx]))
+        print('# reactions:     {:1.0f}'.format(len(g.reaction_equations())))
+        print('final temp:      {:1.0f} K'.format(r.thermo.TP[0]))
+        print('final pressure:  {:1.0f} atm'.format(r.thermo.TP[1]/ct.one_atm))
+        print('Y_02 init/final: {:0.3f} / {:0.3f}'.format(
+            init_mf,
+            r.thermo.mole_fraction_dict()['O2']
+        ))
+        print()
+
+    # clean up
+    os.remove(cti_out)
