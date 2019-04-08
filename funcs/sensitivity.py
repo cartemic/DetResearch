@@ -153,13 +153,14 @@ def make_inert_cti(mech, species, out_file):
         start_loc + data_header_length + 1
     header = data_in[:start_loc]
     to_scan = data_in[start_loc:]
-    scanned = to_scan.split('#')[1:]
+    rxn_indicator = '#'
+    scanned = to_scan.split(rxn_indicator)[1:]
     new_rxns = ''
 
     for loc, rxn in enumerate(scanned):
         # if any of the desired species are in the current reaction, delete
         # it from the mechanism
-        rxn = '#' + rxn
+        rxn = rxn_indicator + rxn
         eqn_start = rxn.find('\"')+1
         eqn_end = rxn[eqn_start:].find('\"') + eqn_start
         eqn = rxn[eqn_start:eqn_end]
@@ -204,40 +205,64 @@ def make_inert_xml(mech, species, out_file):
     to_scan = data_in[start_loc:]
     rxn_indicator = '<!-- reaction'
     scanned = to_scan.split(rxn_indicator)[1:]
-    print(scanned[0])
+    new_rxns = ''
+
+    for loc, rxn in enumerate(scanned):
+        # if any of the desired species are in the current reaction, delete
+        # it from the mechanism
+        rxn = rxn_indicator + rxn
+        eqn_indicators = ['<equation>', '</equation>']
+        eqn_start = rxn.find(eqn_indicators[0]) + len(eqn_indicators[0])
+        eqn_end = rxn.find(eqn_indicators[1])
+        eqn = rxn[eqn_start:eqn_end]
+
+        if not any([_find_specie_in_str(s, eqn) for s in species]):
+            new_rxns += rxn
+
+    new_mech = header + '\n\n' + new_rxns
+    with open(out_loc, 'w') as f:
+        f.writelines(new_mech)
+        f.flush()
 
 
 if __name__ == '__main__':
     # build a test mechanism with inert oxygen
-    # base_mech = 'gri30.cti'
-    # test_mech = 'test_mech.cti'
-    # inert_species = ['O2']
-    # init_temp = 1000
-    # init_press = ct.one_atm
-    # mechs = [base_mech, test_mech]
-    # _, _, cti_out = _get_file_locations(base_mech, test_mech)
-    #
-    # make_inert_cti(base_mech, inert_species, test_mech)
-    # gases = [ct.Solution(m) for m in mechs]
-    # for idx, g in enumerate(gases):
-    #     g.set_equivalence_ratio(1, 'H2', 'O2')
-    #     init_mf = g.mole_fraction_dict()['O2']
-    #     g.TP = init_temp, init_press
-    #     r = ct.Reactor(g)
-    #     n = ct.ReactorNet([r])
-    #     n.advance_to_steady_state()
-    #     print(mechs[idx])
-    #     print('-'*len(mechs[idx]))
-    #     print('# reactions:     {:1.0f}'.format(len(g.reaction_equations())))
-    #     print('final temp:      {:1.0f} K'.format(r.thermo.TP[0]))
-    #     print('final pressure:  {:1.0f} atm'.format(r.thermo.TP[1]/ct.one_atm))
-    #     print('Y_02 init/final: {:0.3f} / {:0.3f}'.format(
-    #         init_mf,
-    #         r.thermo.mole_fraction_dict()['O2']
-    #     ))
-    #     print()
-    #
-    # # clean up
-    # os.remove(cti_out)
+    base_mech = 'gri30'
+    test_mech = 'test_mech'
+    file_types = ['.cti', '.xml']
+    funcs = [make_inert_cti, make_inert_xml]
+    inert_species = ['O2']
+    init_temp = 1000
+    init_press = ct.one_atm
+    for ftype, func in zip(file_types, funcs):
+        mechs = [base_mech + ftype, test_mech + ftype]
+        _, _, file_out = _get_file_locations(mechs[0], mechs[1])
 
-    make_inert_xml('air.xml', '', '')
+        func(mechs[0], inert_species, mechs[1])
+        gases = [ct.Solution(m) for m in mechs]
+        for idx, g in enumerate(gases):
+            g.set_equivalence_ratio(1, 'H2', 'O2')
+            init_mf = g.mole_fraction_dict()['O2']
+            g.TP = init_temp, init_press
+            r = ct.Reactor(g)
+            n = ct.ReactorNet([r])
+            n.advance_to_steady_state()
+            print(mechs[idx])
+            print('-'*len(mechs[idx]))
+            print('# reactions:     {:1.0f}'.format(
+                len(g.reaction_equations()))
+            )
+            print('final temp:      {:1.0f} K'.format(
+                r.thermo.TP[0])
+            )
+            print('final pressure:  {:1.0f} atm'.format(
+                r.thermo.TP[1]/ct.one_atm)
+            )
+            print('Y_02 init/final: {:0.3f} / {:0.3f}'.format(
+                init_mf,
+                r.thermo.mole_fraction_dict()['O2']
+            ))
+            print()
+
+        # clean up
+        os.remove(file_out)
