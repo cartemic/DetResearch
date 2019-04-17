@@ -1,28 +1,14 @@
 import numpy as np
-from matplotlib import pyplot as plt
+import cantera as ct
+import sdtoolbox as sd
 
 
-def check_validity(ea_rtps, tvn_t0):
-    ea_check = 5 <= ea_rtps <= 10
-    tvn_check = 4.5 <= tvn_t0 <= 6.5
-
-    if not ea_check and not tvn_check:
-        print('Both E_a/(R*T_ps) and T_vn/T_0 are out of range')
-        return False
-    elif not ea_check:
-        print('E_a/(R*T_ps) is out of range')
-        return False
-    elif not tvn_check:
-        print('T_vn/T_0 is out of range')
-        return False
-    else:
-        print('Gavrikov conditions are met')
-        return True
-
-
-def get_ea_r(time_1, time_2, temp_1, temp_2):
+def _calculate_ea_r(time_1, time_2, temp_1, temp_2):
     # equation 4
-    return np.log(time_1 / time_2) / (1 / temp_1 - 1 / temp_2)
+    if time_1 == 0 or time_2 == 0:
+        return 0
+    else:
+        return np.log(time_1 / time_2) / (1 / temp_1 - 1 / temp_2)
 
 
 def lambda_delta_ratio(gav_x, gav_y):
@@ -51,6 +37,24 @@ def lambda_delta_ratio(gav_x, gav_y):
     )
 
 
+def get_ea_r(temp_init, press_init, q, mech, cj_speed, time_end):
+    gas = sd.postshock.PostShock_fr(
+        cj_speed,
+        press_init,
+        temp_init,
+        q,
+        mech
+    )
+    temp_ps, press_ps = gas.TP
+    temps = temp_ps * np.array([1.02, 0.98])
+    ind_times = []
+    for temp in temps:
+        gas.TPX = temp, press_ps, q
+        cv_results = sd.cv.cvsolve(gas, t_end=time_end)
+        ind_times.append(cv_results['ind_time'])
+    return _calculate_ea_r(*ind_times, *temps)
+
+
 if __name__ == "__main__":
     # x = Ea/RTps
     # y = Tvn/T0
@@ -59,4 +63,90 @@ if __name__ == "__main__":
     # ans = model(x, y)
     # plt.semilogy(x, ans)
     # plt.show()
-    check_validity(5, 5)
+    # check_validity(5, 5)
+    import sys
+
+    init_temp = 300
+    init_press = 1 * ct.one_atm
+    phi = 1
+    fuel = 'H2'
+    oxidizer = 'O2:1, N2:3.76'
+    mechanism = 'gri30.cti'
+    # cj_speed = 2197.0853146306313
+    # build initial state gas
+    init_gas = ct.Solution(mechanism)
+
+    # my gas
+    init_gas.set_equivalence_ratio(phi, fuel, oxidizer)
+    init_gas.TP = init_temp, init_press
+    q = init_gas.mole_fraction_dict()
+
+    print('calculating cj speed...', end='')
+    sys.stdout.flush()
+    d_cj = sd.postshock.CJspeed(
+        init_press,
+        init_temp,
+        q,
+        mechanism
+    )
+    print('done')
+
+    print('getting reflected gas properties...', end=' ')
+    sys.stdout.flush()
+    # get reflected gas (frozen props)
+    ps_gas = sd.postshock.PostShock_fr(
+        d_cj,
+        init_press,
+        init_temp,
+        init_gas.mole_fraction_dict(),
+        mechanism
+    )
+    print('done')
+
+    end_time = 1e-3  # default 1e-3
+    print('getting znd state...', end=' ')
+    sys.stdout.flush()
+    znd_results = sd.znd.zndsolve(
+        ps_gas,
+        init_gas,
+        d_cj,
+        t_end=end_time,
+        advanced_output=True
+    )
+    print('done')
+    vn_temp = max(znd_results['T'])
+
+    print('getting post-shock state...', end=' ')
+    sys.stdout.flush()
+    ps_temp = sd.postshock.PostShock_eq(
+        U1=1.3 * d_cj,
+        P1=init_press,
+        T1=init_temp,
+        q=init_gas.mole_fraction_dict(),
+        mech=mechanism
+    ).T
+    print('done')
+
+    print('calculating stability parameters...', end=' ')
+    sys.stdout.flush()
+    ea_r = get_ea_r(300, 101325, q, mechanism, d_cj, end_time)
+    print('done')
+
+    print()
+
+    print('T_vn: {:1.0f} K'.format(vn_temp))
+    print('T_ps: {:1.0f} K'.format(ps_temp))
+
+    print()
+
+    gav_x = ea_r / ps_temp
+    gav_y = vn_temp / init_temp
+    print('X:    {:f}'.format(ea_r / ps_temp))
+    print('Y:    {:f}'.format(vn_temp / init_temp))
+
+    print()
+
+    lambda_delta = lambda_delta_ratio(gav_x, gav_y)
+    delta = znd_results['ind_len_ZND']
+    print('lam/del:   {:f}'.format(lambda_delta))
+    print('cell size: {:f} cm'.format(lambda_delta * delta * 100))
