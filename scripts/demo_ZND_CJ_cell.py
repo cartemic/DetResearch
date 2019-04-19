@@ -153,9 +153,9 @@ if __name__ == '__main__':
                 np.log(taua / taub) / ((1 / Ta) - (1 / Tb))
         )
 
-    #  Find Gavrikov induction length based on 50# limiting species consumption,
+    #  Find Gavrikov induction length based on 50% limiting species consumption,
     #  fuel for lean mixtures, oxygen for rich mixtures
-    #  Westbrook time based on 50# temperature rise
+    #  Westbrook time based on 50% temperature rise
     limit_species = 'H2'
     limit_species_loc = gas.species_index(limit_species)
     gas.TPX = Ts, Ps, q
