@@ -98,8 +98,8 @@ def ng(delta, chi):
     b1 = -0.02929128383850
     b2 = 1.0263250730647101E-5
     b3 = -1.031921244571857E-9
-    return delta * (A0 + ((a3 / chi + a2 / chi) / chi + a1) / chi + (
-                (b3 * chi + b2 * chi) * chi + b1) * chi)
+    return delta * (A0 + ((a3 / chi + a2) / chi + a1) / chi + (
+                (b3 * chi + b2) * chi + b1) * chi)
 
 
 if __name__ == '__main__':
