@@ -1,5 +1,37 @@
-# pythonized version of:
-# http://shepherd.caltech.edu/EDL/PublicResources/sdt/SDToolbox/MATLAB/Demo/demo_ZND_CJ_cell.m
+"""
+Original script: demo_ZND_CJ_cell.m found at
+http://shepherd.caltech.edu/EDL/PublicResources/sdt/nb/sdt_intro.slides.html
+
+Modified for python by Mick Carter
+cartemic@oregonstate.edu
+
+Shock and Detonation Toolbox Demo Program
+
+Computes ZND and CV models of detonation with the shock front
+traveling at the CJ speed.  Evaluates various measures of the reaction
+zone thickness and exothermic pulse width, effective activation energy
+and Ng stability parameter.
+
+################################################################################
+Theory, numerical methods and applications are described in the following report:
+
+    Numerical Solution Methods for Shock and Detonation Jump Conditions, S.
+    Browne, J. Ziegler, and J. E. Shepherd, GALCIT Report FM2006.006 - R3,
+    California Institute of Technology Revised September, 2018.
+
+Please cite this report and the website if you use these routines.
+
+Please refer to LICENCE.txt or the above report for copyright and disclaimers.
+
+http://shepherd.caltech.edu/EDL/PublicResources/sdt/
+
+################################################################################
+Updated January 2019
+Tested with:
+    python 3.6.7
+Under these operating systems:
+    Windows 10
+"""
 import numpy as np
 import cantera as ct
 import sdtoolbox as sd
