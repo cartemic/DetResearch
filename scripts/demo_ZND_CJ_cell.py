@@ -13,7 +13,7 @@ zone thickness and exothermic pulse width, effective activation energy
 and Ng stability parameter.
 
 ################################################################################
-Theory, numerical methods and applications are described in the following report:
+Theory, numerical methods and applications are described in the following report
 
     Numerical Solution Methods for Shock and Detonation Jump Conditions, S.
     Browne, J. Ziegler, and J. E. Shepherd, GALCIT Report FM2006.006 - R3,
@@ -167,18 +167,20 @@ if __name__ == '__main__':
     T_west = 0.5*(T_final - Ts) + Ts
     bb = len(CVout1['speciesX'][:, limit_species_loc])
 
-    t_gav = 0
-    for loc in range(bb):
-        if CVout1['speciesX'][loc, limit_species_loc] > X_gav:
-            t_gav = CVout1['time'][loc]
-
+    t_gav = np.nanmax(
+        np.concatenate([
+            CVout1['time'][CVout1['speciesX'][limit_species_loc] > X_gav],
+            [0]
+        ])
+    )
     x_gav = t_gav*out['U'][0]
 
-    t_west = 0
-    for loc in range(bb):
-        if CVout1['T'][loc] < T_west:
-            t_west = CVout1['time'][loc]
-
+    t_west = np.nanmax(
+        np.concatenate([
+            CVout1['time'][CVout1['T'] < T_west],
+            [0]
+        ])
+    )
     x_west = t_west*out['U'][0]
 
     # Ng et al definition of max thermicity width
