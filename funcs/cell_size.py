@@ -13,21 +13,136 @@ This script uses SDToolbox, which can be found at
 http://shepherd.caltech.edu/EDL/PublicResources/sdt/
 """
 import numpy as np
+import sdtoolbox as sd
+import cantera as ct
 
 
 class CellSize:
     """
-    todo:
-     1: znd calcs
-     2: change calculation functions to use self properties
+    todo: docstring pls
     """
-    def calculate_ng(
+    def __call__(
             self,
-            activation_energy,
-            induction_length,
-            max_thermicity,
-            cj_speed
+            P1,
+            T1,
+            q,
+            mech
     ):
+        self.T1 = T1
+        cj_speed = sd.postshock.CJspeed(P1, T1, q, mech)
+        gas1 = ct.Solution(mech)
+        gas1.TPX = T1, P1, q
+
+        # FIND EQUILIBRIUM POST SHOCK STATE FOR GIVEN SPEED
+        gas = sd.postshock.PostShock_eq(
+            cj_speed,
+            P1,
+            T1,
+            q,
+            mech
+        )
+        u_cj = cj_speed * gas1.density / gas.density
+        self.cj_speed = u_cj
+
+        # FIND FROZEN POST SHOCK STATE FOR GIVEN SPEED
+        gas = sd.postshock.PostShock_fr(
+            cj_speed,
+            P1,
+            T1,
+            q,
+            mech
+        )
+
+        # SOLVE ZND DETONATION ODES
+        out = sd.znd.zndsolve(
+            gas,
+            gas1,
+            cj_speed,
+            advanced_output=True,
+            t_end=2e-3
+        )
+
+        # Find CV parameters including effective activation energy
+        gas.TPX = T1, P1, q
+        gas = sd.postshock.PostShock_fr(
+            cj_speed,
+            P1,
+            T1,
+            q,
+            mech
+        )
+        self.Ts, Ps = gas.TP
+        Ta = self.Ts * 1.02
+        gas.TPX = Ta, Ps, q
+        # todo: clean this up a bit
+        CVout1 = sd.cv.cvsolve(gas)
+        Tb = self.Ts * 0.98
+        gas.TPX = Tb, Ps, q
+        CVout2 = sd.cv.cvsolve(gas)
+
+        # Approximate effective activation energy for CV explosion
+        taua = CVout1['ind_time']
+        taub = CVout2['ind_time']
+        if taua == 0 or taub == 0:
+            self.activation_energy = 0
+        else:
+            self.activation_energy = 1 / self.Ts * (
+                    np.log(taua / taub) / ((1 / Ta) - (1 / Tb))
+            )
+
+        #  Find Gavrikov induction length based on 50% limiting species
+        #  consumption, fuel for lean mixtures, oxygen for rich mixtures
+        #  Westbrook time based on 50# temperature rise
+        limit_species = 'H2'  # todo: automate this!
+        limit_species_loc = gas.species_index(limit_species)
+        gas.TPX = self.Ts, Ps, q
+        X_initial = gas.mole_fraction_dict()[limit_species]
+        gas.equilibrate('UV')
+        X_final = gas.mole_fraction_dict()[limit_species]
+        T_final = gas.T
+        X_gav = 0.5*(X_initial - X_final) + X_final
+        T_west = 0.5*(T_final - self.Ts) + self.Ts
+
+        t_gav = np.nanmax(
+            np.concatenate([
+                CVout1['time'][CVout1['speciesX'][limit_species_loc] > X_gav],
+                [0]
+            ])
+        )
+
+        t_west = np.nanmax(
+            np.concatenate([
+                CVout1['time'][CVout1['T'] < T_west],
+                [0]
+            ])
+        )
+
+        # Ng et al definition of max thermicity width
+        # Equation 2
+        self.chi_ng = self.activation_energy * out['ind_len_ZND'] / \
+            (u_cj / max(out['thermicity']))
+
+        self.induction_length = {
+            'Westbrook': t_west*out['U'][0],
+            # determined by time to 50% temperature rise
+
+            'Gavrikov': t_gav*out['U'][0],
+            # determined by time to 50% consumption of limiting species and ZND
+            # initial velocity
+
+            'Ng': out['ind_len_ZND']
+            # determined by peak thermicity
+        }
+
+        # calculate and return cell size results
+        self.cell_size = {
+            'Westbrook': self._cell_size_westbrook(),
+            'Gavrikov': self._cell_size_gavrikov(),
+            'Ng': self._cell_size_ng()
+        }
+        return self.cell_size
+
+    def _cell_size_ng(self):
         """
         Calculates cell size using the correlation given by Ng, H. D., Ju, Y.,
         & Lee, J. H. S. (2007). Assessment of detonation hazards in
@@ -38,14 +153,6 @@ class CellSize:
 
         Parameters
         ----------
-        activation_energy : float
-            reduced activation energy (Ea/RT_ps) (unitless)
-        induction_length : float
-            induction length determined by peak thermicity (m)
-        max_thermicity : float
-            peak thermicity value from ZND calculation (1/s)
-        cj_speed : float
-            CJ particle velocity (m/s)
 
         Returns
         -------
@@ -65,24 +172,15 @@ class CellSize:
             -1.031921244571857e-9
         ])
 
-        # Equation 2
-        chi = activation_energy * induction_length * max_thermicity / cj_speed
-
         # Equation 1
-        chi_pow = np.power(chi, range(1, len(a)+1))
+        chi_pow = np.power(self.chi_ng, range(1, len(a)+1))
         cell_size = (
             a_0 + np.sum(a / chi_pow + b * chi_pow)
-        ) * induction_length
+        ) * self.induction_length['Ng']
 
         return cell_size
 
-    def calculate_gavrikov(
-            self,
-            induction_length,
-            activation_energy,
-            T_vn,
-            T_0
-    ):
+    def _cell_size_gavrikov(self):
         """
         Calculates cell size using the correlation given by Gavrikov, A.I.,
         Efimenko, A.A., & Dorofeev, S.B. (2000). A model for detonation cell
@@ -92,21 +190,16 @@ class CellSize:
 
         Parameters
         ----------
-        induction_length : float
-            induction length determined by time to 50% consumption of limiting
-            species and ZND initial velocity
-        activation_energy : float
-            reduced activation energy (Ea/RT_ps) (unitless)
-        T_vn : float
-            von Neumann temperature (just behind a CJ wave) (K)
-        T_0 : float
-            initial reactant temperature (K)
 
         Returns
         -------
         cell_size : float
             Estimated cell size (m)
         """
+        # Load parameters
+        T_0 = self.T1  # initial reactant temperature (K)
+        T_vn = self.Ts
+
         # Coefficients from Table 1
         a = -0.007843787493
         b = 0.1777662961
@@ -125,19 +218,16 @@ class CellSize:
         gav_y = T_vn / T_0
         cell_size = np.power(
             10,
-            gav_y * (a * gav_y - b) + activation_energy *
-            (c * activation_energy - d + (e - f * gav_y) * gav_y) +
-            g * np.log(gav_y) + h * np.log(activation_energy) +
-            gav_y * (i / activation_energy - k *
-                     gav_y / np.power(activation_energy, m)) - j
-        ) * induction_length
+            gav_y * (a * gav_y - b) + self.activation_energy *
+            (c * self.activation_energy - d + (e - f * gav_y) * gav_y) +
+            g * np.log(gav_y) + h * np.log(self.activation_energy) +
+            gav_y * (i / self.activation_energy - k *
+                     gav_y / np.power(self.activation_energy, m)) - j
+        ) * self.induction_length['Gavrikov']
 
         return cell_size
 
-    def calculate_westbrook(
-            self,
-            induction_length
-    ):
+    def _cell_size_westbrook(self):
         """
         Calculates cell size using the correlation given by Westbrook, C. K., &
         Urtiew, P. A. (1982). Chemical kinetic prediction of critical parameters
@@ -146,12 +236,36 @@ class CellSize:
 
         Parameters
         ----------
-        induction_length : float
-            todo: get friendly with this
 
         Returns
         -------
         cell_size : float
             Estimated cell size (m)
         """
-        return 29 * induction_length
+        return 29 * self.induction_length['Westbrook']
+
+
+if __name__ == '__main__':
+    # Test calculated values against demo script
+    original_values = {
+        'Gavrikov': 1.9316316546518768e-02,
+        'Ng': 6.5644825968914763e-03,
+        'Westbrook': 3.4852910825972942e-03
+    }
+
+    cells = CellSize()
+
+    init_press = 100000
+    init_temp = 300
+    species = 'H2:2 O2:1 N2:3.76'
+    mechanism = 'Mevel2017.cti'
+
+    test = cells(init_press, init_temp, species, mechanism)
+
+    RelTol = 1e-9
+    assert(
+        all([
+            abs(cell - test[correlation]) / cell < RelTol
+            for correlation, cell in original_values.items()
+        ])
+    )
