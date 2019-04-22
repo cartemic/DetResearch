@@ -25,13 +25,25 @@ class CellSize:
             self,
             P1,
             T1,
-            q,
-            mech
+            fuel,
+            oxidizer,
+            phi,
+            mech,
+            diluent=None,
+            diluent_mol_frac=0
     ):
         self.T1 = T1
+        gas1 = self._build_gas_object(
+            mech,
+            fuel,
+            oxidizer,
+            phi,
+            diluent,
+            diluent_mol_frac
+        )
+        q = gas1.X
         cj_speed = sd.postshock.CJspeed(P1, T1, q, mech)
-        gas1 = ct.Solution(mech)
-        gas1.TPX = T1, P1, q
+        gas1.TP = T1, P1
 
         # FIND EQUILIBRIUM POST SHOCK STATE FOR GIVEN SPEED
         gas = sd.postshock.PostShock_eq(
@@ -74,7 +86,6 @@ class CellSize:
         self.Ts, Ps = gas.TP
         Ta = self.Ts * 1.02
         gas.TPX = Ta, Ps, q
-        # todo: clean this up a bit
         CVout1 = sd.cv.cvsolve(gas)
         Tb = self.Ts * 0.98
         gas.TPX = Tb, Ps, q
@@ -90,10 +101,12 @@ class CellSize:
                     np.log(taua / taub) / ((1 / Ta) - (1 / Tb))
             )
 
-        #  Find Gavrikov induction length based on 50% limiting species
+        #  Find Gavrikov induction time based on 50% limiting species
         #  consumption, fuel for lean mixtures, oxygen for rich mixtures
-        #  Westbrook time based on 50# temperature rise
-        limit_species = 'H2'  # todo: automate this!
+        if phi >= 1:
+            limit_species = fuel
+        else:
+            limit_species = 'O2'
         limit_species_loc = gas.species_index(limit_species)
         gas.TPX = self.Ts, Ps, q
         X_initial = gas.mole_fraction_dict()[limit_species]
@@ -101,8 +114,6 @@ class CellSize:
         X_final = gas.mole_fraction_dict()[limit_species]
         T_final = gas.T
         X_gav = 0.5*(X_initial - X_final) + X_final
-        T_west = 0.5*(T_final - self.Ts) + self.Ts
-
         t_gav = np.nanmax(
             np.concatenate([
                 CVout1['time'][CVout1['speciesX'][limit_species_loc] > X_gav],
@@ -110,6 +121,8 @@ class CellSize:
             ])
         )
 
+        #  Westbrook time based on 50% temperature rise
+        T_west = 0.5*(T_final - self.Ts) + self.Ts
         t_west = np.nanmax(
             np.concatenate([
                 CVout1['time'][CVout1['T'] < T_west],
@@ -124,14 +137,8 @@ class CellSize:
 
         self.induction_length = {
             'Westbrook': t_west*out['U'][0],
-            # determined by time to 50% temperature rise
-
             'Gavrikov': t_gav*out['U'][0],
-            # determined by time to 50% consumption of limiting species and ZND
-            # initial velocity
-
             'Ng': out['ind_len_ZND']
-            # determined by peak thermicity
         }
 
         # calculate and return cell size results
@@ -141,6 +148,38 @@ class CellSize:
             'Ng': self._cell_size_ng()
         }
         return self.cell_size
+
+    @staticmethod
+    def _build_gas_object(
+            mech,
+            fuel,
+            oxidizer,
+            phi,
+            diluent,
+            diluent_mol_frac
+    ):
+        gas = ct.Solution(mech)
+        gas.set_equivalence_ratio(
+            phi,
+            fuel,
+            oxidizer
+        )
+        if diluent is not None and diluent_mol_frac > 0:
+            # dilute the gas!
+            mole_fractions = gas.mole_fraction_dict()
+            new_fuel_fraction = (1 - diluent_mol_frac) * \
+                mole_fractions[fuel]
+            new_oxidizer_fraction = (1 - diluent_mol_frac) * \
+                mole_fractions[oxidizer]
+            gas.X = '{0}: {1} {2}: {3} {4}: {5}'.format(
+                diluent,
+                diluent_mol_frac,
+                fuel,
+                new_fuel_fraction,
+                oxidizer,
+                new_oxidizer_fraction
+            )
+        return gas
 
     def _cell_size_ng(self):
         """
@@ -246,26 +285,5 @@ class CellSize:
 
 
 if __name__ == '__main__':
-    # Test calculated values against demo script
-    original_values = {
-        'Gavrikov': 1.9316316546518768e-02,
-        'Ng': 6.5644825968914763e-03,
-        'Westbrook': 3.4852910825972942e-03
-    }
-
-    cells = CellSize()
-
-    init_press = 100000
-    init_temp = 300
-    species = 'H2:2 O2:1 N2:3.76'
-    mechanism = 'Mevel2017.cti'
-
-    test = cells(init_press, init_temp, species, mechanism)
-
-    RelTol = 1e-9
-    assert(
-        all([
-            abs(cell - test[correlation]) / cell < RelTol
-            for correlation, cell in original_values.items()
-        ])
-    )
+    import subprocess
+    subprocess.check_call('pytest -vv tests/test_cell_size.py')
