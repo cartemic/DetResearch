@@ -238,3 +238,6 @@ modules.xml
 *.prof
 
 # End of https://www.gitignore.io/api/windows,python,microsoftoffice,matlab
+
+# data doesn't need to go to github
+*.db
