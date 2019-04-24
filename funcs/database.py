@@ -112,7 +112,6 @@ class Table:
 
         table_info = cur.fetchall()
 
-        con.close()
         return table_info
 
     def check_existing_row(
@@ -383,7 +382,8 @@ class Table:
             else:
                 # warn the user that the current input was ignored
                 warnings.warn(
-                    'Cannot overwrite row unless overwrite_existing=True'
+                    'Cannot overwrite row unless overwrite_existing=True',
+                    Warning
                 )
 
         else:
