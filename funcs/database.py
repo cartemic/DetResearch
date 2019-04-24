@@ -27,7 +27,7 @@ class _AllDataBases:
         return table_list
 
 
-class _AllTables:
+class _Table:
     def __init__(
             self,
             database,
@@ -36,7 +36,8 @@ class _AllTables:
         self.table_name = self._clean(table_name)
         self.database = database
         self.con = sqlite3.connect(self.database)
-        self._create(self.table_name)
+        # todo: add check for existing before create
+        self._create()
 
     def __del__(self):
         self.con.commit()
@@ -125,12 +126,8 @@ class _AllTables:
         return row_found
 
 
-class BaseTable(_AllTables):
-    def _create(
-            self,
-            table_name
-    ):
-        table_name = self._clean(table_name)
+class BaseTable(_Table):
+    def _create(self):
         with self.con as con:
             cur = con.cursor()
             cur.execute(
@@ -147,16 +144,12 @@ class BaseTable(_AllTables):
                     diluent_mol_frac REAL,
                     cj_speed REAL   
                 );
-                """.format(table_name)
+                """.format(self.table_name)
             )
 
 
-class PerturbedTable(_AllTables):
-    def _create(
-            self,
-            table_name
-    ):
-        table_name = self._clean(table_name)
+class PerturbedTable(_Table):
+    def _create(self):
         with self.con as con:
             cur = con.cursor()
             cur.execute(
@@ -175,7 +168,7 @@ class PerturbedTable(_AllTables):
                     k_i REAL,
                     cj_speed REAL 
                 );
-                """.format(table_name)
+                """.format(self.table_name)
             )
 
     def _update_row(
