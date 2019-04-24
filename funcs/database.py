@@ -309,15 +309,12 @@ class Table:
             in inspect.getargvalues(inspect.currentframe())[3].items()
             if value is not None
         }
-        if len(inputs) > 0:
-            where = ' WHERE '
-        else:
-            where = ''
+        [where] = [' WHERE ' if len(inputs) > 0 else '']
         sql_varnames = [
             '{:s} = :{:s}'.format(*[item]*2) for item in inputs.keys()
         ]
-        cmd_str = 'SELECT * FROM {:s} ' + where +\
-                  ' AND '.join(sql_varnames) + ';'
+        [cmd_str] = ['SELECT * FROM {:s} ' + where +
+                     ' AND '.join(sql_varnames) + ';']
         return cmd_str
 
     def fetch_rows(
