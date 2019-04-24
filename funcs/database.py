@@ -25,8 +25,24 @@ warnings.simplefilter('always')
 
 
 class DataBase:
+    """
+    A class for database-level operations
+    """
     @staticmethod
     def list_all_tables(database):
+        """
+        Finds every table in a given database.
+
+        Parameters
+        ----------
+        database : str
+            Database to search, e.g. `test.sqlite`
+
+        Returns
+        -------
+        table_list : list
+            All tables within the requested database
+        """
         with sqlite3.connect(database) as con:
             cur = con.cursor()
             cur.execute(
@@ -40,6 +56,9 @@ class DataBase:
 
 
 class Table:
+    """
+    A class to help manage tables of computational detonation data.
+    """
     def __init__(
             self,
             database,
@@ -78,7 +97,13 @@ class Table:
         else:
             return table_name.lower()
 
-    def list_all_headers(self):
+    def columns(self):
+        """
+        Returns
+        -------
+        table_info : list
+            A list of all column names in the current table.
+        """
         with sqlite3.connect(self.database) as con:
             cur = con.cursor()
             cur.execute("""PRAGMA table_info({:s});""".format(
@@ -102,6 +127,39 @@ class Table:
             diluent,
             diluent_mol_frac
     ):
+        """
+        Checks the current table for a specific row of data
+
+        Parameters
+        ----------
+        mechanism : str
+            Mechanism used for the desired row's computation
+        initial_temp : float
+            Initial temperature for the desired row, in Kelvin
+        initial_press : float
+            Initial pressure for the desired row, in Pascals
+        equivalence : float
+            Equivalence ratio for the desired row
+        fuel : str
+            Fuel used in the desired row
+        oxidizer : str
+            Oxidizer used in the desired row
+        reaction_number : int
+            Reaction number for the desired row:
+                -1:  indicates base case (unperturbed)
+                0+:  indicates a perturbed case, i.e. the current reaction has
+                     been perturbed and this is the resulting solution
+        diluent : str
+            Diluent used in the desired row
+        diluent_mol_frac : float
+            Mole fraction of diluent used in the desired row
+
+        Returns
+        -------
+        row_found : bool
+            True if a row with the given information was found in the current
+            table, False if not
+        """
         with self.con as con:
             cur = con.cursor()
             cur.execute(
@@ -136,6 +194,9 @@ class Table:
         return row_found
 
     def _create(self):
+        """
+        Creates a table in the current database
+        """
         with self.con as con:
             cur = con.cursor()
             cur.execute(
@@ -171,6 +232,38 @@ class Table:
             diluent,
             diluent_mol_frac
     ):
+        """
+        Updates the CJ velocity and forward reaction rate (k_i) for a set of
+        conditions.
+
+        Parameters
+        ----------
+        mechanism : str
+            Mechanism used for the desired row's computation
+        initial_temp : float
+            Initial temperature for the desired row, in Kelvin
+        initial_press : float
+            Initial pressure for the desired row, in Pascals
+        equivalence : float
+            Equivalence ratio for the desired row
+        fuel : str
+            Fuel used in the desired row
+        oxidizer : str
+            Oxidizer used in the desired row
+        reaction_number : int
+            Reaction number for the desired row:
+                -1:  indicates base case (unperturbed)
+                0+:  indicates a perturbed case, i.e. the current reaction has
+                     been perturbed and this is the resulting solution
+        cj_speed : float
+            CJ speed to update
+        k_i : float
+            Forward rate of the current reaction to update
+        diluent : str
+            Diluent used in the desired row
+        diluent_mol_frac : float
+            Mole fraction of diluent used in the desired row
+        """
         with self.con as con:
             cur = con.cursor()
             cur.execute(
@@ -220,6 +313,44 @@ class Table:
             diluent_mol_frac=0,
             overwrite_existing=False
     ):
+        """
+        Stores a row of data in the current table.
+
+        If a row with this information already exists in the current table,
+        overwrite_existing decides whether to overwrite the existing data or
+        disregard the current data.
+
+        Parameters
+        ----------
+        mechanism : str
+            Mechanism used for the current row's computation
+        initial_temp : float
+            Initial temperature for the current row, in Kelvin
+        initial_press : float
+            Initial pressure for the current row, in Pascals
+        equivalence : float
+            Equivalence ratio for the current row
+        fuel : str
+            Fuel used in the current row
+        oxidizer : str
+            Oxidizer used in the current row
+        k_i : float
+            Forward rate of the current reaction
+        cj_speed : float
+            Current CJ speed
+        reaction_number : int
+            Current reaction number:
+                -1:  indicates base case (unperturbed)
+                0+:  indicates a perturbed case, i.e. the current reaction has
+                     been perturbed and this is the resulting solution
+        diluent : str
+            Diluent used in the current row
+        diluent_mol_frac : float
+            Mole fraction of diluent used in the current row
+        overwrite_existing : bool
+            True to overwrite an existing entry if it exists, False to
+            protect existing entries
+        """
         if self.check_existing_row(
             mechanism=mechanism,
             initial_temp=initial_temp,
@@ -304,6 +435,39 @@ class Table:
             diluent,
             diluent_mol_frac
     ):
+        """
+        Builds a SQL query string for all of the inputs. Any inputs which are
+        None will be left wild.
+
+        Parameters
+        ----------
+        mechanism : str
+            Mechanism to search for
+        initial_temp : float
+            Initial temperature to search for, in Kelvin
+        initial_press : float
+            Initial pressure to search for, in Pascals
+        equivalence : float
+            Equivalence ratio to search for
+        fuel : str
+            Fuel to search for
+        oxidizer : str
+            Oxidizer to search for
+        reaction_number : int
+            Reaction number to search for:
+                -1:  indicates base case (unperturbed)
+                0+:  indicates a perturbed case, i.e. the current reaction has
+                     been perturbed and this is the resulting solution
+        diluent : str
+            Diluent to search for
+        diluent_mol_frac : float
+            Mole fraction of diluent to search for
+
+        Returns
+        -------
+        cmd_str : str
+            SQL command to search for the desired inputs
+        """
         inputs = {
             key: value for key, value
             in inspect.getargvalues(inspect.currentframe())[3].items()
@@ -329,6 +493,40 @@ class Table:
             diluent=None,
             diluent_mol_frac=None
     ):
+        """
+        Fetches all rows from the current database with the desired inputs.
+        Any inputs which are None will be left wild.
+
+        Parameters
+        ----------
+        mechanism : str
+            Mechanism to search for
+        initial_temp : float
+            Initial temperature to search for, in Kelvin
+        initial_press : float
+            Initial pressure to search for, in Pascals
+        equivalence : float
+            Equivalence ratio to search for
+        fuel : str
+            Fuel to search for
+        oxidizer : str
+            Oxidizer to search for
+        reaction_number : int
+            Reaction number to search for:
+                -1:  indicates base case (unperturbed)
+                0+:  indicates a perturbed case, i.e. the current reaction has
+                     been perturbed and this is the resulting solution
+        diluent : str
+            Diluent to search for
+        diluent_mol_frac : float
+            Mole fraction of diluent to search for
+
+        Returns
+        -------
+        data : dict
+            Dictionary containing the rows of the current table which match
+            the input criteria. Keys are column names, and values are lists.
+        """
         with self.con as con:
             cur = con.cursor()
             cmd_str = self._build_query_str(
@@ -357,13 +555,12 @@ class Table:
                 }
             )
             info = cur.fetchall()
-            labels = [item[1] for item in self.list_all_headers()]
+            labels = [item[1] for item in self.columns()]
             data = {l: [] for l in labels}
             for row in info:
                 for l, d in zip(labels, row):
                     data[l].append(d)
 
-            # row = {key: value for key, value in zip(labels, info)}
             return data
 
 
