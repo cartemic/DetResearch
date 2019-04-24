@@ -241,3 +241,4 @@ modules.xml
 
 # data doesn't need to go to github
 *.db
+*.sqlite
