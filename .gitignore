@@ -242,3 +242,6 @@ modules.xml
 # data doesn't need to go to github
 *.db
 *.sqlite
+
+# neither does box stuff
+box_key.json
