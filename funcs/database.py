@@ -10,10 +10,21 @@ CREATED BY:
     cartemic@oregonstate.edu
 """
 import sqlite3
+import inspect
+import warnings
 
 
-class _AllDataBases:
+def _formatwarnmsg_impl(msg):
+    # happier warning format :)
+    s = ("%s: %s\n" % (msg.category.__name__, msg.message))
+    return s
 
+
+warnings._formatwarnmsg_impl = _formatwarnmsg_impl
+warnings.simplefilter('always')
+
+
+class DataBase:
     @staticmethod
     def list_all_tables(database):
         with sqlite3.connect(database) as con:
@@ -22,12 +33,13 @@ class _AllDataBases:
                 """SELECT name FROM sqlite_master WHERE type='table';"""
             )
 
-        table_list = cur.fetchall()
+        tables = cur.fetchall()
         con.close()
+        table_list = [item[0] for item in tables]
         return table_list
 
 
-class _Table:
+class Table:
     def __init__(
             self,
             database,
@@ -36,8 +48,8 @@ class _Table:
         self.table_name = self._clean(table_name)
         self.database = database
         self.con = sqlite3.connect(self.database)
-        # todo: add check for existing before create
-        self._create()
+        if self.table_name not in DataBase.list_all_tables(database):
+            self._create()
 
     def __del__(self):
         self.con.commit()
@@ -80,7 +92,6 @@ class _Table:
 
     def check_existing_row(
             self,
-            table_name,
             mechanism,
             initial_temp,
             initial_press,
@@ -91,7 +102,6 @@ class _Table:
             diluent,
             diluent_mol_frac
     ):
-        table_name = self._clean(table_name)
         with self.con as con:
             cur = con.cursor()
             cur.execute(
@@ -106,7 +116,7 @@ class _Table:
                     diluent = :diluent AND
                     diluent_mol_frac = :diluent_mol_frac AND
                     reaction_number = :reaction_number;
-                """.format(table_name),
+                """.format(self.table_name),
                 {
                     'mechanism': mechanism,
                     'initial_temp': initial_temp,
@@ -114,7 +124,7 @@ class _Table:
                     'equivalence': equivalence,
                     'fuel': fuel,
                     'oxidizer': oxidizer,
-                    'diluent': str(diluent),
+                    'diluent': diluent,
                     'diluent_mol_frac': diluent_mol_frac,
                     'reaction_number': reaction_number
                 }
@@ -125,30 +135,6 @@ class _Table:
                 row_found = False
         return row_found
 
-
-class BaseTable(_Table):
-    def _create(self):
-        with self.con as con:
-            cur = con.cursor()
-            cur.execute(
-                """
-                CREATE TABLE {:s} (
-                    date_stored TEXT,
-                    mechanism TEXT,
-                    initial_temp REAL,
-                    initial_press REAL,
-                    equivalence REAL,
-                    fuel TEXT,
-                    oxidizer TEXT,
-                    diluent TEXT,
-                    diluent_mol_frac REAL,
-                    cj_speed REAL   
-                );
-                """.format(self.table_name)
-            )
-
-
-class PerturbedTable(_Table):
     def _create(self):
         with self.con as con:
             cur = con.cursor()
@@ -166,7 +152,7 @@ class PerturbedTable(_Table):
                     diluent_mol_frac REAL,
                     reaction_number INTEGER,
                     k_i REAL,
-                    cj_speed REAL 
+                    cj_speed REAL
                 );
                 """.format(self.table_name)
             )
@@ -180,8 +166,8 @@ class PerturbedTable(_Table):
             fuel,
             oxidizer,
             reaction_number,
-            k_i,
             cj_speed,
+            k_i,
             diluent,
             diluent_mol_frac
     ):
@@ -221,24 +207,20 @@ class PerturbedTable(_Table):
 
     def store_row(
             self,
-            table_name,
             mechanism,
             initial_temp,
             initial_press,
             equivalence,
             fuel,
             oxidizer,
-            reaction_number,
             k_i,
             cj_speed,
-            diluent=None,
+            reaction_number=-1,
+            diluent='None',
             diluent_mol_frac=0,
             overwrite_existing=False
     ):
-        table_name = self._clean(table_name)
-
         if self.check_existing_row(
-            table_name=table_name,
             mechanism=mechanism,
             initial_temp=initial_temp,
             initial_press=initial_press,
@@ -264,10 +246,14 @@ class PerturbedTable(_Table):
                     cj_speed=cj_speed,
                     k_i=k_i
                 )
-                print('ayy')
+                start_color = '\033[92m'
+                end_color = '\033[0m'
+                print(start_color+'data row stored successfully'+end_color)
             else:
                 # warn the user that the current input was ignored
-                print('aw crap man')
+                warnings.warn(
+                    'Cannot overwrite row unless overwrite_existing=True'
+                )
 
         else:
             # no rows with the current information were found
@@ -287,9 +273,9 @@ class PerturbedTable(_Table):
                         :diluent_mol_frac,
                         :reaction_number,
                         :k_i,
-                        :cj_speed 
+                        :cj_speed
                     );
-                    """.format(table_name),
+                    """.format(self.table_name),
                     {
                         'mechanism': mechanism,
                         'initial_temp': initial_temp,
@@ -297,7 +283,7 @@ class PerturbedTable(_Table):
                         'equivalence': equivalence,
                         'fuel': fuel,
                         'oxidizer': oxidizer,
-                        'diluent': str(diluent),
+                        'diluent': diluent,
                         'diluent_mol_frac': diluent_mol_frac,
                         'reaction_number': reaction_number,
                         'k_i': k_i,
@@ -305,7 +291,97 @@ class PerturbedTable(_Table):
                     }
                 )
 
+    # noinspection PyUnusedLocal
+    @staticmethod
+    def _build_query_str(
+            mechanism,
+            initial_temp,
+            initial_press,
+            equivalence,
+            fuel,
+            oxidizer,
+            reaction_number,
+            diluent,
+            diluent_mol_frac
+    ):
+        inputs = {
+            key: value for key, value
+            in inspect.getargvalues(inspect.currentframe())[3].items()
+            if value is not None
+        }
+        if len(inputs) > 0:
+            where = ' WHERE '
+        else:
+            where = ''
+        sql_varnames = [
+            '{:s} = :{:s}'.format(*[item]*2) for item in inputs.keys()
+        ]
+        cmd_str = 'SELECT * FROM {:s} ' + where +\
+                  ' AND '.join(sql_varnames) + ';'
+        return cmd_str
+
+    def fetch_rows(
+            self,
+            mechanism=None,
+            initial_temp=None,
+            initial_press=None,
+            equivalence=None,
+            fuel=None,
+            oxidizer=None,
+            reaction_number=None,
+            diluent=None,
+            diluent_mol_frac=None
+    ):
+        with self.con as con:
+            cur = con.cursor()
+            cmd_str = self._build_query_str(
+                mechanism=mechanism,
+                initial_temp=initial_temp,
+                initial_press=initial_press,
+                equivalence=equivalence,
+                fuel=fuel,
+                oxidizer=oxidizer,
+                reaction_number=reaction_number,
+                diluent=diluent,
+                diluent_mol_frac=diluent_mol_frac
+            )
+            cur.execute(
+                cmd_str.format(self.table_name),
+                {
+                    'mechanism': mechanism,
+                    'initial_temp': initial_temp,
+                    'initial_press': initial_press,
+                    'equivalence': equivalence,
+                    'fuel': fuel,
+                    'oxidizer': oxidizer,
+                    'diluent': diluent,
+                    'diluent_mol_frac': diluent_mol_frac,
+                    'reaction_number': reaction_number
+                }
+            )
+            info = cur.fetchall()
+            labels = [item[1] for item in self.list_all_headers()]
+            data = {l: [] for l in labels}
+            for row in info:
+                for l, d in zip(labels, row):
+                    data[l].append(d)
+
+            # row = {key: value for key, value in zip(labels, info)}
+            return data
+
 
 if __name__ == '__main__':
+    from pprint import pprint
+
     db_str = 'test.sqlite'
     table_str = 'test_table'
+
+    test = Table(db_str, table_str)
+    test.store_row('test.cti', 300, 101325, 1.15, 'CH4', 'N2O', 1.2e12,
+                   2043.87987987987987)
+    test.store_row('test.cti', 300, 101325, 1.15, 'CH4', 'N2O', 1.2e12,
+                   2043.87987987987987, 0)
+    test.store_row('test.cti', 300, 101325, 1.15, 'CH4', 'N2O', 1.2e12,
+                   2043.87987987987987, 1, overwrite_existing=True)
+    pprint(test.fetch_rows())
+    pprint(test.fetch_rows(reaction_number=-1))
