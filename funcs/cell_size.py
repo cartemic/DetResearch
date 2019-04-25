@@ -284,6 +284,6 @@ class CellSize:
         return 29 * self.induction_length['Westbrook']
 
 
-if __name__ == '__main__':
+if __name__ == '__main__':  # pragma: no cover
     import subprocess
     subprocess.check_call('pytest -vv tests/test_cell_size.py')
