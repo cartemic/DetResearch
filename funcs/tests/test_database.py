@@ -8,6 +8,12 @@ import pytest
 import inspect
 
 
+def remove_stragglers():
+    stragglers = set(file for file in os.listdir('.') if '.sqlite' in file)
+    for file in stragglers:
+        os.remove(file)
+
+
 class TestDataBase:
     @staticmethod
     def test_list_all_tables():
@@ -90,7 +96,45 @@ class TestTable:
             for test, good in zip(test_results, good_results)
         ])
 
+    @staticmethod
+    def test_columns():
+        num_cols = 16
+        num_chars = 16
+        test_db = str(uuid4()) + '.sqlite'
+        column_names = [
+            ''.join([random.choice(string.ascii_letters)
+                     for _ in range(num_chars)])
+            for _ in range(num_cols)
+        ]
+        test_table_name = 'test_table'
+        header = 'CREATE TABLE {:s} ('.format(test_table_name)
+        footer = ' TEXT);'
+        sep = ' TEXT, '
+
+        with sqlite3.connect(test_db) as con:
+            cur = con.cursor()
+            cur.execute(
+                header + sep.join(column_names) + footer
+            )
+        con.close()
+
+        class TestSelf:
+            database = test_db
+            table_name = test_table_name
+            columns = db.Table.columns
+
+        test_table = TestSelf()
+        test_columns = test_table.columns()
+        os.remove(test_db)
+        assert all([
+            test == good for test, good in zip(test_columns, column_names)
+        ])
+
 
 if __name__ == '__main__':
     import subprocess
-    subprocess.check_call('pytest test_database.py -vv --noconftest --cov')
+    try:
+        subprocess.check_call('pytest test_database.py -vv --noconftest --cov')
+    except subprocess.CalledProcessError as e:
+        remove_stragglers()
+        raise e
