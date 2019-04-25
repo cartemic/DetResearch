@@ -6,6 +6,7 @@ import os
 import sqlite3
 import pytest
 import inspect
+from numpy import isclose, allclose
 
 
 def remove_stragglers():
@@ -34,8 +35,7 @@ def bind(instance, func, as_name=None):
 
 
 class TestDataBase:
-    @staticmethod
-    def test_list_all_tables():
+    def test_list_all_tables(self):
         num_tables = 16
         num_chars = 16
         test_db = generate_db_name()
@@ -67,6 +67,21 @@ class TestDataBase:
 
 # noinspection PyProtectedMember,PyUnresolvedReferences
 class TestTable:
+    keys = {
+        'date_stored',
+        'mechanism',
+        'initial_temp',
+        'initial_press',
+        'equivalence',
+        'fuel',
+        'oxidizer',
+        'diluent',
+        'diluent_mol_frac',
+        'reaction_number',
+        'k_i',
+        'cj_speed'
+    }
+
     # noinspection PyProtectedMember,PyUnresolvedReferences
     class FakeTable:
         """
@@ -169,20 +184,6 @@ class TestTable:
         ])
 
     def test__create(self):
-        good_columns = {
-            'date_stored',
-            'mechanism',
-            'initial_temp',
-            'initial_press',
-            'equivalence',
-            'fuel',
-            'oxidizer',
-            'diluent',
-            'diluent_mol_frac',
-            'reaction_number',
-            'k_i',
-            'cj_speed'
-        }
         test_db = generate_db_name()
         test_table_name = 'test_table'
         FakeTable = self.FakeTable
@@ -193,34 +194,274 @@ class TestTable:
             allow_create=True
             )
         actual_columns = set(test_table.columns())
-        assert not good_columns.difference(actual_columns)
+        assert not self.keys.difference(actual_columns)
 
-    def test_store_row_in_blank(self):
-        pass
-
-    def test__update_row(self):
-        pass
-
-    def test_store_row_update(self):
-        pass
-
-    def test_store_row_update_no_overwrite(self):
-        pass
-
-    def test_check_existing_row(self):
-        pass
+    def test_store_and_check_existing(self):
+        kwargs = {
+            'mechanism': 'gri30.cti',
+            'initial_temp': 300,
+            'initial_press': 101325,
+            'equivalence': 1,
+            'fuel': 'CH4',
+            'oxidizer': 'N2O',
+            'reaction_number': 0,
+            'diluent': 'N2',
+            'diluent_mol_frac': 0.1
+        }
+        test_db = generate_db_name()
+        test_table_name = 'test_table'
+        FakeTable = self.FakeTable
+        test_table = FakeTable(
+            test_db,
+            test_table_name,
+            allow_create=True
+        )
+        bind(test_table, db.Table.store_row)
+        bind(test_table, db.Table.check_existing_row)
+        test_table.store_row(**{**kwargs, 'k_i': 123, 'cj_speed': 456})
+        assert test_table.check_existing_row(**kwargs)
 
     def test_fetch_rows_blank_table(self):
-        pass
+        test_db = generate_db_name()
+        test_table_name = 'test_table'
+        test_table = db.Table(
+            test_db,
+            test_table_name,
+            testing=True
+            )
+        test_rows = test_table.fetch_rows()
+        assert all([
+            not self.keys.difference(set(test_rows.keys())),
+            *[item == [] for item in test_rows.values()]
+        ])
 
     def test_fetch_rows_single(self):
-        pass
+        test_db = generate_db_name()
+        test_table_name = 'test_table'
+        test_table = db.Table(
+            test_db,
+            test_table_name,
+            testing=True
+            )
+        kwargs = {
+            'mechanism': 'gri30.cti',
+            'initial_temp': 300,
+            'initial_press': 101325,
+            'equivalence': 1,
+            'fuel': 'CH4',
+            'oxidizer': 'N2O',
+            'reaction_number': 0,
+            'diluent': 'N2',
+            'diluent_mol_frac': 0.1,
+            'k_i': 1.2e12,
+            'cj_speed': 1986.12354679687543
+        }
+        test_table.store_row(**kwargs)
+        test_rows = test_table.fetch_rows()
+        checks = []
+        for key, value in test_rows.items():
+            if 'date' not in key:
+                if isinstance(kwargs[key], str) or isinstance(kwargs[key], int):
+                    checks.append(kwargs[key] == value[0])
+                else:
+                    checks.append(isclose(kwargs[key], value[0]))
+        assert all(checks)
 
     def test_fetch_rows_multiple(self):
-        pass
+        test_db = generate_db_name()
+        test_table_name = 'test_table'
+        test_table = db.Table(
+            test_db,
+            test_table_name,
+            testing=True
+            )
+        kwargs = [{
+            'mechanism': 'gri30.cti',
+            'initial_temp': 300,
+            'initial_press': 101325,
+            'equivalence': 1,
+            'fuel': 'CH4',
+            'oxidizer': 'N2O',
+            'reaction_number': 0,
+            'diluent': 'N2',
+            'diluent_mol_frac': 0.1,
+            'k_i': 1.2e12,
+            'cj_speed': 1986.12354679687543
+        }, {
+            'mechanism': 'gri30.cti',
+            'initial_temp': 900,
+            'initial_press': 202156,
+            'equivalence': 2,
+            'fuel': 'C3H8',
+            'oxidizer': 'O2:1 N2:3.76',
+            'reaction_number': 12,
+            'diluent': 'None',
+            'diluent_mol_frac': 0,
+            'k_i': 1.34e12,
+            'cj_speed': 1467.546546539687543
+        }]
+        for kw in kwargs:
+            test_table.store_row(**kw)
+        test_rows = test_table.fetch_rows()
+        checks = []
+        good_answer = {
+            key: [value, kwargs[1][key]] for key, value in kwargs[0].items()
+        }
+        for key, value in test_rows.items():
+            if 'date' not in key:
+                if (isinstance(kwargs[0][key], str)
+                        or isinstance(kwargs[0][key], int)):
+                    for good, test in zip(good_answer[key], test_rows[key]):
+                        checks.append(test == good)
+                else:
+                    checks.append(allclose(good_answer[key], value))
+        assert all(checks)
+
+    def test__update_row(self):
+        test_db = generate_db_name()
+        test_table_name = 'test_table'
+        test_table = db.Table(
+            test_db,
+            test_table_name,
+            testing=True
+            )
+        kwargs_init = {
+            'mechanism': 'gri30.cti',
+            'initial_temp': 300,
+            'initial_press': 101325,
+            'equivalence': 1,
+            'fuel': 'CH4',
+            'oxidizer': 'N2O',
+            'reaction_number': 0,
+            'diluent': 'N2',
+            'diluent_mol_frac': 0.1,
+            'k_i': 1.2e12,
+            'cj_speed': 1986.12354679687543
+        }
+        kwargs_repl = {
+            'mechanism': 'gri30.cti',
+            'initial_temp': 300,
+            'initial_press': 101325,
+            'equivalence': 1,
+            'fuel': 'CH4',
+            'oxidizer': 'N2O',
+            'reaction_number': 0,
+            'diluent': 'N2',
+            'diluent_mol_frac': 0.1,
+            'k_i': 1.34e12,
+            'cj_speed': 1467.546546539687543
+        }
+        test_table.store_row(**kwargs_init)
+        test_table._update_row(**kwargs_repl)
+        test_rows = test_table.fetch_rows()
+        checks = []
+        for key, value in test_rows.items():
+            if 'date' not in key:
+                if (isinstance(kwargs_repl[key], str)
+                        or isinstance(kwargs_repl[key], int)):
+                    checks.append(kwargs_repl[key] == value[0])
+                else:
+                    checks.append(isclose(kwargs_repl[key], value[0]))
+        assert all(checks)
+
+    def test_store_row_update(self):
+        test_db = generate_db_name()
+        test_table_name = 'test_table'
+        test_table = db.Table(
+            test_db,
+            test_table_name,
+            testing=True
+            )
+        kwargs_init = {
+            'mechanism': 'gri30.cti',
+            'initial_temp': 300,
+            'initial_press': 101325,
+            'equivalence': 1,
+            'fuel': 'CH4',
+            'oxidizer': 'N2O',
+            'reaction_number': 0,
+            'diluent': 'N2',
+            'diluent_mol_frac': 0.1,
+            'k_i': 1.2e12,
+            'cj_speed': 1986.12354679687543
+        }
+        kwargs_repl = {
+            'mechanism': 'gri30.cti',
+            'initial_temp': 300,
+            'initial_press': 101325,
+            'equivalence': 1,
+            'fuel': 'CH4',
+            'oxidizer': 'N2O',
+            'reaction_number': 0,
+            'diluent': 'N2',
+            'diluent_mol_frac': 0.1,
+            'k_i': 1.34e12,
+            'cj_speed': 1467.546546539687543
+        }
+        test_table.store_row(**kwargs_init)
+        test_table.store_row(**kwargs_repl, overwrite_existing=True)
+        test_rows = test_table.fetch_rows()
+        checks = []
+        for key, value in test_rows.items():
+            if 'date' not in key:
+                if (isinstance(kwargs_repl[key], str)
+                        or isinstance(kwargs_repl[key], int)):
+                    checks.append(kwargs_repl[key] == value[0])
+                else:
+                    checks.append(isclose(kwargs_repl[key], value[0]))
+        assert all(checks)
+
+    @pytest.mark.filterwarnings('ignore')
+    def test_store_row_update_no_overwrite(self):
+        test_db = generate_db_name()
+        test_table_name = 'test_table'
+        test_table = db.Table(
+            test_db,
+            test_table_name,
+            testing=True
+            )
+        kwargs_init = {
+            'mechanism': 'gri30.cti',
+            'initial_temp': 300,
+            'initial_press': 101325,
+            'equivalence': 1,
+            'fuel': 'CH4',
+            'oxidizer': 'N2O',
+            'reaction_number': 0,
+            'diluent': 'N2',
+            'diluent_mol_frac': 0.1,
+            'k_i': 1.2e12,
+            'cj_speed': 1986.12354679687543
+        }
+        kwargs_repl = {
+            'mechanism': 'gri30.cti',
+            'initial_temp': 300,
+            'initial_press': 101325,
+            'equivalence': 1,
+            'fuel': 'CH4',
+            'oxidizer': 'N2O',
+            'reaction_number': 0,
+            'diluent': 'N2',
+            'diluent_mol_frac': 0.1,
+            'k_i': 1.34e12,
+            'cj_speed': 1467.546546539687543
+        }
+        test_table.store_row(**kwargs_init)
+        test_table.store_row(**kwargs_repl, overwrite_existing=False)
+        test_rows = test_table.fetch_rows()
+
+        checks = []
+        for key, value in test_rows.items():
+            if 'date' not in key:
+                if (isinstance(kwargs_init[key], str)
+                        or isinstance(kwargs_init[key], int)):
+                    checks.append(kwargs_init[key] == value[0])
+                else:
+                    checks.append(isclose(kwargs_init[key], value[0]))
+        assert all(checks)
 
 
-if __name__ == '__main__':
+if __name__ == '__main__':  # pragma: no cover
     import subprocess
     try:
         subprocess.check_call('pytest test_database.py -vv --noconftest --cov')
