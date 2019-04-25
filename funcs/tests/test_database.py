@@ -195,11 +195,36 @@ class TestTable:
         actual_columns = set(test_table.columns())
         assert not good_columns.difference(actual_columns)
 
+    def test_store_row_in_blank(self):
+        pass
+
+    def test__update_row(self):
+        pass
+
+    def test_store_row_update(self):
+        pass
+
+    def test_store_row_update_no_overwrite(self):
+        pass
+
+    def test_check_existing_row(self):
+        pass
+
+    def test_fetch_rows_blank_table(self):
+        pass
+
+    def test_fetch_rows_single(self):
+        pass
+
+    def test_fetch_rows_multiple(self):
+        pass
+
 
 if __name__ == '__main__':
     import subprocess
     try:
         subprocess.check_call('pytest test_database.py -vv --noconftest --cov')
     except subprocess.CalledProcessError as e:
+        # clean up in case of an unexpected error cropping up
         remove_stragglers()
         raise e
