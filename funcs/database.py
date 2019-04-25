@@ -477,7 +477,7 @@ class Table:
         sql_varnames = [
             '{:s} = :{:s}'.format(*[item]*2) for item in inputs.keys()
         ]
-        [cmd_str] = ['SELECT * FROM {:s} ' + where +
+        [cmd_str] = ['SELECT * FROM {:s}' + where +
                      ' AND '.join(sql_varnames) + ';']
         return cmd_str
 
