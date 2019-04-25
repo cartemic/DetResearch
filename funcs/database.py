@@ -110,7 +110,7 @@ class Table:
                 self.table_name)
             )
 
-        table_info = cur.fetchall()
+        table_info = [item[1] for item in cur.fetchall()]
 
         return table_info
 
@@ -555,7 +555,7 @@ class Table:
                 }
             )
             info = cur.fetchall()
-            labels = [item[1] for item in self.columns()]
+            labels = self.columns()
             data = {l: [] for l in labels}
             for row in info:
                 for l, d in zip(labels, row):
