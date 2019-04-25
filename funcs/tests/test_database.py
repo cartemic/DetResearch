@@ -14,12 +14,31 @@ def remove_stragglers():
         os.remove(file)
 
 
+def generate_db_name():
+    return str(uuid4()) + '.sqlite'
+
+
+def bind(instance, func, as_name=None):
+    """
+    https://stackoverflow.com/questions/1015307/python-bind-an-unbound-method
+
+    Bind the function *func* to *instance*, with either provided name *as_name*
+    or the existing name of *func*. The provided *func* should accept the
+    instance as the first argument, i.e. "self".
+    """
+    if as_name is None:
+        as_name = func.__name__
+    bound_method = func.__get__(instance, instance.__class__)
+    setattr(instance, as_name, bound_method)
+    return bound_method
+
+
 class TestDataBase:
     @staticmethod
     def test_list_all_tables():
         num_tables = 16
         num_chars = 16
-        test_db = str(uuid4()) + '.sqlite'
+        test_db = generate_db_name()
         table_names = [
             ''.join([random.choice(string.ascii_letters)
                      for _ in range(num_chars)])
@@ -46,10 +65,33 @@ class TestDataBase:
         ])
 
 
-# noinspection PyProtectedMember
+# noinspection PyProtectedMember,PyUnresolvedReferences
 class TestTable:
-    @staticmethod
-    def test__clean_bad_input():
+    # noinspection PyProtectedMember,PyUnresolvedReferences
+    class FakeTable:
+        """
+        Fake table object for testing methods independently
+        """
+        def __init__(
+                self,
+                test_db,
+                test_table_name,
+                allow_create=True
+        ):
+            self.database = test_db
+            self.table_name = test_table_name
+            self.con = sqlite3.connect(self.database)
+            if allow_create and self.table_name not in\
+                    db.DataBase.list_all_tables(test_db):
+                bind(self, db.Table._create)
+                self._create()
+
+        def __del__(self):
+            self.con.commit()
+            self.con.close()
+            os.remove(self.database)
+
+    def test__clean_bad_input(self):
         num_chars = 16
         dirty_string = ''.join([
             random.choice(string.ascii_uppercase + string.punctuation)
@@ -62,8 +104,7 @@ class TestTable:
         ):
             db.Table._clean(dirty_string)
 
-    @staticmethod
-    def test__clean_good_input():
+    def test__clean_good_input(self):
         num_chars = 16
         good_stuff = set(string.ascii_lowercase)
         dirty_string = ''.join([
@@ -73,8 +114,7 @@ class TestTable:
         test_out = set(db.Table._clean(dirty_string))
         assert not test_out.intersection(good_stuff).difference(test_out)
 
-    @staticmethod
-    def test__build_query_str():
+    def test__build_query_str(self):
         # test empty, one input, and two inputs
         good_results = [
             'SELECT * FROM {:s};',
@@ -96,11 +136,10 @@ class TestTable:
             for test, good in zip(test_results, good_results)
         ])
 
-    @staticmethod
-    def test_columns():
+    def test_columns(self):
         num_cols = 16
         num_chars = 16
-        test_db = str(uuid4()) + '.sqlite'
+        test_db = generate_db_name()
         column_names = [
             ''.join([random.choice(string.ascii_letters)
                      for _ in range(num_chars)])
@@ -118,17 +157,43 @@ class TestTable:
             )
         con.close()
 
-        class TestSelf:
-            database = test_db
-            table_name = test_table_name
-            columns = db.Table.columns
-
-        test_table = TestSelf()
+        test_table = self.FakeTable(
+            test_db,
+            test_table_name,
+            allow_create=False
+            )
+        bind(test_table, db.Table.columns)
         test_columns = test_table.columns()
-        os.remove(test_db)
         assert all([
             test == good for test, good in zip(test_columns, column_names)
         ])
+
+    def test__create(self):
+        good_columns = {
+            'date_stored',
+            'mechanism',
+            'initial_temp',
+            'initial_press',
+            'equivalence',
+            'fuel',
+            'oxidizer',
+            'diluent',
+            'diluent_mol_frac',
+            'reaction_number',
+            'k_i',
+            'cj_speed'
+        }
+        test_db = generate_db_name()
+        test_table_name = 'test_table'
+        FakeTable = self.FakeTable
+        FakeTable.columns = db.Table.columns
+        test_table = FakeTable(
+            test_db,
+            test_table_name,
+            allow_create=True
+            )
+        actual_columns = set(test_table.columns())
+        assert not good_columns.difference(actual_columns)
 
 
 if __name__ == '__main__':
