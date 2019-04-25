@@ -12,9 +12,10 @@ CREATED BY:
 import sqlite3
 import inspect
 import warnings
+import os
 
 
-def _formatwarnmsg_impl(msg):
+def _formatwarnmsg_impl(msg):  # pragma: no cover
     # happier warning format :)
     s = ("%s: %s\n" % (msg.category.__name__, msg.message))
     return s
@@ -62,17 +63,21 @@ class Table:
     def __init__(
             self,
             database,
-            table_name
+            table_name,
+            testing=False
     ):
         self.table_name = self._clean(table_name)
         self.database = database
         self.con = sqlite3.connect(self.database)
+        self._testing = testing
         if self.table_name not in DataBase.list_all_tables(database):
             self._create()
 
     def __del__(self):
         self.con.commit()
         self.con.close()
+        if self._testing:
+            os.remove(self.database)
 
     @staticmethod
     def _clean(table_name):
@@ -564,18 +569,6 @@ class Table:
             return data
 
 
-if __name__ == '__main__':
-    from pprint import pprint
-
-    db_str = 'test.sqlite'
-    table_str = 'test_table'
-
-    test = Table(db_str, table_str)
-    test.store_row('test.cti', 300, 101325, 1.15, 'CH4', 'N2O', 1.2e12,
-                   2043.87987987987987)
-    test.store_row('test.cti', 300, 101325, 1.15, 'CH4', 'N2O', 1.2e12,
-                   2043.87987987987987, 0)
-    test.store_row('test.cti', 300, 101325, 1.15, 'CH4', 'N2O', 1.2e12,
-                   2043.87987987987987, 1, overwrite_existing=True)
-    pprint(test.fetch_rows())
-    pprint(test.fetch_rows(reaction_number=-1))
+if __name__ == '__main__':  # pragma: no cover
+    import subprocess
+    subprocess.check_call('pytest -vv tests/test_database.py')
