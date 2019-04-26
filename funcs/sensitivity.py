@@ -44,8 +44,10 @@ def solution_with_inerts(
     return ct.Solution(
         thermo='IdealGas',
         species=species,
-        reactions=reactions
+        reactions=reactions,
+        kinetics='GasKinetics'
     )
+
 
 if __name__ == '__main__':
     # # build a test mechanism with inert oxygen
@@ -95,5 +97,13 @@ if __name__ == '__main__':
     print(len([rxn for rxn in rxns if 'O' not in list(rxn.reactants) + list(rxn.products) and 'O2' not in list(rxn.reactants) + list(rxn.products)]))
     print(len(ct.Species.listFromFile(mechanism)))
 
-    test_gas = solution_with_inerts('gri30.cti', ['o', 'o2'])
+    # test_gas = solution_with_inerts(mechanism,'')#, ['o2'])#, 'o2'])
+    test_gas = ct.Solution(mechanism)
     print(test_gas.n_reactions, test_gas.n_species)
+
+    test_idx = 0
+    test_gas.TP = 300, ct.one_atm
+    rxn = test_gas.reaction(test_idx)
+    print(rxn.equation, test_gas.forward_rate_constants[test_idx])
+    test_gas.set_multiplier(1.1, test_idx)
+    print(rxn.equation, test_gas.forward_rate_constants[test_idx])
