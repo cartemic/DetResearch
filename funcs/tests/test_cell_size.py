@@ -1,5 +1,3 @@
-print(__package__)
-
 from funcs.cell_size import CellSize
 import numpy as np
 
@@ -20,6 +18,7 @@ original_induction_lengths = {
 }
 
 
+# noinspection PyProtectedMember
 class TestAgainstDemo:
     cells = CellSize()
 
@@ -112,4 +111,3 @@ class TestAgainstDemo:
             np.isclose(test['AR'], 0.1)
         ]
         assert all(check)
-
