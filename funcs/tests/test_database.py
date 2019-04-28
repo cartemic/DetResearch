@@ -98,7 +98,7 @@ class TestTable:
             self.con = sqlite3.connect(self.database)
             if allow_create and self.table_name not in\
                     db.DataBase.list_all_tables(test_db):
-                bind(self, db.Table._create)
+                bind(self, db.Table._create_test_table)
                 self._create()
 
         def __del__(self):
@@ -217,7 +217,7 @@ class TestTable:
             allow_create=True
         )
         bind(test_table, db.Table.store_row)
-        bind(test_table, db.Table.check_existing_row)
+        bind(test_table, db.Table.check_existing_test)
         test_table.store_row(**{**kwargs, 'k_i': 123, 'cj_speed': 456})
         assert test_table.check_existing_row(**kwargs)
 

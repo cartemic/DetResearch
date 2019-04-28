@@ -13,6 +13,7 @@ import sqlite3
 import inspect
 import warnings
 import os
+import uuid
 
 
 def _formatwarnmsg_impl(msg):  # pragma: no cover
@@ -71,7 +72,11 @@ class Table:
         self.con = sqlite3.connect(self.database)
         self._testing = testing
         if self.table_name not in DataBase.list_all_tables(database):
-            self._create()
+            self._rxn_table_id = str(uuid.uuid4())
+            self._create_test_table()
+        else:
+            # todo: look up rxn table id
+            pass
 
     def __del__(self):
         self.con.commit()
@@ -119,7 +124,7 @@ class Table:
 
         return table_info
 
-    def check_existing_row(
+    def check_existing_test(
             self,
             mechanism,
             initial_temp,
@@ -197,7 +202,7 @@ class Table:
                 row_found = False
         return row_found
 
-    def _create(self):
+    def _create_test_table(self):
         """
         Creates a table in the current database
         """
@@ -210,17 +215,75 @@ class Table:
                     mechanism TEXT,
                     initial_temp REAL,
                     initial_press REAL,
-                    equivalence REAL,
                     fuel TEXT,
                     oxidizer TEXT,
+                    equivalence REAL,
                     diluent TEXT,
                     diluent_mol_frac REAL,
-                    reaction_number INTEGER,
-                    k_i REAL,
-                    cj_speed REAL
+                    cj_speed REAL,
+                    ind_len_west REAL,
+                    ind_len_gav REAL,
+                    ind_len_ng REAL,
+                    cell_size_west REAL,
+                    cell_size_gav REAL,
+                    cell_size_ng REAL,
+                    rxn_table_id TEXT
                 );
                 """.format(self.table_name)
             )
+
+    def _create_rxn_table_base(self):
+        """
+        Creates a table in the current database
+        """
+        # TODO: implement this!
+        table_name = 'BASE_' + self._rxn_table_id
+        with self.con as con:
+            cur = con.cursor()
+            cur.execute(
+                """
+                CREATE TABLE {:s} (
+                    rxn_no INTEGER,
+                    rxn TEXT,
+                    k_i REAL
+                );
+                """.format(table_name)
+            )
+        return table_name
+
+    def _create_rxn_table_pert(self):
+        """
+        Creates a table in the current database
+        """
+        # TODO: implement this!
+        table_name = 'PERT_' + self._rxn_table_id
+        with self.con as con:
+            cur = con.cursor()
+            cur.execute(
+                """
+                CREATE TABLE {:s} (
+                    rxn_no INTEGER,
+                    rxn TEXT,
+                    k_i REAL,
+                    cj_speed REAL,
+                    ind_len_west REAL,
+                    ind_len_gav REAL,
+                    ind_len_ng REAL,
+                    cell_size_west REAL,
+                    cell_size_gav REAL,
+                    cell_size_ng REAL,
+                    sens_cj_speed REAL,
+                    sens_ind_len_west REAL,
+                    sens_ind_len_gav REAL,
+                    sens_ind_len_ng REAL,
+                    sens_cell_size_west REAL,
+                    sens_cell_size_gav REAL,
+                    sens_cell_size_ng REAL,
+                    
+                );
+                """.format(table_name)
+            )
+        return table_name
 
     def _update_row(
             self,
@@ -355,7 +418,7 @@ class Table:
             True to overwrite an existing entry if it exists, False to
             protect existing entries
         """
-        if self.check_existing_row(
+        if self.check_existing_test(
             mechanism=mechanism,
             initial_temp=initial_temp,
             initial_press=initial_press,
