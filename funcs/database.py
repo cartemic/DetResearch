@@ -489,6 +489,15 @@ class Table:
             Cell size (Gavrikov)
         cell_size_ng : float
             Cell size (Ng)
+
+        Returns
+        -------
+        rxn_table_id : str
+            Reaction table ID corresponding to the BASE_rxn_table_id and
+            PERT_rxn_table_id tables. BASE table holds all reactions and
+            reaction rate coefficients, while PERT holds all reactions and
+            perturbed reaction rate coefficients along with the associated CJ
+            speed, induction length, and cell size results.
         """
         if self.check_existing_test(
                 mechanism=mechanism,
@@ -502,6 +511,16 @@ class Table:
         ):
             # a rew with the current information was found
             if overwrite_existing:
+                [rxn_table_id] = self.fetch_test_rows(
+                    mechanism=mechanism,
+                    initial_temp=initial_temp,
+                    initial_press=initial_press,
+                    equivalence=equivalence,
+                    fuel=fuel,
+                    oxidizer=oxidizer,
+                    diluent=diluent,
+                    diluent_mol_frac=diluent_mol_frac
+                )['rxn_table_id']
                 self._update_test_row(
                     mechanism=mechanism,
                     initial_temp=initial_temp,
@@ -522,7 +541,7 @@ class Table:
                 start_color = '\033[92m'
                 end_color = '\033[0m'
                 print(start_color+'data row stored successfully'+end_color)
-                # todo: get rxn_table_id
+                return rxn_table_id
             else:
                 # warn the user that the current input was ignored
                 warnings.warn(
@@ -533,7 +552,7 @@ class Table:
         else:
             # no rows with the current information were found
             with self.con as con:
-                table_id = str(uuid.uuid4()).replace('-', '')
+                rxn_table_id = str(uuid.uuid4()).replace('-', '')
                 cur = con.cursor()
                 cur.execute(
                     """
@@ -573,12 +592,12 @@ class Table:
                         'cell_size_west': cell_size_west,
                         'cell_size_gav': cell_size_gav,
                         'cell_size_ng': cell_size_ng,
-                        'rxn_table_id': table_id,
+                        'rxn_table_id': rxn_table_id,
                     }
                 )
-                self._create_rxn_table_base(table_id)
-                self._create_rxn_table_pert(table_id)
-                return table_id
+                self._create_rxn_table_base(rxn_table_id)
+                self._create_rxn_table_pert(rxn_table_id)
+                return rxn_table_id
 
     # noinspection PyUnusedLocal
     @staticmethod
