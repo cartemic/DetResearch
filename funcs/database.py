@@ -181,7 +181,7 @@ class Table:
         return table_info
 
     # noinspection PyUnusedLocal
-    def check_existing_test(
+    def _check_existing_test(
             self,
             mechanism=None,
             initial_temp=None,
@@ -232,6 +232,38 @@ class Table:
                 query_str,
                 {key: value for key, value in inputs.items()
                  if value is not None}
+            )
+            if len(cur.fetchall()) > 0:
+                row_found = True
+            else:
+                row_found = False
+        return row_found
+
+    def _check_existing_pert(
+            self,
+            table_name,
+            rxn_no
+    ):
+        """
+        Checks the current table for a specific row of data
+
+        Parameters
+
+        Returns
+        -------
+        row_found : bool
+            True if a row with the given information was found in the current
+            table, False if not
+        """
+        with self.con as con:
+            cur = con.cursor()
+            cur.execute(
+                """
+                SELECT * from {:s} WHERE rxn_no = :rxn_no
+                """.format(table_name),
+                {
+                    'rxn_no': rxn_no
+                }
             )
             if len(cur.fetchall()) > 0:
                 row_found = True
@@ -423,6 +455,104 @@ class Table:
                 }
             )
 
+    def _update_pert_row(
+            self,
+            mechanism,
+            initial_temp,
+            initial_press,
+            fuel,
+            oxidizer,
+            equivalence,
+            diluent,
+            diluent_mol_frac,
+            cj_speed,
+            ind_len_west,
+            ind_len_gav,
+            ind_len_ng,
+            cell_size_west,
+            cell_size_gav,
+            cell_size_ng,
+    ):
+        """
+        todo: in work pls finish
+        Updates the CJ velocity and forward reaction rate (k_i) for a set of
+        conditions.
+
+        Parameters
+        ----------
+        mechanism : str
+            Mechanism used for the desired row's computation
+        initial_temp : float
+            Initial temperature for the desired row, in Kelvin
+        initial_press : float
+            Initial pressure for the desired row, in Pascals
+        fuel : str
+            Fuel used in the desired row
+        oxidizer : str
+            Oxidizer used in the desired row
+        equivalence : float
+            Equivalence ratio for the desired row
+        diluent : str
+            Diluent used in the desired row
+        diluent_mol_frac : float
+            Mole fraction of diluent used in the desired row
+        cj_speed : float
+            CJ speed to update
+        ind_len_west : float
+            Induction length (Westbrook)
+        ind_len_gav : float
+            Induction length (Gavrikov)
+        ind_len_ng : float
+            Induction length (Ng)
+        cell_size_west : float
+            Cell size (Westbrook)
+        cell_size_gav : float
+            Cell size (Gavrikov)
+        cell_size_ng : float
+            Cell size (Ng)
+        """
+        with self.con as con:
+            cur = con.cursor()
+            cur.execute(
+                """
+                UPDATE {:s} SET 
+                    date_stored = datetime('now', 'localtime'),
+                    cj_speed = :cj_speed, 
+                    ind_len_west = :ind_len_west,
+                    ind_len_gav = :ind_len_gav,
+                    ind_len_ng = :ind_len_ng,
+                    cell_size_west = :cell_size_west,
+                    cell_size_gav = :cell_size_gav,
+                    cell_size_ng = :cell_size_ng
+                WHERE
+                    mechanism = :mechanism AND
+                    initial_temp = :initial_temp AND
+                    initial_press = :initial_press AND
+                    equivalence = :equivalence AND
+                    fuel = :fuel AND
+                    oxidizer = :oxidizer AND
+                    diluent = :diluent AND
+                    diluent_mol_frac = :diluent_mol_frac
+                """.format(self.table_name),
+                {
+                    'mechanism': mechanism,
+                    'initial_temp': initial_temp,
+                    'initial_press': initial_press,
+                    'fuel': fuel,
+                    'oxidizer': oxidizer,
+                    'equivalence': equivalence,
+                    'diluent': diluent,
+                    'diluent_mol_frac': diluent_mol_frac,
+                    'cj_speed': cj_speed,
+                    'ind_len_west': ind_len_west,
+                    'ind_len_gav': ind_len_gav,
+                    'ind_len_ng': ind_len_ng,
+                    'cell_size_west': cell_size_west,
+                    'cell_size_gav': cell_size_gav,
+                    'cell_size_ng': cell_size_ng,
+                }
+            )
+
     def store_test_row(
             self,
             mechanism,
@@ -494,7 +624,7 @@ class Table:
             perturbed reaction rate coefficients along with the associated CJ
             speed, induction length, and cell size results.
         """
-        if self.check_existing_test(
+        if self._check_existing_test(
                 mechanism=mechanism,
                 initial_temp=initial_temp,
                 initial_press=initial_press,
@@ -504,7 +634,7 @@ class Table:
                 diluent=diluent,
                 diluent_mol_frac=diluent_mol_frac
         ):
-            # a rew with the current information was found
+            # a row with the current information was found
             if overwrite_existing:
                 [rxn_table_id] = self.fetch_test_rows(
                     mechanism=mechanism,
@@ -593,6 +723,151 @@ class Table:
                 self._create_rxn_table_base(rxn_table_id)
                 self._create_rxn_table_pert(rxn_table_id)
                 return rxn_table_id
+
+    def store_perturbed_row(
+            self,
+            rxn_table_id,
+            rxn_no,
+            rxn,
+            k_i,
+            cj_speed,
+            ind_len_west,
+            ind_len_gav,
+            ind_len_ng,
+            cell_size_west,
+            cell_size_gav,
+            cell_size_ng,
+            sens_cj_speed,
+            sens_ind_len_west,
+            sens_ind_len_gav,
+            sens_ind_len_ng,
+            sens_cell_size_west,
+            sens_cell_size_gav,
+            sens_cell_size_ng,
+            overwrite_existing=False
+    ):
+        """
+        Stores a row of data in the current table.
+
+        If a row with this information already exists in the current table,
+        overwrite_existing decides whether to overwrite the existing data or
+        disregard the current data.
+
+        Parameters
+        ----------
+        cj_speed : float
+            Current CJ speed
+        overwrite_existing : bool
+            True to overwrite an existing entry if it exists, False to
+            protect existing entries
+        ind_len_west : float
+            Induction length (Westbrook)
+        ind_len_gav : float
+            Induction length (Gavrikov)
+        ind_len_ng : float
+            Induction length (Ng)
+        cell_size_west : float
+            Cell size (Westbrook)
+        cell_size_gav : float
+            Cell size (Gavrikov)
+        cell_size_ng : float
+            Cell size (Ng)
+
+        Returns
+        -------
+        rxn_table_id : str
+            Reaction table ID corresponding to the BASE_rxn_table_id and
+            PERT_rxn_table_id tables. BASE table holds all reactions and
+            reaction rate coefficients, while PERT holds all reactions and
+            perturbed reaction rate coefficients along with the associated CJ
+            speed, induction length, and cell size results.
+        """
+        table_name = 'PERT_' + rxn_table_id
+        if self._check_existing_pert(rxn_no):
+            # a row with the current information was found
+            if overwrite_existing:
+                self._update_pert_row(
+                    table_name=table_name,
+                    rxn_no=rxn_no,
+                    rxn=rxn,
+                    k_i=k_i,
+                    cj_speed=cj_speed,
+                    ind_len_west=ind_len_west,
+                    ind_len_gav=ind_len_gav,
+                    ind_len_ng=ind_len_ng,
+                    cell_size_west=cell_size_west,
+                    cell_size_gav=cell_size_gav,
+                    cell_size_ng=cell_size_ng,
+                    sens_cj_speed=sens_cj_speed,
+                    sens_ind_len_west=sens_ind_len_west,
+                    sens_ind_len_gav=sens_ind_len_gav,
+                    sens_ind_len_ng=sens_ind_len_ng,
+                    sens_cell_size_west=sens_cell_size_west,
+                    sens_cell_size_gav=sens_cell_size_gav,
+                    sens_cell_size_ng=sens_cell_size_ng,
+                )
+                start_color = '\033[92m'
+                end_color = '\033[0m'
+                print(
+                    start_color +
+                    'perturbed data row stored successfully' +
+                    end_color
+                )
+            else:
+                # warn the user that the current input was ignored
+                warnings.warn(
+                    'Cannot overwrite row unless overwrite_existing=True',
+                    Warning
+                )
+
+        else:
+            # no rows with the current information were found
+            with self.con as con:
+                cur = con.cursor()
+                cur.execute(
+                    """
+                    INSERT INTO {:s} VALUES (
+                        datetime('now', 'localtime'),
+                        :rxn_table_id,
+                        :rxn_no,
+                        :rxn,
+                        :k_i,
+                        :cj_speed,
+                        :ind_len_west,
+                        :ind_len_gav,
+                        :ind_len_ng,
+                        :cell_size_west,
+                        :cell_size_gav,
+                        :cell_size_ng,
+                        :sens_cj_speed,
+                        :sens_ind_len_west,
+                        :sens_ind_len_gav,
+                        :sens_ind_len_ng,
+                        :sens_cell_size_west,
+                        :sens_cell_size_gav,
+                        :sens_cell_size_ng
+                    );
+                    """.format(table_name),
+                    {
+                        'rxn_no': rxn_no,
+                        'rxn': rxn,
+                        'k_i': k_i,
+                        'cj_speed': cj_speed,
+                        'ind_len_west': ind_len_west,
+                        'ind_len_gav': ind_len_gav,
+                        'ind_len_ng': ind_len_ng,
+                        'cell_size_west': cell_size_west,
+                        'cell_size_gav': cell_size_gav,
+                        'cell_size_ng': cell_size_ng,
+                        'sens_cj_speed': sens_cj_speed,
+                        'sens_ind_len_west': sens_ind_len_west,
+                        'sens_ind_len_gav': sens_ind_len_gav,
+                        'sens_ind_len_ng': sens_ind_len_ng,
+                        'sens_cell_size_west': sens_cell_size_west,
+                        'sens_cell_size_gav': sens_cell_size_gav,
+                        'sens_cell_size_ng': sens_cell_size_ng,
+                    }
+                )
 
     # noinspection PyUnusedLocal
     @staticmethod
