@@ -522,6 +522,7 @@ class Table:
                 start_color = '\033[92m'
                 end_color = '\033[0m'
                 print(start_color+'data row stored successfully'+end_color)
+                # todo: get rxn_table_id
             else:
                 # warn the user that the current input was ignored
                 warnings.warn(
@@ -577,6 +578,7 @@ class Table:
                 )
                 self._create_rxn_table_base(table_id)
                 self._create_rxn_table_pert(table_id)
+                return table_id
 
     # noinspection PyUnusedLocal
     @staticmethod
@@ -615,9 +617,9 @@ class Table:
             mechanism=None,
             initial_temp=None,
             initial_press=None,
-            equivalence=None,
             fuel=None,
             oxidizer=None,
+            equivalence=None,
             diluent=None,
             diluent_mol_frac=None
     ):
@@ -633,12 +635,12 @@ class Table:
             Initial temperature to search for, in Kelvin
         initial_press : float
             Initial pressure to search for, in Pascals
-        equivalence : float
-            Equivalence ratio to search for
         fuel : str
             Fuel to search for
         oxidizer : str
             Oxidizer to search for
+        equivalence : float
+            Equivalence ratio to search for
         diluent : str
             Diluent to search for
         diluent_mol_frac : float
@@ -683,6 +685,34 @@ class Table:
                     data[l].append(d)
 
             return data
+
+    def store_base_rxn_table(
+            self,
+            rxn_table_id,
+            gas
+    ):
+        rxn_table = 'BASE_' + rxn_table_id
+        with self.con as con:
+            con.execute("""DELETE FROM {:s}""".format(rxn_table))
+            for rxn_no, rxn, k_i in zip(
+                    range(gas.n_reactions),
+                    gas.reaction_equations(),
+                    gas.forward_rate_constants
+            ):
+                con.execute(
+                    """
+                    INSERT INTO {:s} VALUES (
+                        :rxn_no,
+                        :rxn,
+                        :k_i
+                    );
+                    """.format(rxn_table),
+                    {
+                        'rxn_no': rxn_no,
+                        'rxn': rxn,
+                        'k_i': k_i,
+                    }
+                )
 
 
 if __name__ == '__main__':  # pragma: no cover
