@@ -91,12 +91,8 @@ class Table:
         self.database = database
         self.con = sqlite3.connect(self.database)
         self._testing = testing
-        # todo: rxn table id doesn't make sense here, make a Row class
-        self._rxn_table_id = str(uuid.uuid4()).replace('-', '')
         if self.table_name not in DataBase.list_all_tables(database):
             self._create_test_table()
-            self._create_rxn_table_base()
-            self._create_rxn_table_pert()
         else:
             # todo: look up rxn table id
             pass
@@ -147,7 +143,10 @@ class Table:
 
         return table_info
 
-    def base_columns(self):
+    def base_columns(
+            self,
+            rxn_table_id
+    ):
         """
         Returns
         -------
@@ -157,14 +156,17 @@ class Table:
         with sqlite3.connect(self.database) as con:
             cur = con.cursor()
             cur.execute("""PRAGMA table_info({:s});""".format(
-                'BASE_' + self._rxn_table_id)
+                'BASE_' + rxn_table_id)
             )
 
         table_info = [item[1] for item in cur.fetchall()]
 
         return table_info
 
-    def pert_columns(self):
+    def pert_columns(
+            self,
+            rxn_table_id
+    ):
         """
         Returns
         -------
@@ -174,7 +176,7 @@ class Table:
         with sqlite3.connect(self.database) as con:
             cur = con.cursor()
             cur.execute("""PRAGMA table_info({:s});""".format(
-                'PERT_' + self._rxn_table_id)
+                'PERT_' + rxn_table_id)
             )
 
         table_info = [item[1] for item in cur.fetchall()]
@@ -270,13 +272,16 @@ class Table:
                 """.format(self.table_name)
             )
 
-    def _create_rxn_table_base(self):
+    def _create_rxn_table_base(
+            self,
+            rxn_table_id
+    ):
         """
         Creates a table of base (unperturbed) reactions and their rate constants
         in the current database
         """
         # TODO: implement this!
-        base_table_name = 'BASE_' + self._rxn_table_id
+        base_table_name = 'BASE_' + rxn_table_id
         with self.con as con:
             cur = con.cursor()
             cur.execute(
@@ -290,12 +295,15 @@ class Table:
             )
         return base_table_name
 
-    def _create_rxn_table_pert(self):
+    def _create_rxn_table_pert(
+            self,
+            rxn_table_id
+    ):
         """
         Creates a table of perturbed reaction results in the current database
         """
         # TODO: implement this!
-        pert_table_name = 'PERT_' + self._rxn_table_id
+        pert_table_name = 'PERT_' + rxn_table_id
         with self.con as con:
             cur = con.cursor()
             cur.execute(
@@ -524,6 +532,7 @@ class Table:
         else:
             # no rows with the current information were found
             with self.con as con:
+                table_id = str(uuid.uuid4()).replace('-', '')
                 cur = con.cursor()
                 cur.execute(
                     """
@@ -563,9 +572,11 @@ class Table:
                         'cell_size_west': cell_size_west,
                         'cell_size_gav': cell_size_gav,
                         'cell_size_ng': cell_size_ng,
-                        'rxn_table_id': self._rxn_table_id,
+                        'rxn_table_id': table_id,
                     }
                 )
+                self._create_rxn_table_base(table_id)
+                self._create_rxn_table_pert(table_id)
 
     # noinspection PyUnusedLocal
     @staticmethod

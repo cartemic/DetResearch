@@ -170,72 +170,6 @@ class TestTable:
             test == good for test, good in zip(test_columns, column_names)
         ])
 
-    def test_base_columns(self):
-        num_cols = 16
-        num_chars = 16
-        test_db = generate_db_name()
-        column_names = [
-            ''.join([random.choice(string.ascii_letters)
-                     for _ in range(num_chars)])
-            for _ in range(num_cols)
-        ]
-        test_table_name = 'test_table'
-        header = 'CREATE TABLE {:s} ('.format(test_table_name)
-        footer = ' TEXT);'
-        sep = ' TEXT, '
-
-        with sqlite3.connect(test_db) as con:
-            cur = con.cursor()
-            cur.execute(
-                header + sep.join(column_names) + footer
-            )
-        con.close()
-
-        test_table = self.FakeTable(
-            test_db,
-            test_table_name,
-            allow_create=False
-            )
-        bind(test_table, db.Table.base_columns)
-        test_table._rxn_table_id = str(uuid.uuid4()).replace('-', '')
-        test_columns = test_table.base_columns()
-        assert all([
-            test == good for test, good in zip(test_columns, column_names)
-        ])
-
-    def test_pert_columns(self):
-        num_cols = 16
-        num_chars = 16
-        test_db = generate_db_name()
-        column_names = [
-            ''.join([random.choice(string.ascii_letters)
-                     for _ in range(num_chars)])
-            for _ in range(num_cols)
-        ]
-        test_table_name = 'test_table'
-        header = 'CREATE TABLE {:s} ('.format(test_table_name)
-        footer = ' TEXT);'
-        sep = ' TEXT, '
-
-        with sqlite3.connect(test_db) as con:
-            cur = con.cursor()
-            cur.execute(
-                header + sep.join(column_names) + footer
-            )
-        con.close()
-
-        test_table = self.FakeTable(
-            test_db,
-            test_table_name,
-            allow_create=False
-            )
-        bind(test_table, db.Table.pert_columns)
-        test_table._rxn_table_id = str(uuid.uuid4()).replace('-', '')
-        test_columns = test_table.pert_columns()
-        assert all([
-            test == good for test, good in zip(test_columns, column_names)
-        ])
-
     def test__create_test_table(self):
         test_db = generate_db_name()
         test_table_name = 'test_table'
@@ -257,7 +191,35 @@ class TestTable:
             test_table_name,
             testing=True
             )
-        actual_columns = set(test_table.base_columns())
+        test_table.store_test_row(
+            mechanism='gri30.cti',
+            initial_temp=300,
+            initial_press=101325,
+            fuel='CH4',
+            oxidizer='N2O',
+            equivalence=1,
+            diluent='N2',
+            diluent_mol_frac=0.1,
+            cj_speed=1986.12354679687543,
+            ind_len_west=1,
+            ind_len_gav=2,
+            ind_len_ng=3,
+            cell_size_west=4,
+            cell_size_gav=5,
+            cell_size_ng=6
+        )
+        info = test_table.fetch_test_rows(
+            mechanism='gri30.cti',
+            initial_temp=300,
+            initial_press=101325,
+            fuel='CH4',
+            oxidizer='N2O',
+            equivalence=1,
+            diluent='N2',
+            diluent_mol_frac=0.1,
+        )
+        [rxn_id] = info['rxn_table_id']
+        actual_columns = set(test_table.base_columns(rxn_id))
         assert not {'rxn_no', 'rxn', 'k_i'}.difference(actual_columns)
 
     def test__create_pert_table(self):
@@ -268,7 +230,35 @@ class TestTable:
             test_table_name,
             testing=True
             )
-        actual_columns = set(test_table.pert_columns())
+        test_table.store_test_row(
+            mechanism='gri30.cti',
+            initial_temp=300,
+            initial_press=101325,
+            fuel='CH4',
+            oxidizer='N2O',
+            equivalence=1,
+            diluent='N2',
+            diluent_mol_frac=0.1,
+            cj_speed=1986.12354679687543,
+            ind_len_west=1,
+            ind_len_gav=2,
+            ind_len_ng=3,
+            cell_size_west=4,
+            cell_size_gav=5,
+            cell_size_ng=6
+        )
+        info = test_table.fetch_test_rows(
+            mechanism='gri30.cti',
+            initial_temp=300,
+            initial_press=101325,
+            fuel='CH4',
+            oxidizer='N2O',
+            equivalence=1,
+            diluent='N2',
+            diluent_mol_frac=0.1,
+        )
+        [rxn_id] = info['rxn_table_id']
+        actual_columns = set(test_table.pert_columns(rxn_id))
         assert not {
             'rxn_no',
             'rxn',
