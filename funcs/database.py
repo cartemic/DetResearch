@@ -61,6 +61,26 @@ class Table:
     """
     A class to help manage tables of computational detonation data.
     """
+    _test_table_args = (
+        'date_stored',
+        'mechanism',
+        'initial_temp',
+        'initial_press',
+        'fuel',
+        'oxidizer',
+        'equivalence',
+        'diluent',
+        'diluent_mol_frac',
+        'cj_speed',
+        'ind_len_west',
+        'ind_len_gav',
+        'ind_len_ng',
+        'cell_size_west',
+        'cell_size_gav',
+        'cell_size_ng',
+        'rxn_table_id'
+    )
+
     def __init__(
             self,
             database,
@@ -71,9 +91,12 @@ class Table:
         self.database = database
         self.con = sqlite3.connect(self.database)
         self._testing = testing
+        # todo: rxn table id doesn't make sense here, make a Row class
+        self._rxn_table_id = str(uuid.uuid4()).replace('-', '')
         if self.table_name not in DataBase.list_all_tables(database):
-            self._rxn_table_id = str(uuid.uuid4())
             self._create_test_table()
+            self._create_rxn_table_base()
+            self._create_rxn_table_pert()
         else:
             # todo: look up rxn table id
             pass
@@ -107,7 +130,7 @@ class Table:
         else:
             return table_name.lower()
 
-    def columns(self):
+    def test_columns(self):
         """
         Returns
         -------
@@ -124,17 +147,51 @@ class Table:
 
         return table_info
 
+    def base_columns(self):
+        """
+        Returns
+        -------
+        table_info : list
+            A list of all column names in the current table.
+        """
+        with sqlite3.connect(self.database) as con:
+            cur = con.cursor()
+            cur.execute("""PRAGMA table_info({:s});""".format(
+                'BASE_' + self._rxn_table_id)
+            )
+
+        table_info = [item[1] for item in cur.fetchall()]
+
+        return table_info
+
+    def pert_columns(self):
+        """
+        Returns
+        -------
+        table_info : list
+            A list of all column names in the current table.
+        """
+        with sqlite3.connect(self.database) as con:
+            cur = con.cursor()
+            cur.execute("""PRAGMA table_info({:s});""".format(
+                'PERT_' + self._rxn_table_id)
+            )
+
+        table_info = [item[1] for item in cur.fetchall()]
+
+        return table_info
+
+    # noinspection PyUnusedLocal
     def check_existing_test(
             self,
-            mechanism,
-            initial_temp,
-            initial_press,
-            equivalence,
-            fuel,
-            oxidizer,
-            reaction_number,
-            diluent,
-            diluent_mol_frac
+            mechanism=None,
+            initial_temp=None,
+            initial_press=None,
+            fuel=None,
+            oxidizer=None,
+            equivalence=None,
+            diluent=None,
+            diluent_mol_frac=None
     ):
         """
         Checks the current table for a specific row of data
@@ -153,11 +210,6 @@ class Table:
             Fuel used in the desired row
         oxidizer : str
             Oxidizer used in the desired row
-        reaction_number : int
-            Reaction number for the desired row:
-                -1:  indicates base case (unperturbed)
-                0+:  indicates a perturbed case, i.e. the current reaction has
-                     been perturbed and this is the resulting solution
         diluent : str
             Diluent used in the desired row
         diluent_mol_frac : float
@@ -169,32 +221,18 @@ class Table:
             True if a row with the given information was found in the current
             table, False if not
         """
+        inputs = {
+            key: value for key, value
+            in inspect.getargvalues(inspect.currentframe())[3].items()
+            if key in self._test_table_args
+        }
         with self.con as con:
             cur = con.cursor()
+            query_str = self._build_query_str(inputs).format(self.table_name)
             cur.execute(
-                """
-                SELECT * FROM {:s} WHERE
-                    mechanism = :mechanism AND
-                    initial_temp = :initial_temp AND
-                    initial_press = :initial_press AND
-                    equivalence = :equivalence AND
-                    fuel = :fuel AND
-                    oxidizer = :oxidizer AND
-                    diluent = :diluent AND
-                    diluent_mol_frac = :diluent_mol_frac AND
-                    reaction_number = :reaction_number;
-                """.format(self.table_name),
-                {
-                    'mechanism': mechanism,
-                    'initial_temp': initial_temp,
-                    'initial_press': initial_press,
-                    'equivalence': equivalence,
-                    'fuel': fuel,
-                    'oxidizer': oxidizer,
-                    'diluent': diluent,
-                    'diluent_mol_frac': diluent_mol_frac,
-                    'reaction_number': reaction_number
-                }
+                query_str,
+                {key: value for key, value in inputs.items()
+                 if value is not None}
             )
             if len(cur.fetchall()) > 0:
                 row_found = True
@@ -204,7 +242,7 @@ class Table:
 
     def _create_test_table(self):
         """
-        Creates a table in the current database
+        Creates a table of test conditions and results in the current database
         """
         with self.con as con:
             cur = con.cursor()
@@ -234,10 +272,11 @@ class Table:
 
     def _create_rxn_table_base(self):
         """
-        Creates a table in the current database
+        Creates a table of base (unperturbed) reactions and their rate constants
+        in the current database
         """
         # TODO: implement this!
-        table_name = 'BASE_' + self._rxn_table_id
+        base_table_name = 'BASE_' + self._rxn_table_id
         with self.con as con:
             cur = con.cursor()
             cur.execute(
@@ -247,16 +286,16 @@ class Table:
                     rxn TEXT,
                     k_i REAL
                 );
-                """.format(table_name)
+                """.format(base_table_name)
             )
-        return table_name
+        return base_table_name
 
     def _create_rxn_table_pert(self):
         """
-        Creates a table in the current database
+        Creates a table of perturbed reaction results in the current database
         """
         # TODO: implement this!
-        table_name = 'PERT_' + self._rxn_table_id
+        pert_table_name = 'PERT_' + self._rxn_table_id
         with self.con as con:
             cur = con.cursor()
             cur.execute(
@@ -278,26 +317,29 @@ class Table:
                     sens_ind_len_ng REAL,
                     sens_cell_size_west REAL,
                     sens_cell_size_gav REAL,
-                    sens_cell_size_ng REAL,
-                    
+                    sens_cell_size_ng REAL
                 );
-                """.format(table_name)
+                """.format(pert_table_name)
             )
-        return table_name
+        return pert_table_name
 
-    def _update_row(
+    def _update_test_row(
             self,
             mechanism,
             initial_temp,
             initial_press,
-            equivalence,
             fuel,
             oxidizer,
-            reaction_number,
-            cj_speed,
-            k_i,
+            equivalence,
             diluent,
-            diluent_mol_frac
+            diluent_mol_frac,
+            cj_speed,
+            ind_len_west,
+            ind_len_gav,
+            ind_len_ng,
+            cell_size_west,
+            cell_size_gav,
+            cell_size_ng,
     ):
         """
         Updates the CJ velocity and forward reaction rate (k_i) for a set of
@@ -311,25 +353,30 @@ class Table:
             Initial temperature for the desired row, in Kelvin
         initial_press : float
             Initial pressure for the desired row, in Pascals
-        equivalence : float
-            Equivalence ratio for the desired row
         fuel : str
             Fuel used in the desired row
         oxidizer : str
             Oxidizer used in the desired row
-        reaction_number : int
-            Reaction number for the desired row:
-                -1:  indicates base case (unperturbed)
-                0+:  indicates a perturbed case, i.e. the current reaction has
-                     been perturbed and this is the resulting solution
-        cj_speed : float
-            CJ speed to update
-        k_i : float
-            Forward rate of the current reaction to update
+        equivalence : float
+            Equivalence ratio for the desired row
         diluent : str
             Diluent used in the desired row
         diluent_mol_frac : float
             Mole fraction of diluent used in the desired row
+        cj_speed : float
+            CJ speed to update
+        ind_len_west : float
+            Induction length (Westbrook)
+        ind_len_gav : float
+            Induction length (Gavrikov)
+        ind_len_ng : float
+            Induction length (Ng)
+        cell_size_west : float
+            Cell size (Westbrook)
+        cell_size_gav : float
+            Cell size (Gavrikov)
+        cell_size_ng : float
+            Cell size (Ng)
         """
         with self.con as con:
             cur = con.cursor()
@@ -337,8 +384,13 @@ class Table:
                 """
                 UPDATE {:s} SET 
                     date_stored = datetime('now', 'localtime'),
-                    k_i = :k_i,
-                    cj_speed = :cj_speed 
+                    cj_speed = :cj_speed, 
+                    ind_len_west = :ind_len_west,
+                    ind_len_gav = :ind_len_gav,
+                    ind_len_ng = :ind_len_ng,
+                    cell_size_west = :cell_size_west,
+                    cell_size_gav = :cell_size_gav,
+                    cell_size_ng = :cell_size_ng
                 WHERE
                     mechanism = :mechanism AND
                     initial_temp = :initial_temp AND
@@ -347,37 +399,44 @@ class Table:
                     fuel = :fuel AND
                     oxidizer = :oxidizer AND
                     diluent = :diluent AND
-                    diluent_mol_frac = :diluent_mol_frac AND
-                    reaction_number = :reaction_number;
+                    diluent_mol_frac = :diluent_mol_frac
                 """.format(self.table_name),
                 {
                     'mechanism': mechanism,
                     'initial_temp': initial_temp,
                     'initial_press': initial_press,
-                    'equivalence': equivalence,
                     'fuel': fuel,
                     'oxidizer': oxidizer,
-                    'diluent': str(diluent),
+                    'equivalence': equivalence,
+                    'diluent': diluent,
                     'diluent_mol_frac': diluent_mol_frac,
-                    'reaction_number': reaction_number,
-                    'k_i': k_i,
-                    'cj_speed': cj_speed
+                    'cj_speed': cj_speed,
+                    'ind_len_west': ind_len_west,
+                    'ind_len_gav': ind_len_gav,
+                    'ind_len_ng': ind_len_ng,
+                    'cell_size_west': cell_size_west,
+                    'cell_size_gav': cell_size_gav,
+                    'cell_size_ng': cell_size_ng,
                 }
             )
 
-    def store_row(
+    def store_test_row(
             self,
             mechanism,
             initial_temp,
             initial_press,
-            equivalence,
             fuel,
             oxidizer,
-            k_i,
+            equivalence,
+            diluent,
+            diluent_mol_frac,
             cj_speed,
-            reaction_number=-1,
-            diluent='None',
-            diluent_mol_frac=0,
+            ind_len_west,
+            ind_len_gav,
+            ind_len_ng,
+            cell_size_west,
+            cell_size_gav,
+            cell_size_ng,
             overwrite_existing=False
     ):
         """
@@ -401,15 +460,8 @@ class Table:
             Fuel used in the current row
         oxidizer : str
             Oxidizer used in the current row
-        k_i : float
-            Forward rate of the current reaction
         cj_speed : float
             Current CJ speed
-        reaction_number : int
-            Current reaction number:
-                -1:  indicates base case (unperturbed)
-                0+:  indicates a perturbed case, i.e. the current reaction has
-                     been perturbed and this is the resulting solution
         diluent : str
             Diluent used in the current row
         diluent_mol_frac : float
@@ -417,32 +469,47 @@ class Table:
         overwrite_existing : bool
             True to overwrite an existing entry if it exists, False to
             protect existing entries
+        ind_len_west : float
+            Induction length (Westbrook)
+        ind_len_gav : float
+            Induction length (Gavrikov)
+        ind_len_ng : float
+            Induction length (Ng)
+        cell_size_west : float
+            Cell size (Westbrook)
+        cell_size_gav : float
+            Cell size (Gavrikov)
+        cell_size_ng : float
+            Cell size (Ng)
         """
         if self.check_existing_test(
-            mechanism=mechanism,
-            initial_temp=initial_temp,
-            initial_press=initial_press,
-            equivalence=equivalence,
-            fuel=fuel,
-            oxidizer=oxidizer,
-            reaction_number=reaction_number,
-            diluent=diluent,
-            diluent_mol_frac=diluent_mol_frac
+                mechanism=mechanism,
+                initial_temp=initial_temp,
+                initial_press=initial_press,
+                equivalence=equivalence,
+                fuel=fuel,
+                oxidizer=oxidizer,
+                diluent=diluent,
+                diluent_mol_frac=diluent_mol_frac
         ):
             # a rew with the current information was found
             if overwrite_existing:
-                self._update_row(
+                self._update_test_row(
                     mechanism=mechanism,
                     initial_temp=initial_temp,
                     initial_press=initial_press,
-                    equivalence=equivalence,
                     fuel=fuel,
                     oxidizer=oxidizer,
-                    reaction_number=reaction_number,
+                    equivalence=equivalence,
                     diluent=diluent,
                     diluent_mol_frac=diluent_mol_frac,
                     cj_speed=cj_speed,
-                    k_i=k_i
+                    ind_len_west=ind_len_west,
+                    ind_len_gav=ind_len_gav,
+                    ind_len_ng=ind_len_ng,
+                    cell_size_west=cell_size_west,
+                    cell_size_gav=cell_size_gav,
+                    cell_size_ng=cell_size_ng,
                 )
                 start_color = '\033[92m'
                 end_color = '\033[0m'
@@ -465,80 +532,63 @@ class Table:
                         :mechanism,
                         :initial_temp,
                         :initial_press,
-                        :equivalence,
                         :fuel,
                         :oxidizer,
+                        :equivalence,
                         :diluent,
                         :diluent_mol_frac,
-                        :reaction_number,
-                        :k_i,
-                        :cj_speed
+                        :cj_speed,
+                        :ind_len_west,
+                        :ind_len_gav,
+                        :ind_len_ng,
+                        :cell_size_west,
+                        :cell_size_gav,
+                        :cell_size_ng,
+                        :rxn_table_id
                     );
                     """.format(self.table_name),
                     {
                         'mechanism': mechanism,
                         'initial_temp': initial_temp,
                         'initial_press': initial_press,
-                        'equivalence': equivalence,
                         'fuel': fuel,
                         'oxidizer': oxidizer,
+                        'equivalence': equivalence,
                         'diluent': diluent,
                         'diluent_mol_frac': diluent_mol_frac,
-                        'reaction_number': reaction_number,
-                        'k_i': k_i,
-                        'cj_speed': cj_speed
+                        'cj_speed': cj_speed,
+                        'ind_len_west': ind_len_west,
+                        'ind_len_gav': ind_len_gav,
+                        'ind_len_ng': ind_len_ng,
+                        'cell_size_west': cell_size_west,
+                        'cell_size_gav': cell_size_gav,
+                        'cell_size_ng': cell_size_ng,
+                        'rxn_table_id': self._rxn_table_id,
                     }
                 )
 
     # noinspection PyUnusedLocal
     @staticmethod
-    def _build_query_str(
-            mechanism,
-            initial_temp,
-            initial_press,
-            equivalence,
-            fuel,
-            oxidizer,
-            reaction_number,
-            diluent,
-            diluent_mol_frac
-    ):
+    def _build_query_str(kwargs):
         """
         Builds a SQL query string for all of the inputs. Any inputs which are
         None will be left wild.
 
+        todo: this
         Parameters
         ----------
-        mechanism : str
-            Mechanism to search for
-        initial_temp : float
-            Initial temperature to search for, in Kelvin
-        initial_press : float
-            Initial pressure to search for, in Pascals
-        equivalence : float
-            Equivalence ratio to search for
-        fuel : str
-            Fuel to search for
-        oxidizer : str
-            Oxidizer to search for
-        reaction_number : int
-            Reaction number to search for:
-                -1:  indicates base case (unperturbed)
-                0+:  indicates a perturbed case, i.e. the current reaction has
-                     been perturbed and this is the resulting solution
-        diluent : str
-            Diluent to search for
-        diluent_mol_frac : float
-            Mole fraction of diluent to search for
 
         Returns
         -------
         cmd_str : str
             SQL command to search for the desired inputs
         """
+        if hasattr(kwargs, 'self'):
+            kwargs.pop('self')
+
         inputs = {
             key: value for key, value
-            in inspect.getargvalues(inspect.currentframe())[3].items()
+            in kwargs.items()
             if value is not None
         }
         [where] = [' WHERE ' if len(inputs) > 0 else '']
@@ -549,7 +599,7 @@ class Table:
                      ' AND '.join(sql_varnames) + ';']
         return cmd_str
 
-    def fetch_rows(
+    def fetch_test_rows(
             self,
             mechanism=None,
             initial_temp=None,
@@ -557,7 +607,6 @@ class Table:
             equivalence=None,
             fuel=None,
             oxidizer=None,
-            reaction_number=None,
             diluent=None,
             diluent_mol_frac=None
     ):
@@ -579,11 +628,6 @@ class Table:
             Fuel to search for
         oxidizer : str
             Oxidizer to search for
-        reaction_number : int
-            Reaction number to search for:
-                -1:  indicates base case (unperturbed)
-                0+:  indicates a perturbed case, i.e. the current reaction has
-                     been perturbed and this is the resulting solution
         diluent : str
             Diluent to search for
         diluent_mol_frac : float
@@ -597,17 +641,16 @@ class Table:
         """
         with self.con as con:
             cur = con.cursor()
-            cmd_str = self._build_query_str(
-                mechanism=mechanism,
-                initial_temp=initial_temp,
-                initial_press=initial_press,
-                equivalence=equivalence,
-                fuel=fuel,
-                oxidizer=oxidizer,
-                reaction_number=reaction_number,
-                diluent=diluent,
-                diluent_mol_frac=diluent_mol_frac
-            )
+            cmd_str = self._build_query_str({
+                'mechanism': mechanism,
+                'initial_temp': initial_temp,
+                'initial_press': initial_press,
+                'equivalence': equivalence,
+                'fuel': fuel,
+                'oxidizer': oxidizer,
+                'diluent': diluent,
+                'diluent_mol_frac': diluent_mol_frac
+            })
             cur.execute(
                 cmd_str.format(self.table_name),
                 {
@@ -618,12 +661,11 @@ class Table:
                     'fuel': fuel,
                     'oxidizer': oxidizer,
                     'diluent': diluent,
-                    'diluent_mol_frac': diluent_mol_frac,
-                    'reaction_number': reaction_number
+                    'diluent_mol_frac': diluent_mol_frac
                 }
             )
             info = cur.fetchall()
-            labels = self.columns()
+            labels = self.test_columns()
             data = {l: [] for l in labels}
             for row in info:
                 for l, d in zip(labels, row):
