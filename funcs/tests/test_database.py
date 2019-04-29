@@ -307,7 +307,7 @@ class TestTable:
             'cell_size_gav': 5,
             'cell_size_ng': 6
         })
-        assert test_table.check_existing_test(**kwargs)
+        assert test_table._check_existing_test(**kwargs)
 
     def test_fetch_rows_blank_table(self):
         test_db = generate_db_name()
