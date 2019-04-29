@@ -93,9 +93,6 @@ class Table:
         self._testing = testing
         if self.table_name not in DataBase.list_all_tables(database):
             self._create_test_table()
-        else:
-            # todo: look up rxn table id
-            pass
 
     def __del__(self):
         self.con.commit()
@@ -280,7 +277,6 @@ class Table:
         Creates a table of base (unperturbed) reactions and their rate constants
         in the current database
         """
-        # TODO: implement this!
         base_table_name = 'BASE_' + rxn_table_id
         with self.con as con:
             cur = con.cursor()
@@ -302,7 +298,6 @@ class Table:
         """
         Creates a table of perturbed reaction results in the current database
         """
-        # TODO: implement this!
         pert_table_name = 'PERT_' + rxn_table_id
         with self.con as con:
             cur = con.cursor()
@@ -606,9 +601,12 @@ class Table:
         Builds a SQL query string for all of the inputs. Any inputs which are
         None will be left wild.
 
-        todo: this
         Parameters
         ----------
+        kwargs : dict
+            Dictionary of keyword arguments to build a query string around.
+            This has been left as flexible as possible so that this method can
+            build query strings for any of the table types.
 
         Returns
         -------
