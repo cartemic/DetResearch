@@ -336,6 +336,7 @@ class Table:
             cur.execute(
                 """
                 CREATE TABLE {:s} (
+                    stored_date TEXT,
                     rxn_no INTEGER,
                     rxn TEXT,
                     k_i REAL,
@@ -457,14 +458,10 @@ class Table:
 
     def _update_pert_row(
             self,
-            mechanism,
-            initial_temp,
-            initial_press,
-            fuel,
-            oxidizer,
-            equivalence,
-            diluent,
-            diluent_mol_frac,
+            rxn_table_id,
+            rxn_no,
+            rxn,
+            k_i,
             cj_speed,
             ind_len_west,
             ind_len_gav,
@@ -472,6 +469,13 @@ class Table:
             cell_size_west,
             cell_size_gav,
             cell_size_ng,
+            sens_cj_speed,
+            sens_ind_len_west,
+            sens_ind_len_gav,
+            sens_ind_len_ng,
+            sens_cell_size_west,
+            sens_cell_size_gav,
+            sens_cell_size_ng,
     ):
         """
         todo: in work pls finish
@@ -480,22 +484,6 @@ class Table:
 
         Parameters
         ----------
-        mechanism : str
-            Mechanism used for the desired row's computation
-        initial_temp : float
-            Initial temperature for the desired row, in Kelvin
-        initial_press : float
-            Initial pressure for the desired row, in Pascals
-        fuel : str
-            Fuel used in the desired row
-        oxidizer : str
-            Oxidizer used in the desired row
-        equivalence : float
-            Equivalence ratio for the desired row
-        diluent : str
-            Diluent used in the desired row
-        diluent_mol_frac : float
-            Mole fraction of diluent used in the desired row
         cj_speed : float
             CJ speed to update
         ind_len_west : float
@@ -516,33 +504,29 @@ class Table:
             cur.execute(
                 """
                 UPDATE {:s} SET 
-                    date_stored = datetime('now', 'localtime'),
-                    cj_speed = :cj_speed, 
+                    k_i = :k_i,
+                    cj_speed = :cj_speed,
                     ind_len_west = :ind_len_west,
                     ind_len_gav = :ind_len_gav,
                     ind_len_ng = :ind_len_ng,
                     cell_size_west = :cell_size_west,
                     cell_size_gav = :cell_size_gav,
-                    cell_size_ng = :cell_size_ng
+                    cell_size_ng = :cell_size_ng,
+                    sens_cj_speed = :sens_cj_speed,
+                    sens_ind_len_west = :sens_ind_len_west,
+                    sens_ind_len_gav = :sens_ind_len_gav,
+                    sens_ind_len_ng = :sens_ind_len_ng,
+                    sens_cell_size_west = :sens_cell_size_west,
+                    sens_cell_size_gav = :sens_cell_size_gav,
+                    sens_cell_size_ng = :sens_cell_size_ng
                 WHERE
-                    mechanism = :mechanism AND
-                    initial_temp = :initial_temp AND
-                    initial_press = :initial_press AND
-                    equivalence = :equivalence AND
-                    fuel = :fuel AND
-                    oxidizer = :oxidizer AND
-                    diluent = :diluent AND
-                    diluent_mol_frac = :diluent_mol_frac
-                """.format(self.table_name),
+                    rxn_no = :rxn_no AND
+                    rxn = :rxn
+                """.format(rxn_table_id),
                 {
-                    'mechanism': mechanism,
-                    'initial_temp': initial_temp,
-                    'initial_press': initial_press,
-                    'fuel': fuel,
-                    'oxidizer': oxidizer,
-                    'equivalence': equivalence,
-                    'diluent': diluent,
-                    'diluent_mol_frac': diluent_mol_frac,
+                    'rxn_no': rxn_no,
+                    'rxn': rxn,
+                    'k_i': k_i,
                     'cj_speed': cj_speed,
                     'ind_len_west': ind_len_west,
                     'ind_len_gav': ind_len_gav,
@@ -550,6 +534,13 @@ class Table:
                     'cell_size_west': cell_size_west,
                     'cell_size_gav': cell_size_gav,
                     'cell_size_ng': cell_size_ng,
+                    'sens_cj_speed': sens_cj_speed,
+                    'sens_ind_len_west': sens_ind_len_west,
+                    'sens_ind_len_gav': sens_ind_len_gav,
+                    'sens_ind_len_ng': sens_ind_len_ng,
+                    'sens_cell_size_west': sens_cell_size_west,
+                    'sens_cell_size_gav': sens_cell_size_gav,
+                    'sens_cell_size_ng': sens_cell_size_ng,
                 }
             )
 
@@ -783,11 +774,11 @@ class Table:
             speed, induction length, and cell size results.
         """
         table_name = 'PERT_' + rxn_table_id
-        if self._check_existing_pert(rxn_no):
+        if self._check_existing_pert(table_name, rxn_no):
             # a row with the current information was found
             if overwrite_existing:
                 self._update_pert_row(
-                    table_name=table_name,
+                    rxn_table_id=table_name,
                     rxn_no=rxn_no,
                     rxn=rxn,
                     k_i=k_i,
@@ -828,7 +819,6 @@ class Table:
                     """
                     INSERT INTO {:s} VALUES (
                         datetime('now', 'localtime'),
-                        :rxn_table_id,
                         :rxn_no,
                         :rxn,
                         :k_i,
@@ -888,13 +878,10 @@ class Table:
         cmd_str : str
             SQL command to search for the desired inputs
         """
-        if hasattr(kwargs, 'self'):
-            kwargs.pop('self')
-
         inputs = {
             key: value for key, value
             in kwargs.items()
-            if value is not None
+            if value is not None and 'self' not in key
         }
         [where] = [' WHERE ' if len(inputs) > 0 else '']
         sql_varnames = [
@@ -903,6 +890,93 @@ class Table:
         [cmd_str] = ['SELECT * FROM {:s}' + where +
                      ' AND '.join(sql_varnames) + ';']
         return cmd_str
+
+    def fetch_pert_table(
+            self,
+            rxn_table_id,
+            rxn_no=None,
+            rxn=None,
+            k_i=None,
+            cj_speed=None,
+            ind_len_west=None,
+            ind_len_gav=None,
+            ind_len_ng=None,
+            cell_size_west=None,
+            cell_size_gav=None,
+            cell_size_ng=None,
+            sens_cj_speed=None,
+            sens_ind_len_west=None,
+            sens_ind_len_gav=None,
+            sens_ind_len_ng=None,
+            sens_cell_size_west=None,
+            sens_cell_size_gav=None,
+            sens_cell_size_ng=None,
+    ):
+        """
+        Fetches all rows from the current database with the desired inputs.
+        Any inputs which are None will be left wild.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        data : dict
+            Dictionary containing the rows of the current table which match
+            the input criteria. Keys are column names, and values are lists.
+        """
+        rxn_table = 'PERT_' + rxn_table_id
+        with self.con as con:
+            cur = con.cursor()
+            cmd_str = self._build_query_str({
+                'rxn_no': rxn_no,
+                'rxn': rxn,
+                'k_i': k_i,
+                'cj_speed': cj_speed,
+                'ind_len_west': ind_len_west,
+                'ind_len_gav': ind_len_gav,
+                'ind_len_ng': ind_len_ng,
+                'cell_size_west': cell_size_west,
+                'cell_size_gav': cell_size_gav,
+                'cell_size_ng': cell_size_ng,
+                'sens_cj_speed': sens_cj_speed,
+                'sens_ind_len_west': sens_ind_len_west,
+                'sens_ind_len_gav': sens_ind_len_gav,
+                'sens_ind_len_ng': sens_ind_len_ng,
+                'sens_cell_size_west': sens_cell_size_west,
+                'sens_cell_size_gav': sens_cell_size_gav,
+                'sens_cell_size_ng': sens_cell_size_ng,
+            })
+            cur.execute(
+                cmd_str.format(rxn_table),
+                {
+                    'rxn_no': rxn_no,
+                    'rxn': rxn,
+                    'k_i': k_i,
+                    'cj_speed': cj_speed,
+                    'ind_len_west': ind_len_west,
+                    'ind_len_gav': ind_len_gav,
+                    'ind_len_ng': ind_len_ng,
+                    'cell_size_west': cell_size_west,
+                    'cell_size_gav': cell_size_gav,
+                    'cell_size_ng': cell_size_ng,
+                    'sens_cj_speed': sens_cj_speed,
+                    'sens_ind_len_west': sens_ind_len_west,
+                    'sens_ind_len_gav': sens_ind_len_gav,
+                    'sens_ind_len_ng': sens_ind_len_ng,
+                    'sens_cell_size_west': sens_cell_size_west,
+                    'sens_cell_size_gav': sens_cell_size_gav,
+                    'sens_cell_size_ng': sens_cell_size_ng,
+                }
+            )
+            info = cur.fetchall()
+            labels = self.pert_columns(rxn_table_id)
+            data = {l: [] for l in labels}
+            for row in info:
+                for l, d in zip(labels, row):
+                    data[l].append(d)
+
+            return data
 
     def fetch_test_rows(
             self,
@@ -1005,6 +1079,17 @@ class Table:
                         'k_i': k_i,
                     }
                 )
+
+    def fetch_base_rxn_table(
+            self,
+            rxn_table_id
+    ):
+        rxn_table = 'BASE_' + rxn_table_id
+        with self.con as con:
+            cur = con.cursor()
+            cur.execute("""SELECT * FROM {:s}""".format(rxn_table))
+            base_rxns = cur.fetchall()
+        return base_rxns
 
 
 if __name__ == '__main__':  # pragma: no cover

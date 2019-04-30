@@ -1,5 +1,4 @@
 import funcs.database as db
-from uuid import uuid4
 import string
 import random
 import os
@@ -8,19 +7,20 @@ import pytest
 import inspect
 from numpy import isclose, allclose
 import uuid
+import cantera as ct
 
 
-def remove_stragglers():
+def remove_stragglers():  # pragma: no cover
     stragglers = set(file for file in os.listdir('.') if '.sqlite' in file)
     for file in stragglers:
         os.remove(file)
 
 
-def generate_db_name():
-    return str(uuid4()) + '.sqlite'
+def generate_db_name():  # pragma: no cover
+    return str(uuid.uuid4()) + '.sqlite'
 
 
-def bind(instance, func, as_name=None):
+def bind(instance, func, as_name=None):  # pragma: no cover
     """
     https://stackoverflow.com/questions/1015307/python-bind-an-unbound-method
 
@@ -69,7 +69,7 @@ class TestDataBase:
 # noinspection PyProtectedMember,PyUnresolvedReferences
 class TestTable:
     # noinspection PyProtectedMember,PyUnresolvedReferences
-    class FakeTable:
+    class FakeTable:  # pragma: no cover
         """
         Fake table object for testing methods independently
         """
@@ -418,7 +418,7 @@ class TestTable:
                     checks.append(allclose(good_answer[key], value))
         assert all(checks)
 
-    def test__update_row(self):
+    def test__update_test_row(self):
         test_db = generate_db_name()
         test_table_name = 'test_table'
         test_table = db.Table(
@@ -473,7 +473,8 @@ class TestTable:
                     checks.append(isclose(kwargs_repl[key], value[0]))
         assert all(checks)
 
-    def test_store_row_update(self):
+    @pytest.mark.filterwarnings('ignore')
+    def test_store_test_row_update(self):
         test_db = generate_db_name()
         test_table_name = 'test_table'
         test_table = db.Table(
@@ -517,6 +518,7 @@ class TestTable:
         }
         test_table.store_test_row(**kwargs_init)
         test_table.store_test_row(**kwargs_repl, overwrite_existing=True)
+        test_table.store_test_row(**kwargs_init, overwrite_existing=False)
         test_rows = test_table.fetch_test_rows()
         checks = []
         for key, value in test_rows.items():
@@ -529,7 +531,99 @@ class TestTable:
         assert all(checks)
 
     @pytest.mark.filterwarnings('ignore')
-    def test_store_row_update_no_overwrite(self):
+    def test_store_pert_row_update(self):
+        test_db = generate_db_name()
+        test_table_name = 'test_table'
+        test_table = db.Table(
+            test_db,
+            test_table_name,
+            testing=True
+            )
+        test_kwargs = {
+            'mechanism': 'gri30.cti',
+            'initial_temp': 300,
+            'initial_press': 101325,
+            'fuel': 'CH4',
+            'oxidizer': 'N2O',
+            'equivalence': 1,
+            'diluent': 'N2',
+            'diluent_mol_frac': 0.1,
+            'cj_speed': 1986.12354679687543,
+            'ind_len_west': 1,
+            'ind_len_gav': 2,
+            'ind_len_ng': 3,
+            'cell_size_west': 4,
+            'cell_size_gav': 5,
+            'cell_size_ng': 6
+        }
+        pert_kwargs_init = {
+            'rxn_no': 100,
+            'rxn': '3 food + 1 stomach => 1 poop',
+            'k_i': 1.2e12,
+            'cj_speed': 1234.56789,
+            'ind_len_west': 1.1,
+            'ind_len_gav': 2.2,
+            'ind_len_ng': 3.3,
+            'cell_size_west': 4.4,
+            'cell_size_gav': 5.5,
+            'cell_size_ng': 6.6,
+            'sens_cj_speed': 7.7,
+            'sens_ind_len_west': 8.8,
+            'sens_ind_len_gav': 9.9,
+            'sens_ind_len_ng': 0.0,
+            'sens_cell_size_west': 1.1,
+            'sens_cell_size_gav': 2.2,
+            'sens_cell_size_ng': 3.3,
+        }
+        pert_kwargs_repl = {
+            'rxn_no': 100,
+            'rxn': '3 food + 1 stomach => 1 poop',
+            'k_i': 1.2e12,
+            'cj_speed': 1234.56789,
+            'ind_len_west': 11.1,
+            'ind_len_gav': 12.2,
+            'ind_len_ng': 13.3,
+            'cell_size_west': 14.4,
+            'cell_size_gav': 15.5,
+            'cell_size_ng': 16.6,
+            'sens_cj_speed': 17.7,
+            'sens_ind_len_west': 18.8,
+            'sens_ind_len_gav': 19.9,
+            'sens_ind_len_ng': 10.0,
+            'sens_cell_size_west': 11.1,
+            'sens_cell_size_gav': 12.2,
+            'sens_cell_size_ng': 13.3,
+        }
+        table_id = test_table.store_test_row(**test_kwargs)
+        test_table.store_perturbed_row(
+            rxn_table_id=table_id,
+            **pert_kwargs_init
+        )
+        test_table.store_perturbed_row(
+            rxn_table_id=table_id,
+            overwrite_existing=True,
+            **pert_kwargs_repl,
+        )
+        test_table.store_perturbed_row(
+            rxn_table_id=table_id,
+            overwrite_existing=False,
+            **pert_kwargs_init,
+        )
+        test_rows = test_table.fetch_pert_table(
+            rxn_table_id=table_id,
+            **pert_kwargs_repl
+        )
+        checks = []
+        for key, value in test_rows.items():
+            if 'date' not in key:
+                if (isinstance(pert_kwargs_repl[key], str)
+                        or isinstance(pert_kwargs_repl[key], int)):
+                    checks.append(pert_kwargs_repl[key] == value[0])
+                else:
+                    checks.append(isclose(pert_kwargs_repl[key], value[0]))
+        assert all(checks)
+
+    def test_store_base_table(self):
         test_db = generate_db_name()
         test_table_name = 'test_table'
         test_table = db.Table(
@@ -547,49 +641,43 @@ class TestTable:
             'diluent': 'N2',
             'diluent_mol_frac': 0.1,
             'cj_speed': 1986.12354679687543,
-            'ind_len_west': 1.23354,
-            'ind_len_gav': 2.12354,
-            'ind_len_ng':  1.21354,
-            'cell_size_west': 25.354,
-            'cell_size_gav': 235.243254,
-            'cell_size_ng': .4874341,
+            'ind_len_west': 1,
+            'ind_len_gav': 2,
+            'ind_len_ng': 3,
+            'cell_size_west': 4,
+            'cell_size_gav': 5,
+            'cell_size_ng': 6
         }
-        kwargs_repl = {
-            'mechanism': 'gri30.cti',
-            'initial_temp': 300,
-            'initial_press': 101325,
-            'fuel': 'CH4',
-            'oxidizer': 'N2O',
-            'equivalence': 1,
-            'diluent': 'N2',
-            'diluent_mol_frac': 0.1,
-            'cj_speed': 1467.546546539687543,
-            'ind_len_west': 21.23354,
-            'ind_len_gav': 22.12354,
-            'ind_len_ng':  14.21354,
-            'cell_size_west': 265.354,
-            'cell_size_gav': 235.254643254,
-            'cell_size_ng': 76.4874341,
-        }
-        test_table.store_test_row(**kwargs_init)
-        test_table.store_test_row(**kwargs_repl, overwrite_existing=False)
-        test_rows = test_table.fetch_test_rows()
+        rxn_table_id = test_table.store_test_row(**kwargs_init)
 
-        checks = []
-        for key, value in test_rows.items():
-            if 'date' not in key and 'rxn_table_id' not in key:
-                if (isinstance(kwargs_init[key], str)
-                        or isinstance(kwargs_init[key], int)):
-                    checks.append(kwargs_init[key] == value[0])
-                else:
-                    checks.append(isclose(kwargs_init[key], value[0]))
+        gas = ct.Solution(kwargs_init['mechanism'])
+        gas.TP = kwargs_init['initial_temp'], kwargs_init['initial_press']
+        gas.set_equivalence_ratio(
+            kwargs_init['equivalence'],
+            kwargs_init['fuel'],
+            kwargs_init['oxidizer']
+        )
+        test_table.store_base_rxn_table(
+            rxn_table_id,
+            gas
+        )
+
+        test_rows = test_table.fetch_base_rxn_table(rxn_table_id)
+        checks = [gas.n_reactions == len(test_rows)]
+        for row in test_rows:
+            current_tests = [
+                gas.reaction_equation(row[0]) == row[1],
+                isclose(gas.forward_rate_constants[row[0]], row[2])
+            ]
+            checks.append(current_tests)
+
         assert all(checks)
 
 
 if __name__ == '__main__':  # pragma: no cover
     import subprocess
     try:
-        subprocess.check_call('pytest test_database.py -vv --noconftest --cov')
+        subprocess.check_call('pytest test_database.py -vv --noconftest --cov --cov-report html')
     except subprocess.CalledProcessError as e:
         # clean up in case of an unexpected error cropping up
         remove_stragglers()
