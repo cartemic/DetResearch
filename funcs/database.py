@@ -1091,6 +1091,25 @@ class Table:
             base_rxns = cur.fetchall()
         return base_rxns
 
+    def fetch_single_base_rxn(
+            self,
+            rxn_table_id,
+            rxn_no
+    ):
+        rxn_table = 'BASE_' + rxn_table_id
+        with self.con as con:
+            cur = con.cursor()
+            cur.execute(
+                """SELECT * FROM {:s}
+                    WHERE rxn_no = :rxn_no
+                """.format(rxn_table),
+                {
+                    'rxn_no': rxn_no
+                }
+            )
+            base_rxns = cur.fetchone()
+        return base_rxns
+
 
 if __name__ == '__main__':  # pragma: no cover
     import subprocess

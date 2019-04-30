@@ -673,11 +673,65 @@ class TestTable:
 
         assert all(checks)
 
+    def test_fetch_single_base_rxn(self):
+        test_db = generate_db_name()
+        test_table_name = 'test_table'
+        test_table = db.Table(
+            test_db,
+            test_table_name,
+            testing=True
+            )
+        kwargs_init = {
+            'mechanism': 'gri30.cti',
+            'initial_temp': 300,
+            'initial_press': 101325,
+            'fuel': 'CH4',
+            'oxidizer': 'N2O',
+            'equivalence': 1,
+            'diluent': 'N2',
+            'diluent_mol_frac': 0.1,
+            'cj_speed': 1986.12354679687543,
+            'ind_len_west': 1,
+            'ind_len_gav': 2,
+            'ind_len_ng': 3,
+            'cell_size_west': 4,
+            'cell_size_gav': 5,
+            'cell_size_ng': 6
+        }
+        rxn_table_id = test_table.store_test_row(**kwargs_init)
+
+        gas = ct.Solution(kwargs_init['mechanism'])
+        gas.TP = kwargs_init['initial_temp'], kwargs_init['initial_press']
+        gas.set_equivalence_ratio(
+            kwargs_init['equivalence'],
+            kwargs_init['fuel'],
+            kwargs_init['oxidizer']
+        )
+        test_table.store_base_rxn_table(
+            rxn_table_id,
+            gas
+        )
+
+        checks = []
+        rates = gas.forward_rate_constants
+        for idx in range(gas.n_reactions):
+            test_rxn = test_table.fetch_single_base_rxn(
+                rxn_table_id,
+                idx
+            )
+            checks.append([
+                test_rxn[0] == idx,
+                test_rxn[1] == gas.reaction_equation(idx),
+                test_rxn[2] == rates[idx]
+            ])
+
 
 if __name__ == '__main__':  # pragma: no cover
     import subprocess
     try:
-        subprocess.check_call('pytest test_database.py -vv --noconftest --cov --cov-report html')
+        subprocess.check_call(
+            'pytest test_database.py -vv --noconftest --cov --cov-report html'
+        )
     except subprocess.CalledProcessError as e:
         # clean up in case of an unexpected error cropping up
         remove_stragglers()
