@@ -71,6 +71,7 @@ class Table:
         'equivalence',
         'diluent',
         'diluent_mol_frac',
+        'inert',
         'cj_speed',
         'ind_len_west',
         'ind_len_gav',
@@ -190,7 +191,8 @@ class Table:
             oxidizer=None,
             equivalence=None,
             diluent=None,
-            diluent_mol_frac=None
+            diluent_mol_frac=None,
+            inert=None
     ):
         """
         Checks the current table for a specific row of data
@@ -289,6 +291,7 @@ class Table:
                     equivalence REAL,
                     diluent TEXT,
                     diluent_mol_frac REAL,
+                    inert TEXT,
                     cj_speed REAL,
                     ind_len_west REAL,
                     ind_len_gav REAL,
@@ -369,6 +372,7 @@ class Table:
             equivalence,
             diluent,
             diluent_mol_frac,
+            inert,
             cj_speed,
             ind_len_west,
             ind_len_gav,
@@ -435,7 +439,8 @@ class Table:
                     fuel = :fuel AND
                     oxidizer = :oxidizer AND
                     diluent = :diluent AND
-                    diluent_mol_frac = :diluent_mol_frac
+                    diluent_mol_frac = :diluent_mol_frac AND
+                    inert = :inert
                 """.format(self.table_name),
                 {
                     'mechanism': mechanism,
@@ -446,6 +451,7 @@ class Table:
                     'equivalence': equivalence,
                     'diluent': diluent,
                     'diluent_mol_frac': diluent_mol_frac,
+                    'inert': inert,
                     'cj_speed': cj_speed,
                     'ind_len_west': ind_len_west,
                     'ind_len_gav': ind_len_gav,
@@ -478,7 +484,6 @@ class Table:
             sens_cell_size_ng,
     ):
         """
-        todo: in work pls finish
         Updates the CJ velocity and forward reaction rate (k_i) for a set of
         conditions.
 
@@ -554,6 +559,7 @@ class Table:
             equivalence,
             diluent,
             diluent_mol_frac,
+            inert,
             cj_speed,
             ind_len_west,
             ind_len_gav,
@@ -623,7 +629,8 @@ class Table:
                 fuel=fuel,
                 oxidizer=oxidizer,
                 diluent=diluent,
-                diluent_mol_frac=diluent_mol_frac
+                diluent_mol_frac=diluent_mol_frac,
+                inert=inert
         ):
             # a row with the current information was found
             if overwrite_existing:
@@ -635,7 +642,8 @@ class Table:
                     fuel=fuel,
                     oxidizer=oxidizer,
                     diluent=diluent,
-                    diluent_mol_frac=diluent_mol_frac
+                    diluent_mol_frac=diluent_mol_frac,
+                    inert=inert
                 )['rxn_table_id']
                 self._update_test_row(
                     mechanism=mechanism,
@@ -646,6 +654,7 @@ class Table:
                     equivalence=equivalence,
                     diluent=diluent,
                     diluent_mol_frac=diluent_mol_frac,
+                    inert=inert,
                     cj_speed=cj_speed,
                     ind_len_west=ind_len_west,
                     ind_len_gav=ind_len_gav,
@@ -682,6 +691,7 @@ class Table:
                         :equivalence,
                         :diluent,
                         :diluent_mol_frac,
+                        :inert,
                         :cj_speed,
                         :ind_len_west,
                         :ind_len_gav,
@@ -701,6 +711,7 @@ class Table:
                         'equivalence': equivalence,
                         'diluent': diluent,
                         'diluent_mol_frac': diluent_mol_frac,
+                        'inert': inert,
                         'cj_speed': cj_speed,
                         'ind_len_west': ind_len_west,
                         'ind_len_gav': ind_len_gav,
@@ -987,7 +998,8 @@ class Table:
             oxidizer=None,
             equivalence=None,
             diluent=None,
-            diluent_mol_frac=None
+            diluent_mol_frac=None,
+            inert=None
     ):
         """
         Fetches all rows from the current database with the desired inputs.
@@ -1028,7 +1040,8 @@ class Table:
                 'fuel': fuel,
                 'oxidizer': oxidizer,
                 'diluent': diluent,
-                'diluent_mol_frac': diluent_mol_frac
+                'diluent_mol_frac': diluent_mol_frac,
+                'inert': inert
             })
             cur.execute(
                 cmd_str.format(self.table_name),
@@ -1040,7 +1053,8 @@ class Table:
                     'fuel': fuel,
                     'oxidizer': oxidizer,
                     'diluent': diluent,
-                    'diluent_mol_frac': diluent_mol_frac
+                    'diluent_mol_frac': diluent_mol_frac,
+                    'inert': inert
                 }
             )
             info = cur.fetchall()
