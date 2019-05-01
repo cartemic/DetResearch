@@ -15,6 +15,7 @@ http://shepherd.caltech.edu/EDL/PublicResources/sdt/
 import numpy as np
 import sdtoolbox as sd
 import cantera as ct
+from . import database as db
 
 
 class CellSize:
@@ -23,46 +24,56 @@ class CellSize:
     """
     def __call__(
             self,
-            P1,
-            T1,
+            mechanism,
+            initial_temp,
+            initial_press,
             fuel,
             oxidizer,
-            phi,
-            mech,
-            diluent=None,
-            diluent_mol_frac=0
-    ):
-        self.T1 = T1
-        gas1 = self._build_gas_object(
-            mech,
-            fuel,
-            oxidizer,
-            phi,
+            equivalence,
             diluent,
-            diluent_mol_frac
+            diluent_mol_frac,
+            inert=None,
+            perturbed_reaction=-1,
+            perturbation_fraction=1e-2,
+            store_data=False,
+            database='sensitivity.sqlite',
+            table_name='test_data'
+    ):
+        data_table = db.Table(database, table_name)
+        self.T1 = initial_temp
+        gas1 = self._build_gas_object(
+            mechanism,
+            fuel,
+            oxidizer,
+            equivalence,
+            diluent,
+            diluent_mol_frac,
+            inert
         )
         q = gas1.X
-        cj_speed = sd.postshock.CJspeed(P1, T1, q, mech)
-        gas1.TP = T1, P1
+        cj_speed = sd.postshock.CJspeed(initial_press, initial_temp, q, mechanism)
+        gas1.TP = initial_temp, initial_press
 
         # FIND EQUILIBRIUM POST SHOCK STATE FOR GIVEN SPEED
+        # todo: need to bypass mechanism
         gas = sd.postshock.PostShock_eq(
             cj_speed,
-            P1,
-            T1,
+            initial_press,
+            initial_temp,
             q,
-            mech
+            mechanism
         )
         u_cj = cj_speed * gas1.density / gas.density
         self.cj_speed = u_cj
 
         # FIND FROZEN POST SHOCK STATE FOR GIVEN SPEED
+        # todo: need to bypass mechanism
         gas = sd.postshock.PostShock_fr(
             cj_speed,
-            P1,
-            T1,
+            initial_press,
+            initial_temp,
             q,
-            mech
+            mechanism
         )
 
         # SOLVE ZND DETONATION ODES
@@ -75,13 +86,14 @@ class CellSize:
         )
 
         # Find CV parameters including effective activation energy
-        gas.TPX = T1, P1, q
+        gas.TPX = initial_temp, initial_press, q
+        # todo: need to bypass mechanism
         gas = sd.postshock.PostShock_fr(
             cj_speed,
-            P1,
-            T1,
+            initial_press,
+            initial_temp,
             q,
-            mech
+            mechanism
         )
         self.Ts, Ps = gas.TP
         Ta = self.Ts * 1.02
@@ -103,7 +115,7 @@ class CellSize:
 
         #  Find Gavrikov induction time based on 50% limiting species
         #  consumption, fuel for lean mixtures, oxygen for rich mixtures
-        if phi >= 1:
+        if equivalence >= 1:
             limit_species = fuel
         else:
             limit_species = 'O2'
@@ -147,18 +159,119 @@ class CellSize:
             'Gavrikov': self._cell_size_gavrikov(),
             'Ng': self._cell_size_ng()
         }
+
+        # store calculations
+        if perturbed_reaction == -1:
+            # unperturbed data, store in test condition table with initial
+            # conditions and store all reactions
+            table_id = data_table.store_test_row(
+                mechanism=mechanism,
+                initial_temp=initial_temp,
+                initial_press=initial_press,
+                fuel=fuel,
+                oxidizer=oxidizer,
+                equivalence=equivalence,
+                diluent=diluent,
+                diluent_mol_frac=diluent_mol_frac,
+                inert=inert,
+                cj_speed=cj_speed,
+                ind_len_west=self.induction_length['Westbrook'],
+                ind_len_gav=self.induction_length['Gavrikov'],
+                ind_len_ng=self.induction_length['Ng'],
+                cell_size_west=self.cell_size['Westbrook'],
+                cell_size_gav=self.cell_size['Gavrikov'],
+                cell_size_ng=self.cell_size['Ng'],
+            )
+            data_table.store_base_rxn_table(
+                rxn_table_id=table_id,
+                gas=gas
+            )
+        else:
+            # perturbed data, store in perturbed table
+            # todo: make sure a base is stored before doing this
+            [table_id] = data_table.fetch_test_rows(
+                mechanism=mechanism,
+                initial_temp=initial_temp,
+                initial_press=initial_press,
+                fuel=fuel,
+                oxidizer=oxidizer,
+                equivalence=equivalence,
+                diluent=diluent,
+                diluent_mol_frac=diluent_mol_frac,
+                inert=inert
+            )['rxn_table_id']
+            # todo: fill out all inputs correctly
+            data_table.store_perturbed_row(
+                rxn_table_id=table_id,
+                rxn_no=perturbed_reaction,
+                rxn='',
+                k_i='ki',
+                cj_speed='cj_speed',
+                ind_len_west=self.induction_length['Westbrook'],
+                ind_len_gav=self.induction_length['Gavrikov'],
+                ind_len_ng=self.induction_length['Ng'],
+                cell_size_west=self.cell_size['Westbrook'],
+                cell_size_gav=self.cell_size['Gavrikov'],
+                cell_size_ng=self.cell_size['Ng'],
+                sens_cj_speed='',
+                sens_ind_len_west='',
+                sens_ind_len_gav='',
+                sens_ind_len_ng='',
+                sens_cell_size_west='',
+                sens_cell_size_gav='',
+                sens_cell_size_ng=''
+            )
+
         return self.cell_size
 
+    def _build_solution_with_inerts(
+            self,
+            mech,
+            inert_species
+    ):
+        inert_species = self._enforce_species_list(inert_species)
+        species = ct.Species.listFromFile(mech)
+        reactions = []
+        for rxn in ct.Reaction.listFromFile(mech):
+            if not any([
+                s in list(rxn.reactants) + list(rxn.products)
+                for s in inert_species
+            ]):
+                reactions.append(rxn)
+
+        return ct.Solution(
+            thermo='IdealGas',
+            species=species,
+            reactions=reactions,
+            kinetics='GasKinetics'
+        )
+
     @staticmethod
+    def _enforce_species_list(species):
+        if isinstance(species, str):
+            species = [species.upper()]
+        elif hasattr(species, '__iter__'):
+            species = [s.upper() for s in species]
+        else:
+            raise TypeError('Bad species type: %s' % type(species))
+
+        return species
+
     def _build_gas_object(
+            self,
             mech,
             fuel,
             oxidizer,
             phi,
             diluent,
-            diluent_mol_frac
+            diluent_mol_frac,
+            inert=None
     ):
-        gas = ct.Solution(mech)
+        if inert is not None:
+            gas = ct.Solution(mech)
+        else:
+            gas = self._build_solution_with_inerts(mech, inert)
+
         gas.set_equivalence_ratio(
             phi,
             fuel,

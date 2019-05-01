@@ -15,6 +15,7 @@ import cantera as ct
 import os
 
 
+# todo: shift to cell_size
 def _enforce_species_list(species):
     if isinstance(species, str):
         species = [species.upper()]
@@ -26,6 +27,7 @@ def _enforce_species_list(species):
     return species
 
 
+# todo: shift to cell_size
 # noinspection PyArgumentList
 def solution_with_inerts(
         mech,
@@ -90,7 +92,7 @@ if __name__ == '__main__':
     #
     #     # clean up
     #     os.remove(file_out)
-
+    # todo: turn this into tests
     mechanism = 'gri30.cti'
 
     rxns = ct.Reaction.listFromFile(mechanism)
