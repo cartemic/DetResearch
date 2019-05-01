@@ -738,6 +738,49 @@ class TestTable:
                 test_rxn[2] == rates[idx]
             ])
 
+    def test_check_for_stored_base_data(self):
+        test_db = generate_db_name()
+        test_table_name = 'test_table'
+        test_table = db.Table(
+            test_db,
+            test_table_name,
+            testing=True
+            )
+        kwargs_init = {
+            'mechanism': 'gri30.cti',
+            'initial_temp': 300,
+            'initial_press': 101325,
+            'fuel': 'CH4',
+            'oxidizer': 'N2O',
+            'equivalence': 1,
+            'diluent': 'N2',
+            'diluent_mol_frac': 0.1,
+            'inert': 'None',
+            'cj_speed': 1986.12354679687543,
+            'ind_len_west': 1,
+            'ind_len_gav': 2,
+            'ind_len_ng': 3,
+            'cell_size_west': 4,
+            'cell_size_gav': 5,
+            'cell_size_ng': 6
+        }
+        rxn_table_id = test_table.store_test_row(**kwargs_init)
+        test_false = test_table.check_for_stored_base_data(rxn_table_id)
+
+        gas = ct.Solution(kwargs_init['mechanism'])
+        gas.TP = kwargs_init['initial_temp'], kwargs_init['initial_press']
+        gas.set_equivalence_ratio(
+            kwargs_init['equivalence'],
+            kwargs_init['fuel'],
+            kwargs_init['oxidizer']
+        )
+        test_table.store_base_rxn_table(
+            rxn_table_id,
+            gas
+        )
+        test_true = test_table.check_for_stored_base_data(rxn_table_id)
+        assert all([test_true, not test_false])
+
 
 if __name__ == '__main__':  # pragma: no cover
     import subprocess

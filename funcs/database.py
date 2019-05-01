@@ -273,6 +273,42 @@ class Table:
                 row_found = False
         return row_found
 
+    def check_for_stored_base_data(
+            self,
+            rxn_table_id
+    ):
+        """
+        Allows a user to check whether or not a base reaction table has data
+        stored in it
+
+        Parameters
+        ----------
+        rxn_table_id : str
+            Reaction table ID corresponding to the BASE_rxn_table_id and
+            PERT_rxn_table_id tables. BASE table holds all reactions and
+            reaction rate coefficients, while PERT holds all reactions and
+            perturbed reaction rate coefficients along with the associated CJ
+            speed, induction length, and cell size results.
+
+        Returns
+        -------
+        data_found : bool
+            True if base table has data in it, False if not
+        """
+        table_name = 'BASE_' + rxn_table_id
+        with self.con as con:
+            cur = con.cursor()
+            cur.execute(
+                """
+                SELECT * from {:s}
+                """.format(table_name)
+            )
+            if len(cur.fetchall()) > 0:
+                data_found = True
+            else:
+                data_found = False
+        return data_found
+
     def _create_test_table(self):
         """
         Creates a table of test conditions and results in the current database
