@@ -15,7 +15,12 @@ http://shepherd.caltech.edu/EDL/PublicResources/sdt/
 import numpy as np
 import sdtoolbox as sd
 import cantera as ct
+from uuid import uuid4
+import os
 from . import database as db
+from . import cti_solution_writer as cti
+
+OriginalSolution = ct.Solution
 
 
 class CellSize:
@@ -24,7 +29,7 @@ class CellSize:
     """
     def __call__(
             self,
-            mechanism,
+            base_mechanism,
             initial_temp,
             initial_press,
             fuel,
@@ -37,12 +42,39 @@ class CellSize:
             perturbation_fraction=1e-2,
             store_data=False,
             database='sensitivity.sqlite',
-            table_name='test_data'
+            table_name='test_data',
+            overwrite_existing=False
     ):
-        data_table = db.Table(database, table_name)
+        # self.mechanism will change with inert species, but base will not
+        self.mechanism = base_mechanism
+        self.base_mechanism = base_mechanism
+        self.initial_temp = initial_temp
+        self.initial_press = initial_press
+        self.fuel = fuel
+        self.oxidizer = oxidizer
+        self.equivalence = equivalence
+        self.diluent = diluent
+        self.diluent_mol_frac = diluent_mol_frac
+        self.inert = inert
+        self.data_table = db.Table(database, table_name)
         self.T1 = initial_temp
-        gas1 = self._build_gas_object(
-            mechanism,
+        self.perturbed_reaction = perturbed_reaction
+        self.perturbation_fraction = perturbation_fraction
+        self.overwrite_existing = overwrite_existing
+
+        if perturbed_reaction != -1:
+            # alter ct.Solution within sdtoolbox so that it returns perturbed
+            # reaction results
+            def my_solution(mech):
+                original_gas = OriginalSolution(mech)
+                original_gas.set_multiplier(
+                    1 + perturbation_fraction,
+                    perturbed_reaction
+                )
+                return original_gas
+            sd.postshock.ct.Solution = my_solution
+
+        base_gas = self._build_gas_object(
             fuel,
             oxidizer,
             equivalence,
@@ -50,36 +82,62 @@ class CellSize:
             diluent_mol_frac,
             inert
         )
-        q = gas1.X
-        cj_speed = sd.postshock.CJspeed(initial_press, initial_temp, q, mechanism)
-        gas1.TP = initial_temp, initial_press
+        q = base_gas.X
+        existing_data = self.data_table.fetch_test_rows(
+            mechanism=self.base_mechanism,
+            initial_temp=initial_temp,
+            initial_press=initial_press,
+            fuel=fuel,
+            oxidizer=oxidizer,
+            equivalence=equivalence,
+            diluent=diluent,
+            diluent_mol_frac=diluent_mol_frac,
+            inert=inert
+        )
+        if len(existing_data['cj_speed']) == 0:
+            cj_speed = sd.postshock.CJspeed(
+                initial_press,
+                initial_temp,
+                q,
+                self.mechanism
+            )
+            base_gas.TP = initial_temp, initial_press
+        else:
+            [cj_speed] = existing_data['cj_speed']
 
         # FIND EQUILIBRIUM POST SHOCK STATE FOR GIVEN SPEED
-        # todo: need to bypass mechanism
         gas = sd.postshock.PostShock_eq(
             cj_speed,
             initial_press,
             initial_temp,
             q,
-            mechanism
+            self.mechanism
         )
-        u_cj = cj_speed * gas1.density / gas.density
+
+        if perturbed_reaction >= 0:
+            assert (gas.multiplier(perturbed_reaction) ==
+                    1 + perturbation_fraction)
+
+        u_cj = cj_speed * base_gas.density / gas.density
         self.cj_speed = u_cj
 
         # FIND FROZEN POST SHOCK STATE FOR GIVEN SPEED
-        # todo: need to bypass mechanism
         gas = sd.postshock.PostShock_fr(
             cj_speed,
             initial_press,
             initial_temp,
             q,
-            mechanism
+            self.mechanism
         )
+
+        if perturbed_reaction >= 0:
+            assert (gas.multiplier(perturbed_reaction) ==
+                    1 + perturbation_fraction)
 
         # SOLVE ZND DETONATION ODES
         out = sd.znd.zndsolve(
             gas,
-            gas1,
+            base_gas,
             cj_speed,
             advanced_output=True,
             t_end=2e-3
@@ -87,30 +145,34 @@ class CellSize:
 
         # Find CV parameters including effective activation energy
         gas.TPX = initial_temp, initial_press, q
-        # todo: need to bypass mechanism
         gas = sd.postshock.PostShock_fr(
             cj_speed,
             initial_press,
             initial_temp,
             q,
-            mechanism
+            self.mechanism
         )
+
+        if perturbed_reaction >= 0:
+            assert (gas.multiplier(perturbed_reaction) ==
+                    1 + perturbation_fraction)
+
         self.Ts, Ps = gas.TP
         Ta = self.Ts * 1.02
         gas.TPX = Ta, Ps, q
-        CVout1 = sd.cv.cvsolve(gas)
+        cv_out_0 = sd.cv.cvsolve(gas)
         Tb = self.Ts * 0.98
         gas.TPX = Tb, Ps, q
-        CVout2 = sd.cv.cvsolve(gas)
+        cv_out_1 = sd.cv.cvsolve(gas)
 
         # Approximate effective activation energy for CV explosion
-        taua = CVout1['ind_time']
-        taub = CVout2['ind_time']
-        if taua == 0 or taub == 0:
+        tau_a = cv_out_0['ind_time']
+        tau_b = cv_out_1['ind_time']
+        if tau_a == 0 or tau_b == 0:
             self.activation_energy = 0
         else:
             self.activation_energy = 1 / self.Ts * (
-                    np.log(taua / taub) / ((1 / Ta) - (1 / Tb))
+                    np.log(tau_a / tau_b) / ((1 / Ta) - (1 / Tb))
             )
 
         #  Find Gavrikov induction time based on 50% limiting species
@@ -128,7 +190,9 @@ class CellSize:
         X_gav = 0.5*(X_initial - X_final) + X_final
         t_gav = np.nanmax(
             np.concatenate([
-                CVout1['time'][CVout1['speciesX'][limit_species_loc] > X_gav],
+                cv_out_0['time'][
+                    cv_out_0['speciesX'][limit_species_loc] > X_gav
+                ],
                 [0]
             ])
         )
@@ -137,7 +201,7 @@ class CellSize:
         T_west = 0.5*(T_final - self.Ts) + self.Ts
         t_west = np.nanmax(
             np.concatenate([
-                CVout1['time'][CVout1['T'] < T_west],
+                cv_out_0['time'][cv_out_0['T'] < T_west],
                 [0]
             ])
         )
@@ -161,90 +225,171 @@ class CellSize:
         }
 
         # store calculations
-        if perturbed_reaction == -1:
-            # unperturbed data, store in test condition table with initial
-            # conditions and store all reactions
-            table_id = data_table.store_test_row(
-                mechanism=mechanism,
-                initial_temp=initial_temp,
-                initial_press=initial_press,
-                fuel=fuel,
-                oxidizer=oxidizer,
-                equivalence=equivalence,
-                diluent=diluent,
-                diluent_mol_frac=diluent_mol_frac,
-                inert=inert,
-                cj_speed=cj_speed,
-                ind_len_west=self.induction_length['Westbrook'],
-                ind_len_gav=self.induction_length['Gavrikov'],
-                ind_len_ng=self.induction_length['Ng'],
-                cell_size_west=self.cell_size['Westbrook'],
-                cell_size_gav=self.cell_size['Gavrikov'],
-                cell_size_ng=self.cell_size['Ng'],
+        if store_data:
+            if len(existing_data['fuel']) == 0:
+                self.data_table.store_test_row(
+                    mechanism=base_mechanism,
+                    initial_temp=initial_temp,
+                    initial_press=initial_press,
+                    fuel=fuel,
+                    oxidizer=oxidizer,
+                    equivalence=equivalence,
+                    diluent=diluent,
+                    diluent_mol_frac=diluent_mol_frac,
+                    inert=inert,
+                    cj_speed=cj_speed,
+                    ind_len_west=self.induction_length['Westbrook'],
+                    ind_len_gav=self.induction_length['Gavrikov'],
+                    ind_len_ng=self.induction_length['Ng'],
+                    cell_size_west=self.cell_size['Westbrook'],
+                    cell_size_gav=self.cell_size['Gavrikov'],
+                    cell_size_ng=self.cell_size['Ng'],
+                    overwrite_existing=overwrite_existing
+                )
+
+            if perturbed_reaction == -1:
+                print('mother fucker')
+                self._store_base_rxn_table(gas)
+            else:
+                test_info = self.data_table.fetch_test_rows(
+                    mechanism=base_mechanism,
+                    initial_temp=initial_temp,
+                    initial_press=initial_press,
+                    fuel=fuel,
+                    oxidizer=oxidizer,
+                    equivalence=equivalence,
+                    diluent=diluent,
+                    diluent_mol_frac=diluent_mol_frac,
+                    inert=inert
+                )
+                table_id = test_info['rxn_table_id']
+
+                # create a base reaction table if one doesn't exist
+                if not self.data_table.check_for_stored_base_data(table_id):
+                    # note: self.mechanism is either the base mechanism or the
+                    # temporary mechanism file that has had the relevant inerts
+                    # built, whichever is appropriate
+                    self._store_base_rxn_table(base_gas)
+
+                # fetch base case information from test table
+                [cj_speed_0] = test_info['cj_speed']
+                [ind_len_west_0] = test_info['ind_len_west']
+                [ind_len_gav_0] = test_info['ind_len_gav']
+                [ind_len_ng_0] = test_info['ind_len_ng']
+                [cell_size_west_0] = test_info['cell_size_west']
+                [cell_size_gav_0] = test_info['cell_size_gav']
+                [cell_size_ng_0] = test_info['cell_size_ng']
+
+                # calculate sensitivities
+                sens_cj_speed = (cj_speed - cj_speed_0) / perturbation_fraction
+                sens_ind_len_west = (
+                    self.induction_length['Westbrook'] - ind_len_west_0
+                ) / (self.induction_length['Westbrook'] * perturbation_fraction)
+                sens_ind_len_gav = (
+                    self.induction_length['Gavrikov'] - ind_len_gav_0
+                ) / (self.induction_length['Gavrikov'] * perturbation_fraction)
+                sens_ind_len_ng = (
+                    self.induction_length['Ng'] - ind_len_ng_0
+                ) / (self.induction_length['Ng'] * perturbation_fraction)
+                sens_cell_size_west = (
+                    self.cell_size['Westbrook'] - cell_size_west_0
+                ) / (self.cell_size['Westbrook'] * perturbation_fraction)
+                sens_cell_size_gav = (
+                    self.cell_size['Gavrikov'] - cell_size_gav_0
+                ) / (self.cell_size['Gavrikov'] * perturbation_fraction)
+                sens_cell_size_ng = (
+                    self.cell_size['Ng'] - cell_size_ng_0
+                ) / (self.cell_size['Ng'] * perturbation_fraction)
+
+                self.data_table.store_perturbed_row(
+                    rxn_table_id=table_id,
+                    rxn_no=perturbed_reaction,
+                    rxn=gas.reaction_equation(perturbed_reaction),
+                    k_i=gas.forward_rate_constants[perturbed_reaction],
+                    cj_speed=cj_speed,
+                    ind_len_west=self.induction_length['Westbrook'],
+                    ind_len_gav=self.induction_length['Gavrikov'],
+                    ind_len_ng=self.induction_length['Ng'],
+                    cell_size_west=self.cell_size['Westbrook'],
+                    cell_size_gav=self.cell_size['Gavrikov'],
+                    cell_size_ng=self.cell_size['Ng'],
+                    sens_cj_speed=sens_cj_speed,
+                    sens_ind_len_west=sens_ind_len_west,
+                    sens_ind_len_gav=sens_ind_len_gav,
+                    sens_ind_len_ng=sens_ind_len_ng,
+                    sens_cell_size_west=sens_cell_size_west,
+                    sens_cell_size_gav=sens_cell_size_gav,
+                    sens_cell_size_ng=sens_cell_size_ng
+                )
+
+        # clean up
+        if 'INERT_MECH_' in self.mechanism:
+            mech_path = os.path.join(
+                os.path.split(ct.__file__)[0],
+                'data',
+                self.mechanism
             )
-            data_table.store_base_rxn_table(
-                rxn_table_id=table_id,
-                gas=gas
-            )
-        else:
-            # perturbed data, store in perturbed table
-            # todo: make sure a base is stored before doing this
-            [table_id] = data_table.fetch_test_rows(
-                mechanism=mechanism,
-                initial_temp=initial_temp,
-                initial_press=initial_press,
-                fuel=fuel,
-                oxidizer=oxidizer,
-                equivalence=equivalence,
-                diluent=diluent,
-                diluent_mol_frac=diluent_mol_frac,
-                inert=inert
-            )['rxn_table_id']
-            # todo: fill out all inputs correctly
-            data_table.store_perturbed_row(
-                rxn_table_id=table_id,
-                rxn_no=perturbed_reaction,
-                rxn='',
-                k_i='ki',
-                cj_speed='cj_speed',
-                ind_len_west=self.induction_length['Westbrook'],
-                ind_len_gav=self.induction_length['Gavrikov'],
-                ind_len_ng=self.induction_length['Ng'],
-                cell_size_west=self.cell_size['Westbrook'],
-                cell_size_gav=self.cell_size['Gavrikov'],
-                cell_size_ng=self.cell_size['Ng'],
-                sens_cj_speed='',
-                sens_ind_len_west='',
-                sens_ind_len_gav='',
-                sens_ind_len_ng='',
-                sens_cell_size_west='',
-                sens_cell_size_gav='',
-                sens_cell_size_ng=''
-            )
+            os.remove(mech_path)
 
         return self.cell_size
 
+    def _store_base_rxn_table(
+            self,
+            gas
+    ):
+        # unperturbed data, store in test condition table with initial
+        # conditions and store all reactions
+        table_id = self.data_table.store_test_row(
+            mechanism=self.base_mechanism,
+            initial_temp=self.initial_temp,
+            initial_press=self.initial_press,
+            fuel=self.fuel,
+            oxidizer=self.oxidizer,
+            equivalence=self.equivalence,
+            diluent=self.diluent,
+            diluent_mol_frac=self.diluent_mol_frac,
+            inert=self.inert,
+            cj_speed=self.cj_speed,
+            ind_len_west=self.induction_length['Westbrook'],
+            ind_len_gav=self.induction_length['Gavrikov'],
+            ind_len_ng=self.induction_length['Ng'],
+            cell_size_west=self.cell_size['Westbrook'],
+            cell_size_gav=self.cell_size['Gavrikov'],
+            cell_size_ng=self.cell_size['Ng'],
+            overwrite_existing=self.overwrite_existing
+        )
+        print(self.overwrite_existing)
+        print(table_id)
+        self.data_table.store_base_rxn_table(
+            rxn_table_id=table_id,
+            gas=gas
+        )
+
+    # noinspection PyArgumentList
     def _build_solution_with_inerts(
             self,
-            mech,
             inert_species
     ):
         inert_species = self._enforce_species_list(inert_species)
-        species = ct.Species.listFromFile(mech)
+        species = ct.Species.listFromFile(self.mechanism)
         reactions = []
-        for rxn in ct.Reaction.listFromFile(mech):
+        for rxn in ct.Reaction.listFromFile(self.mechanism):
             if not any([
                 s in list(rxn.reactants) + list(rxn.products)
                 for s in inert_species
             ]):
                 reactions.append(rxn)
 
-        return ct.Solution(
+        gas = OriginalSolution(
             thermo='IdealGas',
             species=species,
             reactions=reactions,
             kinetics='GasKinetics'
         )
+        self.mechanism = 'INERT_MECH_' + self.mechanism + '_' + str(uuid4())
+        cti.write(gas, self.mechanism)
+
+        return gas
 
     @staticmethod
     def _enforce_species_list(species):
@@ -259,7 +404,6 @@ class CellSize:
 
     def _build_gas_object(
             self,
-            mech,
             fuel,
             oxidizer,
             phi,
@@ -267,10 +411,11 @@ class CellSize:
             diluent_mol_frac,
             inert=None
     ):
-        if inert is not None:
-            gas = ct.Solution(mech)
+        if inert is None or 'INERT_MECH_' in self.mechanism:
+            gas = ct.Solution(self.mechanism)
         else:
-            gas = self._build_solution_with_inerts(mech, inert)
+            # this will change self.mechanism to the new one with inerts
+            gas = self._build_solution_with_inerts(inert)
 
         gas.set_equivalence_ratio(
             phi,

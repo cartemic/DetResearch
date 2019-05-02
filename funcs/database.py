@@ -93,6 +93,8 @@ class Table:
         self.con = sqlite3.connect(self.database)
         self._testing = testing
         if self.table_name not in DataBase.list_all_tables(database):
+            # todo: init without test id is causing problems with implementation
+            #  in cell_size
             self._create_test_table()
 
     def __del__(self):

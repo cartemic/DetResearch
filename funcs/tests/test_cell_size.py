@@ -1,5 +1,8 @@
 from funcs.cell_size import CellSize
 import numpy as np
+from time import time
+import funcs.database as db
+from uuid import uuid4
 
 relTol = 1e-4
 absTol = 1e-6
@@ -28,12 +31,14 @@ class TestAgainstDemo:
 
     def test_induction_lengths(self):
         self.cells(
-            P1=self.init_press,
-            T1=self.init_temp,
+            base_mechanism=self.mechanism,
+            initial_temp=self.init_temp,
+            initial_press=self.init_press,
             fuel='H2',
             oxidizer='O2:1, N2:3.76',
-            phi=1,
-            mech=self.mechanism
+            equivalence=1,
+            diluent='None',
+            diluent_mol_frac=0
         )
         assert (
             all([[
@@ -49,12 +54,14 @@ class TestAgainstDemo:
 
     def test_cell_sizes(self):
         test = self.cells(
-            P1=self.init_press,
-            T1=self.init_temp,
+            base_mechanism=self.mechanism,
+            initial_temp=self.init_temp,
+            initial_press=self.init_press,
             fuel='H2',
             oxidizer='O2:1, N2:3.76',
-            phi=1,
-            mech=self.mechanism
+            equivalence=1,
+            diluent='None',
+            diluent_mol_frac=0
         )
         assert (
             all([[
@@ -67,12 +74,11 @@ class TestAgainstDemo:
             )
         )
 
-    def test_no_dilution(self):
+    def test_build_gas_no_dilution(self):
         undiluted = {'H2': 2 / 3, 'O2': 1 / 3}
 
         # should not dilute with diluent=None
         test = self.cells._build_gas_object(
-            mech='gri30.cti',
             fuel='H2',
             oxidizer='O2',
             phi=1,
@@ -85,7 +91,6 @@ class TestAgainstDemo:
 
         # should not dilute with diluent_mol_frac=0
         test = self.cells._build_gas_object(
-            mech='gri30.cti',
             fuel='H2',
             oxidizer='O2',
             phi=1,
@@ -97,9 +102,8 @@ class TestAgainstDemo:
         ]
         assert all([check_none, check_zero])
 
-    def test_with_dilution(self):
+    def test_build_gas_with_dilution(self):
         test = self.cells._build_gas_object(
-            mech='gri30.cti',
             fuel='H2',
             oxidizer='O2',
             phi=1,
@@ -111,3 +115,55 @@ class TestAgainstDemo:
             np.isclose(test['AR'], 0.1)
         ]
         assert all(check)
+
+    def test_with_lookup(self):
+        new_db = str(uuid4()) + '.sqlite'
+        test_cells = self.cells
+        test_cells.data_table = db.Table(new_db, 'test_table')
+        t0 = time()
+        test_cells(
+            base_mechanism=self.mechanism,
+            initial_temp=self.init_temp,
+            initial_press=self.init_press,
+            fuel='H2',
+            oxidizer='O2:1, N2:3.76',
+            equivalence=1,
+            diluent='None',
+            diluent_mol_frac=0,
+            store_data=True,
+        )
+        t1 = time()
+        original_cj = test_cells.cj_speed
+        t2 = time()
+        test_cells(
+            base_mechanism=self.mechanism,
+            initial_temp=self.init_temp,
+            initial_press=self.init_press,
+            fuel='H2',
+            oxidizer='O2:1, N2:3.76',
+            equivalence=1,
+            diluent='None',
+            diluent_mol_frac=0,
+            store_data=True,
+            overwrite_existing=True
+        )
+        t3 = time()
+        print(t1-t0)
+        print(t3-t2)
+        raise ValueError
+
+
+if __name__ == '__main__':  # pragma: no cover
+    import subprocess
+    from funcs.tests.test_database import remove_stragglers
+    try:
+        subprocess.check_call(
+            'pytest test_cell_size.py -vv --noconftest --cov '
+            '--cov-report html'
+        )
+    except subprocess.CalledProcessError as e:
+        # clean up in case of an unexpected error cropping up
+        # remove_stragglers()
+        raise e
+
+    # remove_stragglers()
