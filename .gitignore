@@ -245,3 +245,6 @@ modules.xml
 
 # neither does box stuff
 box_key.json
+
+# or visio
+*.vsdx
