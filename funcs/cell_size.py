@@ -36,6 +36,7 @@ class CellSize:
             equivalence,
             diluent,
             diluent_mol_frac,
+            cj_speed,
             inert=None,
             perturbed_reaction=-1,
             perturbation_fraction=1e-2,
@@ -83,19 +84,6 @@ class CellSize:
             inert
         )
         q = base_gas.X
-        existing_data = self.data_table.fetch_test_rows(
-            mechanism=self.base_mechanism,
-            initial_temp=initial_temp,
-            initial_press=initial_press,
-            fuel=fuel,
-            oxidizer=oxidizer,
-            equivalence=equivalence,
-            diluent=diluent,
-            diluent_mol_frac=diluent_mol_frac,
-            inert=inert
-        )
-
-        [cj_speed] = existing_data['cj_speed']
 
         # FIND EQUILIBRIUM POST SHOCK STATE FOR GIVEN SPEED
         gas = sd.postshock.PostShock_eq(
