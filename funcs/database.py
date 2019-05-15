@@ -381,14 +381,12 @@ class Table:
                     rxn_no INTEGER,
                     rxn TEXT,
                     k_i REAL,
-                    cj_speed REAL,
                     ind_len_west REAL,
                     ind_len_gav REAL,
                     ind_len_ng REAL,
                     cell_size_west REAL,
                     cell_size_gav REAL,
                     cell_size_ng REAL,
-                    sens_cj_speed REAL,
                     sens_ind_len_west REAL,
                     sens_ind_len_gav REAL,
                     sens_ind_len_ng REAL,
@@ -506,14 +504,12 @@ class Table:
             rxn_no,
             rxn,
             k_i,
-            cj_speed,
             ind_len_west,
             ind_len_gav,
             ind_len_ng,
             cell_size_west,
             cell_size_gav,
             cell_size_ng,
-            sens_cj_speed,
             sens_ind_len_west,
             sens_ind_len_gav,
             sens_ind_len_ng,
@@ -527,8 +523,6 @@ class Table:
 
         Parameters
         ----------
-        cj_speed : float
-            CJ speed to update
         ind_len_west : float
             Induction length (Westbrook)
         ind_len_gav : float
@@ -548,14 +542,12 @@ class Table:
                 """
                 UPDATE {:s} SET 
                     k_i = :k_i,
-                    cj_speed = :cj_speed,
                     ind_len_west = :ind_len_west,
                     ind_len_gav = :ind_len_gav,
                     ind_len_ng = :ind_len_ng,
                     cell_size_west = :cell_size_west,
                     cell_size_gav = :cell_size_gav,
                     cell_size_ng = :cell_size_ng,
-                    sens_cj_speed = :sens_cj_speed,
                     sens_ind_len_west = :sens_ind_len_west,
                     sens_ind_len_gav = :sens_ind_len_gav,
                     sens_ind_len_ng = :sens_ind_len_ng,
@@ -570,14 +562,12 @@ class Table:
                     'rxn_no': rxn_no,
                     'rxn': rxn,
                     'k_i': k_i,
-                    'cj_speed': cj_speed,
                     'ind_len_west': ind_len_west,
                     'ind_len_gav': ind_len_gav,
                     'ind_len_ng': ind_len_ng,
                     'cell_size_west': cell_size_west,
                     'cell_size_gav': cell_size_gav,
                     'cell_size_ng': cell_size_ng,
-                    'sens_cj_speed': sens_cj_speed,
                     'sens_ind_len_west': sens_ind_len_west,
                     'sens_ind_len_gav': sens_ind_len_gav,
                     'sens_ind_len_ng': sens_ind_len_ng,
@@ -701,9 +691,6 @@ class Table:
                     cell_size_gav=cell_size_gav,
                     cell_size_ng=cell_size_ng,
                 )
-                start_color = '\033[92m'
-                end_color = '\033[0m'
-                print(start_color+'data row stored successfully'+end_color)
                 return rxn_table_id
             else:
                 # warn the user that the current input was ignored
@@ -770,14 +757,12 @@ class Table:
             rxn_no,
             rxn,
             k_i,
-            cj_speed,
             ind_len_west,
             ind_len_gav,
             ind_len_ng,
             cell_size_west,
             cell_size_gav,
             cell_size_ng,
-            sens_cj_speed,
             sens_ind_len_west,
             sens_ind_len_gav,
             sens_ind_len_ng,
@@ -795,8 +780,6 @@ class Table:
 
         Parameters
         ----------
-        cj_speed : float
-            Current CJ speed
         overwrite_existing : bool
             True to overwrite an existing entry if it exists, False to
             protect existing entries
@@ -831,27 +814,18 @@ class Table:
                     rxn_no=rxn_no,
                     rxn=rxn,
                     k_i=k_i,
-                    cj_speed=cj_speed,
                     ind_len_west=ind_len_west,
                     ind_len_gav=ind_len_gav,
                     ind_len_ng=ind_len_ng,
                     cell_size_west=cell_size_west,
                     cell_size_gav=cell_size_gav,
                     cell_size_ng=cell_size_ng,
-                    sens_cj_speed=sens_cj_speed,
                     sens_ind_len_west=sens_ind_len_west,
                     sens_ind_len_gav=sens_ind_len_gav,
                     sens_ind_len_ng=sens_ind_len_ng,
                     sens_cell_size_west=sens_cell_size_west,
                     sens_cell_size_gav=sens_cell_size_gav,
                     sens_cell_size_ng=sens_cell_size_ng,
-                )
-                start_color = '\033[92m'
-                end_color = '\033[0m'
-                print(
-                    start_color +
-                    'perturbed data row stored successfully' +
-                    end_color
                 )
             else:
                 # warn the user that the current input was ignored
@@ -871,14 +845,12 @@ class Table:
                         :rxn_no,
                         :rxn,
                         :k_i,
-                        :cj_speed,
                         :ind_len_west,
                         :ind_len_gav,
                         :ind_len_ng,
                         :cell_size_west,
                         :cell_size_gav,
                         :cell_size_ng,
-                        :sens_cj_speed,
                         :sens_ind_len_west,
                         :sens_ind_len_gav,
                         :sens_ind_len_ng,
@@ -891,14 +863,12 @@ class Table:
                         'rxn_no': rxn_no,
                         'rxn': rxn,
                         'k_i': k_i,
-                        'cj_speed': cj_speed,
                         'ind_len_west': ind_len_west,
                         'ind_len_gav': ind_len_gav,
                         'ind_len_ng': ind_len_ng,
                         'cell_size_west': cell_size_west,
                         'cell_size_gav': cell_size_gav,
                         'cell_size_ng': cell_size_ng,
-                        'sens_cj_speed': sens_cj_speed,
                         'sens_ind_len_west': sens_ind_len_west,
                         'sens_ind_len_gav': sens_ind_len_gav,
                         'sens_ind_len_ng': sens_ind_len_ng,
@@ -946,14 +916,12 @@ class Table:
             rxn_no=None,
             rxn=None,
             k_i=None,
-            cj_speed=None,
             ind_len_west=None,
             ind_len_gav=None,
             ind_len_ng=None,
             cell_size_west=None,
             cell_size_gav=None,
             cell_size_ng=None,
-            sens_cj_speed=None,
             sens_ind_len_west=None,
             sens_ind_len_gav=None,
             sens_ind_len_ng=None,
@@ -981,14 +949,12 @@ class Table:
                 'rxn_no': rxn_no,
                 'rxn': rxn,
                 'k_i': k_i,
-                'cj_speed': cj_speed,
                 'ind_len_west': ind_len_west,
                 'ind_len_gav': ind_len_gav,
                 'ind_len_ng': ind_len_ng,
                 'cell_size_west': cell_size_west,
                 'cell_size_gav': cell_size_gav,
                 'cell_size_ng': cell_size_ng,
-                'sens_cj_speed': sens_cj_speed,
                 'sens_ind_len_west': sens_ind_len_west,
                 'sens_ind_len_gav': sens_ind_len_gav,
                 'sens_ind_len_ng': sens_ind_len_ng,
@@ -1002,14 +968,12 @@ class Table:
                     'rxn_no': rxn_no,
                     'rxn': rxn,
                     'k_i': k_i,
-                    'cj_speed': cj_speed,
                     'ind_len_west': ind_len_west,
                     'ind_len_gav': ind_len_gav,
                     'ind_len_ng': ind_len_ng,
                     'cell_size_west': cell_size_west,
                     'cell_size_gav': cell_size_gav,
                     'cell_size_ng': cell_size_ng,
-                    'sens_cj_speed': sens_cj_speed,
                     'sens_ind_len_west': sens_ind_len_west,
                     'sens_ind_len_gav': sens_ind_len_gav,
                     'sens_ind_len_ng': sens_ind_len_ng,
