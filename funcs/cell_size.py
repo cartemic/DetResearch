@@ -14,17 +14,80 @@ http://shepherd.caltech.edu/EDL/PublicResources/sdt/
 """
 import numpy as np
 import cantera as ct
-from uuid import uuid4
-import os
-from . import database as db
-from . import cti_solution_writer as cti
 
 OriginalSolution = ct.Solution
 
 
+def _enforce_species_list(species):
+    if isinstance(species, str):
+        species = [species.upper()]
+    elif hasattr(species, '__iter__'):
+        species = [s.upper() for s in species]
+    else:
+        raise TypeError('Bad species type: %s' % type(species))
+
+    return species
+
+
+# noinspection PyArgumentList
+def solution_with_inerts(
+        mech,
+        inert_species
+):
+    inert_species = _enforce_species_list(inert_species)
+    species = ct.Species.listFromFile(mech)
+    reactions = []
+    for rxn in ct.Reaction.listFromFile(mech):
+        if not any([
+            s in list(rxn.reactants) + list(rxn.products)
+            for s in inert_species
+        ]):
+            reactions.append(rxn)
+
+    return OriginalSolution(
+        thermo='IdealGas',
+        species=species,
+        reactions=reactions,
+        kinetics='GasKinetics'
+    )
+
+
 class CellSize:
     """
-    todo: docstring pls
+    A class that, when called, calculates detonation cell sizes using the
+    methods of Westbrook, Ng, and Gavrikov. Based on the script
+    demo_ZND_CJ_cell.m which can be found at
+    http://shepherd.caltech.edu/EDL/PublicResources/sdt/nb/sdt_intro.slides.html
+
+    Inputs
+    ------
+    base_mechanism : str
+        Base chemical mechanism for Cantera calculations
+    initial_temp : float
+        Initial mixture temperature in Kelvin
+    initial_press : float
+        Initial mixture temperature in Pascals
+    fuel : str
+        Fuel
+    oxidizer : str
+        Oxidizer
+    equivalence : float
+        Equivalence ratio
+    diluent : str
+        Diluent
+    diluent_mol_frac : float
+        Mole fraction of diluent
+    cj_speed : float
+        Chapman-Jouguet wave speed of the mixture specified above
+    inert : str or None
+        Specie to deactivate (must be deactivated in CJ speed calculation as
+        well). Defaults to None
+    perturbed_reaction : int
+        Reaction number to perturb. Defaults to -1, meaning that no reaction is
+        perturbed
+    perturbation_fraction : float
+        Fraction by which to perturb the specified reaction's forward and
+        reverse rate constants, i.e. dk/k. Defaults to 1e-2 (1%)
     """
     def __call__(
             self,
@@ -40,8 +103,6 @@ class CellSize:
             inert=None,
             perturbed_reaction=-1,
             perturbation_fraction=1e-2,
-            database='sensitivity.sqlite',
-            table_name='test_data',
     ):
         # sdt import is here to avoid any module-level weirdness stemming from
         # Solution object modification
@@ -58,7 +119,6 @@ class CellSize:
         self.diluent = diluent
         self.diluent_mol_frac = diluent_mol_frac
         self.inert = inert
-        self.data_table = db.Table(database, table_name)
         self.T1 = initial_temp
         self.perturbed_reaction = perturbed_reaction
         self.perturbation_fraction = perturbation_fraction
@@ -67,7 +127,13 @@ class CellSize:
             # alter ct.Solution within sdtoolbox so that it returns perturbed
             # reaction results
             def my_solution(mech):
-                original_gas = OriginalSolution(mech)
+                if inert is None:
+                    original_gas = OriginalSolution(mech)
+                else:
+                    original_gas = solution_with_inerts(
+                        mech,
+                        inert
+                    )
                 original_gas.set_multiplier(
                     1 + perturbation_fraction,
                     perturbed_reaction
@@ -75,15 +141,8 @@ class CellSize:
                 return original_gas
             sd.postshock.ct.Solution = my_solution
 
-        base_gas = self._build_gas_object(
-            fuel,
-            oxidizer,
-            equivalence,
-            diluent,
-            diluent_mol_frac,
-            inert
-        )
-        q = base_gas.X
+        self.base_gas = self._build_gas_object()
+        q = self.base_gas.X
 
         # FIND EQUILIBRIUM POST SHOCK STATE FOR GIVEN SPEED
         gas = sd.postshock.PostShock_eq(
@@ -98,7 +157,7 @@ class CellSize:
             assert (gas.multiplier(perturbed_reaction) ==
                     1 + perturbation_fraction)
 
-        u_cj = cj_speed * base_gas.density / gas.density
+        u_cj = cj_speed * self.base_gas.density / gas.density
         self.cj_speed = u_cj
 
         # FIND FROZEN POST SHOCK STATE FOR GIVEN SPEED
@@ -117,7 +176,7 @@ class CellSize:
         # SOLVE ZND DETONATION ODES
         out = sd.znd.zndsolve(
             gas,
-            base_gas,
+            self.base_gas,
             cj_speed,
             advanced_output=True,
             t_end=2e-3
@@ -204,42 +263,7 @@ class CellSize:
             'Ng': self._cell_size_ng()
         }
 
-        # clean up
-        if 'INERT_MECH_' in self.mechanism:
-            mech_path = os.path.join(
-                os.path.split(ct.__file__)[0],
-                'data',
-                self.mechanism
-            )
-            os.remove(mech_path)
-
         return self.cell_size
-
-    # noinspection PyArgumentList
-    def _build_solution_with_inerts(
-            self,
-            inert_species
-    ):
-        inert_species = self._enforce_species_list(inert_species)
-        species = ct.Species.listFromFile(self.mechanism)
-        reactions = []
-        for rxn in ct.Reaction.listFromFile(self.mechanism):
-            if not any([
-                s in list(rxn.reactants) + list(rxn.products)
-                for s in inert_species
-            ]):
-                reactions.append(rxn)
-
-        gas = OriginalSolution(
-            thermo='IdealGas',
-            species=species,
-            reactions=reactions,
-            kinetics='GasKinetics'
-        )
-        self.mechanism = 'INERT_MECH_' + self.mechanism + '_' + str(uuid4())
-        cti.write(gas, self.mechanism)
-
-        return gas
 
     @staticmethod
     def _enforce_species_list(species):
@@ -252,40 +276,38 @@ class CellSize:
 
         return species
 
-    def _build_gas_object(
-            self,
-            fuel,
-            oxidizer,
-            phi,
-            diluent,
-            diluent_mol_frac,
-            inert=None
-    ):
-        if inert is None or 'INERT_MECH_' in self.mechanism:
+    def _build_gas_object(self):
+        if self.inert is None:
             gas = ct.Solution(self.mechanism)
         else:
             # this will change self.mechanism to the new one with inerts
-            gas = self._build_solution_with_inerts(inert)
+            gas = solution_with_inerts(self.mechanism, self.inert)
 
         gas.set_equivalence_ratio(
-            phi,
-            fuel,
-            oxidizer
+            self.equivalence,
+            self.fuel,
+            self.oxidizer
         )
-        if diluent is not None and diluent_mol_frac > 0:
+        if self.diluent is not None and self.diluent_mol_frac > 0:
             # dilute the gas!
             mole_fractions = gas.mole_fraction_dict()
-            new_fuel_fraction = (1 - diluent_mol_frac) * \
-                mole_fractions[fuel]
-            new_oxidizer_fraction = (1 - diluent_mol_frac) * \
-                mole_fractions[oxidizer]
+            new_fuel_fraction = (1 - self.diluent_mol_frac) * \
+                mole_fractions[self.fuel]
+            new_oxidizer_fraction = (1 - self.diluent_mol_frac) * \
+                mole_fractions[self.oxidizer]
             gas.X = '{0}: {1} {2}: {3} {4}: {5}'.format(
-                diluent,
-                diluent_mol_frac,
-                fuel,
+                self.diluent,
+                self.diluent_mol_frac,
+                self.fuel,
                 new_fuel_fraction,
-                oxidizer,
+                self.oxidizer,
                 new_oxidizer_fraction
+            )
+        gas.TP = self.initial_temp, self.initial_press
+        if self.perturbed_reaction > 0:
+            gas.set_multiplier(
+                1 + self.perturbation_fraction,
+
             )
         return gas
 

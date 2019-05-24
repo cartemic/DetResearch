@@ -93,8 +93,6 @@ class Table:
         self.con = sqlite3.connect(self.database)
         self._testing = testing
         if self.table_name not in DataBase.list_all_tables(database):
-            # todo: init without test id is causing problems with implementation
-            #  in cell_size
             self._create_test_table()
 
     def __del__(self):
@@ -624,6 +622,9 @@ class Table:
             Diluent used in the current row
         diluent_mol_frac : float
             Mole fraction of diluent used in the current row
+        inert : str
+            Specie to make inert by removing every reaction where it is a
+            reactant or product
         overwrite_existing : bool
             True to overwrite an existing entry if it exists, False to
             protect existing entries
@@ -749,7 +750,7 @@ class Table:
                 )
                 self._create_rxn_table_base(rxn_table_id)
                 self._create_rxn_table_pert(rxn_table_id)
-                return rxn_table_id
+            return rxn_table_id
 
     def store_perturbed_row(
             self,
@@ -780,9 +781,19 @@ class Table:
 
         Parameters
         ----------
-        overwrite_existing : bool
-            True to overwrite an existing entry if it exists, False to
-            protect existing entries
+        rxn_table_id : str
+            Reaction table ID corresponding to the BASE_rxn_table_id and
+            PERT_rxn_table_id tables. BASE table holds all reactions and
+            reaction rate coefficients, while PERT holds all reactions and
+            perturbed reaction rate coefficients along with the associated CJ
+            speed, induction length, and cell size results.
+        rxn_no : int
+            Reaction number of the perturbed reaction in the mechanism's
+            reaction list
+        rxn : str
+            Equation for the perturbed reaction
+        k_i : float
+            Forward reaction rate constant for the perturbed reaction
         ind_len_west : float
             Induction length (Westbrook)
         ind_len_gav : float
@@ -795,6 +806,21 @@ class Table:
             Cell size (Gavrikov)
         cell_size_ng : float
             Cell size (Ng)
+        sens_ind_len_west : float
+            Induction length sensitivity (Westbrook)
+        sens_ind_len_gav : float
+            Induction length sensitivity (Gavrikov)
+        sens_ind_len_ng : float
+            Induction length sensitivity (Ng)
+        sens_cell_size_west : float
+            Cell size (Westbrook)
+        sens_cell_size_gav : float
+            Cell size sensitivity (Gavrikov)
+        sens_cell_size_ng : float
+            Cell size sensitivity (Ng)
+        overwrite_existing : bool
+            True to overwrite an existing entry if it exists, False to
+            protect existing entries
 
         Returns
         -------
@@ -1025,6 +1051,9 @@ class Table:
             Diluent to search for
         diluent_mol_frac : float
             Mole fraction of diluent to search for
+        inert : str
+            Specie to make inert by removing every reaction where it is a
+            reactant or product
 
         Returns
         -------
@@ -1116,8 +1145,9 @@ class Table:
         with self.con as con:
             cur = con.cursor()
             cur.execute(
-                """SELECT * FROM {:s}
-                    WHERE rxn_no = :rxn_no
+                """
+                SELECT * FROM {:s}
+                WHERE rxn_no = :rxn_no
                 """.format(rxn_table),
                 {
                     'rxn_no': rxn_no
@@ -1125,6 +1155,35 @@ class Table:
             )
             base_rxns = cur.fetchone()
         return base_rxns
+
+    def delete_test(
+            self,
+            rxn_table_id
+    ):
+        with self.con as con:
+            cur = con.cursor()
+            for table in ['BASE', 'PERT']:
+                cur.execute(
+                    """
+                    DROP TABLE IF EXISTS {:s}
+                    """.format(
+                        self._clean(
+                            table + '_' + rxn_table_id
+                        )
+                    )
+                )
+            cur.execute(
+                """
+                DELETE FROM {:s} WHERE rxn_table_id = "{:s}"
+                """.format(
+                    self._clean(
+                        self.table_name
+                    ),
+                    self._clean(
+                        rxn_table_id
+                    )
+                )
+            )
 
 
 if __name__ == '__main__':  # pragma: no cover
