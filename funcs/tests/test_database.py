@@ -265,14 +265,12 @@ class TestTable:
             'rxn_no',
             'rxn',
             'k_i',
-            'cj_speed',
             'ind_len_west',
             'ind_len_gav',
             'ind_len_ng',
             'cell_size_west',
             'cell_size_gav',
             'cell_size_ng',
-            'sens_cj_speed',
             'sens_ind_len_west',
             'sens_ind_len_gav',
             'sens_ind_len_ng',
@@ -571,14 +569,12 @@ class TestTable:
             'rxn_no': 100,
             'rxn': '3 food + 1 stomach => 1 poop',
             'k_i': 1.2e12,
-            'cj_speed': 1234.56789,
             'ind_len_west': 1.1,
             'ind_len_gav': 2.2,
             'ind_len_ng': 3.3,
             'cell_size_west': 4.4,
             'cell_size_gav': 5.5,
             'cell_size_ng': 6.6,
-            'sens_cj_speed': 7.7,
             'sens_ind_len_west': 8.8,
             'sens_ind_len_gav': 9.9,
             'sens_ind_len_ng': 0.0,
@@ -590,14 +586,12 @@ class TestTable:
             'rxn_no': 100,
             'rxn': '3 food + 1 stomach => 1 poop',
             'k_i': 1.2e12,
-            'cj_speed': 1234.56789,
             'ind_len_west': 11.1,
             'ind_len_gav': 12.2,
             'ind_len_ng': 13.3,
             'cell_size_west': 14.4,
             'cell_size_gav': 15.5,
             'cell_size_ng': 16.6,
-            'sens_cj_speed': 17.7,
             'sens_ind_len_west': 18.8,
             'sens_ind_len_gav': 19.9,
             'sens_ind_len_ng': 10.0,
@@ -780,6 +774,8 @@ class TestTable:
         )
         test_true = test_table.check_for_stored_base_data(rxn_table_id)
         assert all([test_true, not test_false])
+
+    # todo: test for delete_test
 
 
 if __name__ == '__main__':  # pragma: no cover

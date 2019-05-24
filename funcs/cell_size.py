@@ -21,10 +21,18 @@ OriginalSolution = ct.Solution
 def _enforce_species_list(species):
     if isinstance(species, str):
         species = [species.upper()]
-    elif hasattr(species, '__iter__'):
+    elif hasattr(species, '__iter__') and \
+            all([isinstance(s, str) for s in species]):
         species = [s.upper() for s in species]
     else:
-        raise TypeError('Bad species type: %s' % type(species))
+        if hasattr(species, '__iter__'):
+            bad_type = [
+                type(item) for item in species if not isinstance(item, str)
+            ]
+        else:
+            bad_type = type(species)
+
+        raise TypeError('Bad species type: %s' % bad_type)
 
     return species
 
@@ -216,7 +224,7 @@ class CellSize:
 
         #  Find Gavrikov induction time based on 50% limiting species
         #  consumption, fuel for lean mixtures, oxygen for rich mixtures
-        if equivalence >= 1:
+        if equivalence <= 1:
             limit_species = fuel
         else:
             limit_species = 'O2'
@@ -264,17 +272,6 @@ class CellSize:
         }
 
         return self.cell_size
-
-    @staticmethod
-    def _enforce_species_list(species):
-        if isinstance(species, str):
-            species = [species.upper()]
-        elif hasattr(species, '__iter__'):
-            species = [s.upper() for s in species]
-        else:
-            raise TypeError('Bad species type: %s' % type(species))
-
-        return species
 
     def _build_gas_object(self):
         if self.inert is None:
