@@ -152,6 +152,13 @@ class CellSize:
         self.base_gas = self._build_gas_object()
         q = self.base_gas.X
 
+        if perturbed_reaction >= 0:
+            assert (self.base_gas.multiplier(perturbed_reaction) ==
+                    1 + perturbation_fraction)
+        for rxn in range(self.base_gas.n_reactions):
+            if rxn != perturbed_reaction:
+                assert self.base_gas.multiplier(rxn) == 1
+
         # FIND EQUILIBRIUM POST SHOCK STATE FOR GIVEN SPEED
         gas = sd.postshock.PostShock_eq(
             cj_speed,
@@ -164,6 +171,9 @@ class CellSize:
         if perturbed_reaction >= 0:
             assert (gas.multiplier(perturbed_reaction) ==
                     1 + perturbation_fraction)
+        for rxn in range(gas.n_reactions):
+            if rxn != perturbed_reaction:
+                assert gas.multiplier(rxn) == 1
 
         u_cj = cj_speed * self.base_gas.density / gas.density
         self.cj_speed = u_cj
@@ -304,7 +314,7 @@ class CellSize:
         if self.perturbed_reaction > 0:
             gas.set_multiplier(
                 1 + self.perturbation_fraction,
-
+                self.perturbed_reaction
             )
         return gas
 
