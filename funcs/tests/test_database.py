@@ -775,7 +775,58 @@ class TestTable:
         test_true = test_table.check_for_stored_base_data(rxn_table_id)
         assert all([test_true, not test_false])
 
-    # todo: test for delete_test
+    def test_delete_test(self):
+        test_db = generate_db_name()
+        test_table_name = 'test_table'
+        test_table = db.Table(
+            test_db,
+            test_table_name,
+            testing=True
+            )
+        rxn_table_id = test_table.store_test_row(
+            mechanism='gri30.cti',
+            initial_temp=300,
+            initial_press=101325,
+            fuel='CH4',
+            oxidizer='N2O',
+            equivalence=1,
+            diluent='N2',
+            diluent_mol_frac=0.1,
+            inert='None',
+            cj_speed=1986.12354679687543,
+            ind_len_west=1,
+            ind_len_gav=2,
+            ind_len_ng=3,
+            cell_size_west=4,
+            cell_size_gav=5,
+            cell_size_ng=6
+        )
+        test_table.delete_test(rxn_table_id)
+        empties = []
+        with test_table.con as con:
+            cur = con.cursor()
+            cur.execute(
+                    """
+                    SELECT * FROM {:s} WHERE rxn_table_id='{:s}';
+                    """.format(test_table_name, rxn_table_id)
+            )
+            empties.append(cur.fetchall())
+            cur.execute(
+                    """
+                    SELECT name FROM sqlite_master WHERE type='table' AND
+                    name LIKE 'PERT_%';
+                    """
+            )
+            empties.append(cur.fetchall())
+            cur.execute(
+                    """
+                    SELECT name FROM sqlite_master WHERE type='table' AND 
+                    name LIKE 'BASE_%';
+                    """.format(test_db)
+            )
+            empties.append(cur.fetchall())
+
+        assert all([len(chk) == 0 for chk in empties])
 
 
 if __name__ == '__main__':  # pragma: no cover
