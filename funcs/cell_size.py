@@ -311,7 +311,7 @@ class CellSize:
                 new_oxidizer_fraction
             )
         gas.TP = self.initial_temp, self.initial_press
-        if self.perturbed_reaction > 0:
+        if self.perturbed_reaction >= 0:
             gas.set_multiplier(
                 1 + self.perturbation_fraction,
                 self.perturbed_reaction
