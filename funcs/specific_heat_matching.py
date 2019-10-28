@@ -4,9 +4,16 @@ from scipy.optimize import minimize
 
 
 def diluted_species_dict(spec, diluent, diluent_mol_frac):
-    spec = {k: v * (1 - diluent_mol_frac) for k, v in spec.items()}
-    spec[diluent] = diluent_mol_frac
-    return spec
+    if diluent not in spec.keys():
+        spec = {k: v * (1 - diluent_mol_frac) for k, v in spec.items()}
+        spec[diluent] = diluent_mol_frac
+        return spec
+    else:
+        spec[diluent] += 1 / (1 / diluent_mol_frac - 1)
+        new_total_moles = sum(spec.values())
+        for s in spec.keys():
+            spec[s] /= new_total_moles
+        return spec
 
 
 def spec_heat_error(
