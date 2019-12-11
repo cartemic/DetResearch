@@ -74,6 +74,7 @@ def perform_study(
         inert,
         perturbation_fraction,
         perturbed_reaction_no,
+        db_lock
 ):
     CellSize = cell_size.CellSize()
     gas = cell_size.solution_with_inerts(mech, inert)
