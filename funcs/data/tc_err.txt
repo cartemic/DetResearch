@@ -1,0 +1,9 @@
+#DataThief \\depot.engr.oregonstate.edu\users\cartemic\Windows.Documents\Desktop\tc_err.png Thursday 19-Dec-2019 7:29:54 PM
+-106.7416, 1.9571
+-75.1404, 1.7124
+-36.5169, 1.5107
+203.6517, 0.9914
+7.7247, 1.3433
+54.7753, 1.206
+102.5281, 1.103
+153.0899, 1.0343

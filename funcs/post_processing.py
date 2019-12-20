@@ -2,6 +2,7 @@
 import os
 
 # third party imports
+import cantera as ct
 import pandas as pd
 from nptdms import TdmsFile
 from numpy import NaN
@@ -21,8 +22,10 @@ class PostProcessDate:
             tdms_sensor="sensor log.tdms",
             csv_conditions="test_conditions.csv",
             output_file="tube data.h5",
-            diode_spacing=1.0668,
+            diode_spacing=1.0668,  # meters
             sample_time=pd.Timedelta(seconds=70),
+            u_pressure_reading=62.345029384733806,  # Pascals
+            u_temperature_reading=1.1,  # Kelvin
     ):
         self._dir_raw = os.path.join(data_base_dir, dir_raw, date)
         self._dir_processed = os.path.join(data_base_dir, dir_processed, date)
@@ -193,6 +196,12 @@ class PostProcessDate:
                     "actual_diluent"
                 ] = self.df_test_info.loc[best_row, "actual_fuel"]
                 self.df_test_info.loc[best_row, "partial_diluent"] = 0.
+
+            # TODO: calculate and store equivalence ratio
+            pass
+
+            # TODO: calculate and store CJ speed
+            pass
 
             # store auxiliary test data
             self.tests[i]["pressure"] = df_p_row
