@@ -5,6 +5,7 @@ import numpy as np
 from scipy.interpolate import interp1d
 import uncertainties as un
 from uncertainties import unumpy as unp
+from scipy.stats import t, sem
 
 ureg = pint.UnitRegistry()
 quant = ureg.Quantity
@@ -16,7 +17,7 @@ quant = ureg.Quantity
 # daq: NI 9211 operating instructions and specifications p 26
 #      using Typ (Autozero on)
 df_9211 = pd.read_csv(
-    os.path.join("data", "tc_err.txt"),
+    os.path.join(os.path.dirname(__file__), "data", "tc_err.txt"),
     skiprows=1,
     names=["measured", "error"]
 ).sort_values("measured")
@@ -115,7 +116,8 @@ def u_pressure(
         intercept=pressure_cal["intercept"],
         u_intercept=pressure_sources["calibration"]["intercept"],
         u_cal_accuracy=pressure_sources["calibration"]["accuracy"],
-        daq_err=True
+        daq_err=True,
+        collapse=False
 ):
     """
     Calculate uncertainty in a pressure measurement
@@ -138,6 +140,10 @@ def u_pressure(
         Calibration transducer accuracy uncertainty (Pa)
     daq_err : bool
         Whether or not to apply DAQ error, mostly for answering questions
+    collapse : bool
+        Whether or not to collapse array to a single value. This will return
+        the scalar population uncertainty of the input array rather than an
+        array of uncertainties.
 
     Returns
     -------
@@ -161,7 +167,20 @@ def u_pressure(
         u_cal_accuracy
     )
     measured = quant(measured, "Pa").to(units).magnitude
-    return np.array([m.std_dev for m in measured])
+    if collapse:
+        t_95 = t.ppf(0.975, len(measured))
+        return (
+            un.ufloat(
+                0,
+                sem([m.nominal_value for m in measured]) * t_95
+            ) +
+            un.ufloat(
+                0,
+                np.max([m.std_dev for m in measured]) * t_95
+            )
+        ).std_dev
+    else:
+        return np.array([m.std_dev for m in measured])
 
 
 def _u_pressure_daq_current(
