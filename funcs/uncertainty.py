@@ -115,7 +115,7 @@ def u_temperature(
             )
         ).std_dev
     else:
-        return np.array([m.std_dev for m in measured])
+        return uncert
 
 
 # Pressure
