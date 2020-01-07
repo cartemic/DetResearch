@@ -11,31 +11,29 @@ ureg = pint.UnitRegistry()
 quant = ureg.Quantity
 
 # Temperature -- T type thermocouple in manifold is used for temp calculations.
+# Old datasets use K type tube thermocouple.
 # All values here are in degrees Celsius
 # ==============================================================================
 # standard: https://www.omega.com/en-us/resources/thermocouple-types
 # daq: NI 9211 operating instructions and specifications p 26
 #      using Typ (Autozero on)
-df_9211 = pd.read_csv(
-    os.path.join(os.path.dirname(__file__), "data", "tc_err.txt"),
-    skiprows=1,
-    names=["measured", "error"]
-).sort_values("measured")
-temperature_sources = {
-    "standard": 1.0,
-    "daq": interp1d(
-        df_9211["measured"],
-        df_9211["error"],
-        kind="cubic"
-    )
+DF_9211 = pd.read_csv(
+    os.path.join(os.path.dirname(__file__), "data", "tc_err.csv")
+)
+TEMP_STD = {
+    "T": (1.0, 0.0075),
+    "K": (2.2, 0.0075),
+    "E": (1.7, 0.0050),
+    "J": (2.2, 0.0075)
 }
 
 
 def u_temperature(
         measured,
         units="K",
-        u_thermocouple=temperature_sources["standard"],
+        u_thermocouple=None,
         tc_type="T",
+        collapse=False
 ):
     """
     Calculate uncertainty in a temperature measurement
@@ -46,11 +44,15 @@ def u_temperature(
         Nominal measured temperature values
     units : str
         Pressure units of `measured` array. Defaults to K.
-    u_thermocouple : float
-        Thermocouple uncertainty. Defaults to standard limits.
+    u_thermocouple : float or None
+        Thermocouple uncertainty. Pass None to use standard limits.
     tc_type : str
         Type of thermocouple used in measured value.
-        Currently only supports T type.
+        Currently only supports T and K types.
+    collapse : bool
+        Whether or not to collapse array to a single value. This will return
+        the scalar population uncertainty of the input array rather than an
+        array of uncertainties.
 
     Returns
     -------
@@ -65,30 +67,61 @@ def u_temperature(
     else:
         raise ValueError("bad temperature units")
 
-    if tc_type != "T":
-        return ValueError("u_temperature currently only supports T type")
+    if tc_type not in {"T", "K"}:
+        return ValueError("u_temperature currently only supports T or K type")
 
     measured = quant(measured, units).to("degC").magnitude
+
+    if u_thermocouple is None:
+        # apply standard limits of error
+        u_thermocouple = np.array([
+            TEMP_STD[tc_type][0] * np.ones_like(measured),
+            TEMP_STD[tc_type][1] * measured
+        ]).max(axis=0)
+
+    daq_err = DF_9211[DF_9211["type"] == tc_type]
 
     uncert = np.sqrt(
         np.sum(
             np.square(
                 [
                     np.ones_like(measured) * u_thermocouple,
-                    # this will have to be changed to support different TC types
-                    temperature_sources["daq"](measured)
+                    interp1d(
+                        daq_err["temp_C"],
+                        daq_err["err_C"],
+                        kind="cubic"
+                    )(measured)
                 ]
             ),
             axis=0
         )
     )
-    return quant(uncert, "delta_degC").to(units_out).magnitude
+
+    measured = quant(measured, "degC").to(units).magnitude
+    uncert = quant(uncert, "delta_degC").to(units_out).magnitude
+
+    measured = unp.uarray(measured, uncert)
+
+    if collapse:
+        t_95 = t.ppf(0.975, len(measured))
+        return (
+            un.ufloat(
+                0,
+                sem([m.nominal_value for m in measured]) * t_95
+            ) +
+            un.ufloat(
+                0,
+                np.max([m.std_dev for m in measured]) * t_95
+            )
+        ).std_dev
+    else:
+        return np.array([m.std_dev for m in measured])
 
 
 # Pressure
 # current measurements in Amps,
 # ==============================================================================
-pressure_sources = {
+PRESSURE_SOURCES = {
     "calibration": {
         # These values come from TEST Lab Rosemount calibration
         # Slope and intercept are from 95% CI on curve fit using scipy.stats
@@ -102,7 +135,7 @@ pressure_sources = {
         "current_offset_A": 0.0005 * 0.00022
     }
 }
-pressure_cal = {
+PRESSURE_CAL = {
     "slope": 13005886.223474432,
     "intercept": -51985.514384049835
 }
@@ -111,11 +144,11 @@ pressure_cal = {
 def u_pressure(
         measured,
         units="Pa",
-        slope=pressure_cal["slope"],
-        u_slope=pressure_sources["calibration"]["slope"],
-        intercept=pressure_cal["intercept"],
-        u_intercept=pressure_sources["calibration"]["intercept"],
-        u_cal_accuracy=pressure_sources["calibration"]["accuracy"],
+        slope=None,
+        u_slope=None,
+        intercept=None,
+        u_intercept=None,
+        u_cal_accuracy=None,
         daq_err=True,
         collapse=False
 ):
@@ -128,16 +161,18 @@ def u_pressure(
         Nominal measured pressure values
     units : str
         Pressure units of `measured` array. Defaults to Pa
-    slope : float
-        Calibration curve slope in Pa/A
-    u_slope : float
-        Uncertainty in calibration slope (Pa/A)
-    intercept : float
-        Calibration curve intercept in Pa
-    u_intercept
-        Uncertainty in calibration intercept (Pa)
-    u_cal_accuracy : float
-        Calibration transducer accuracy uncertainty (Pa)
+    slope : float or None
+        Calibration curve slope in Pa/A. Pass None to use latest value.
+    u_slope : float or None
+        Uncertainty in calibration slope (Pa/A). Pass None to use latest value.
+    intercept : float or None
+        Calibration curve intercept in Pa. Pass None to use latest value.
+    u_intercept : float or None
+        Uncertainty in calibration intercept (Pa). Pass None to use latest
+        value.
+    u_cal_accuracy : float or None
+        Calibration transducer accuracy uncertainty (Pa). Pass None to use
+        latest value.
     daq_err : bool
         Whether or not to apply DAQ error, mostly for answering questions
     collapse : bool
@@ -151,6 +186,17 @@ def u_pressure(
         Calculated uncertainty values corresponding to input measurements, in
         the same units as the input array.
     """
+    if slope is None:
+        slope = PRESSURE_CAL["slope"]
+    if u_slope is None:
+        u_slope = PRESSURE_SOURCES["calibration"]["slope"]
+    if intercept is None:
+        intercept = PRESSURE_CAL["intercept"]
+    if u_intercept is None:
+        u_intercept = PRESSURE_SOURCES["calibration"]["intercept"]
+    if u_cal_accuracy is None:
+        u_cal_accuracy = PRESSURE_SOURCES["calibration"]["accuracy"]
+
     measured = quant(measured, units).to("Pa").magnitude
     measured = _u_pressure_daq_current(
         measured,
@@ -214,10 +260,10 @@ def _u_pressure_daq_current(
         return measured
 
     else:
-        u_gain = measured * pressure_sources["daq"]["current_gain_pct_rdg"]
+        u_gain = measured * PRESSURE_SOURCES["daq"]["current_gain_pct_rdg"]
         u_offset = unp.uarray(
             np.zeros_like(measured),
-            np.ones_like(measured) * pressure_sources["daq"]["current_offset_A"]
+            np.ones_like(measured) * PRESSURE_SOURCES["daq"]["current_offset_A"]
         )
         measured = unp.uarray(measured, u_gain) + u_offset
         return measured
