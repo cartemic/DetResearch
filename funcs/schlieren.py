@@ -8,59 +8,121 @@ import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib import widgets
 from skimage import io
-from skimage.external import tifffile
 
 
-def find_images(
+def _find_images_in_dir(
         directory,
         data_type=".tif"
 ):
-    return sorted([f for f in os.listdir(directory) if data_type in f])
+    """
+    Finds all files in a directory of the given file type. This function should
+    be applied to either a `bg` or `frames` directory from a single day of
+    testing.
+
+    Parameters
+    ----------
+    directory : str
+        Directory to search
+    data_type : str
+        File type to search for
+
+    Returns
+    -------
+    list
+    """
+    last_n = -len(data_type)
+    return sorted([
+        os.path.join(directory, f)
+        for f in os.listdir(directory)
+        if f[last_n:] == data_type
+    ])
 
 
-def average_bg_frames(bg_dir):
-    # TODO: look in to skimage.io.imread_collection and do speed tests
+def collect_shot_images(
+        dir_shot,
+        data_type=".tif"
+):
+    """
+    Collects all background and frame images for a single shot directory. Shot
+    directory should contain `bg` and `frames` sub-directories.
+
+    Parameters
+    ----------
+    dir_shot : str
+        Shot directory to collect images from
+    data_type : str
+        File type of schlieren images
+
+    Returns
+    -------
+    list
+        [[background image paths], [frame image paths]]
+    """
+    backgrounds = []
+    frames = []
+    for root, _, files in os.walk(dir_shot):
+        curdir = os.path.split(root)[1]
+        if curdir == "bg":
+            backgrounds = _find_images_in_dir(root, data_type=data_type)
+        elif curdir == "frames":
+            frames = _find_images_in_dir(root, data_type=data_type)
+
+    return [backgrounds, frames]
+
+
+def average_frames(frame_paths):
+    """
+    Averages all frames contained within a list of paths
+
+    Parameters
+    ----------
+    frame_paths : list
+        Path to image frames to average
+
+    Returns
+    -------
+    np.array
+        Average image as a numpy array of float64 values
+    """
     return np.array(
-        [io.imread(os.path.join(bg_dir, file)) for file in find_images(bg_dir)],
+        [io.imread(frame) for frame in frame_paths],
         dtype='float64'
     ).mean(axis=0)
 
 
-def bg_subtract_all(
-        dir_date_raw,
-        dir_processed,
-        search_key="shot",
-        dir_frames="frames",
-        dir_bg="bg",
-        ignore_if=None
-):
-    dir_shots = sorted([d for d in os.listdir(dir_date_raw) if search_key in d])
-    if ignore_if is not None:
-        dir_shots = [d for d in dir_shots if ignore_if not in d]
+def bg_subtract_all_frames(dir_raw_shot):
+    """
+    Subtract the averaged background from all frames of schlieren data in a
+    given shot.
 
-    if not os.path.exists(dir_processed):
-        os.mkdir(dir_processed)
+    Parameters
+    ----------
+    dir_raw_shot : str
+        Directory containing raw shot data output. Should have `bg` and
+        `frames` sub-directories.
 
-    for shot in dir_shots:
-        background = average_bg_frames(os.path.join(dir_date_raw, shot, dir_bg))
-        for image in find_images(os.path.join(dir_date_raw, shot, dir_frames)):
-            tifffile.imsave(
-                os.path.join(
-                    dir_processed,
-                    "{:s} {:s}".format(
-                        shot,
-                        image
-                    )
-                ),
-                (io.imread(
-                    os.path.join(
-                        dir_date_raw, shot, dir_frames, image
-                    )
-                ) - background + 2**15).astype("uint16"),
-            )
+    Returns
+    -------
+    list
+        List of background subtracted arrays
+    """
+    pth_list_bg, pth_list_frames = collect_shot_images(dir_raw_shot)
+    bg = average_frames(pth_list_bg)
+    return [(io.imread(frame) - bg + 2**15) for frame in pth_list_frames]
 
 
-def remove_annotations(ax):
+def remove_annotations(ax):  # pragma: no cover
+    """
+    Hide plot annotations
+
+    Parameters
+    ----------
+    ax : matplotlib.axes._subplots.AxesSubplot
+
+    Returns
+    -------
+    None
+    """
     ax.xaxis._visible = False
     ax.yaxis._visible = False
     for s in ax.spines:
@@ -74,7 +136,7 @@ def spatial_calibration(
         cmap="viridis",
         marker_length_inches=0.2,
         save_output=True,
-):
+):  # pragma: no cover
     image = io.imread(spatial_file)
     fig, ax = plt.subplots(1, 1)
 
@@ -125,9 +187,30 @@ def spatial_calibration(
     return inches_per_pixel
 
 
-def _calibrate(x_data, y_data, line_length_inches):
-    line_length_px = np.sqrt(sum(np.diff(x_data)**2 + np.diff(y_data)**2))
-    return line_length_inches/line_length_px
+def _calibrate(
+        x_data,
+        y_data,
+        line_length_inches
+):
+    """
+    Calculates a calibration factor to convert pixels to inches by dividing
+    the known line length in inches by the L2 norm between two pixels.
+
+    Parameters
+    ----------
+    x_data : iterable
+        X locations of two points
+    y_data : iterable
+        Y locations of two points
+    line_length_inches : float
+        Length, in inches, of the line between (x0, y0), (x1, y1)
+
+    Returns
+    -------
+    float
+        Pixel linear pitch in in/px
+    """
+    return line_length_inches/np.linalg.norm([x_data, y_data], ord=2)
 
 
 def _save_spatial_calibration(
@@ -184,7 +267,9 @@ def _save_spatial_calibration(
             print(save_statement)
 
 
-class LineBuilder(object):
+class LineBuilder(object):  # pragma: no cover
+    # I'm not sure how to automate tests on this, it works right now, and I
+    # don't have time to figure out how, so I'm going to skip it for now.
     # modified version of code from
     # https://stackoverflow.com/questions/34855074/interactive-line-in-matplotlib
     def __init__(self, line, epsilon=10):
