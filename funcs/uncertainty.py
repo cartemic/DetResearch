@@ -70,6 +70,9 @@ def u_temperature(
     if tc_type not in {"T", "K"}:
         return ValueError("u_temperature currently only supports T or K type")
 
+    if isinstance(measured, type(pd.Series())):
+        measured = measured.values
+
     measured = quant(measured, units).to("degC").magnitude
 
     if u_thermocouple is None:
@@ -196,6 +199,9 @@ def u_pressure(
         u_intercept = PRESSURE_SOURCES["calibration"]["intercept"]
     if u_cal_accuracy is None:
         u_cal_accuracy = PRESSURE_SOURCES["calibration"]["accuracy"]
+
+    if isinstance(measured, type(pd.Series())):
+        measured = measured.values
 
     measured = quant(measured, units).to("Pa").magnitude
     measured = _u_pressure_daq_current(
