@@ -16,6 +16,8 @@ from nptdms import TdmsFile
 from tkinter import filedialog as fd
 from tkinter import Tk
 import scipy.signal as signal
+import uncertainties as un
+from uncertainties import unumpy as unp
 
 
 def find_diode_data(
@@ -101,14 +103,16 @@ def _velocity_calculator(
     )
 
     if data_is_useful:
-        calculated_velocity = sample_specific_velocity / np.diff(
-                diode_dataframe.diff(axis=0).idxmax(
-                    axis=0,
-                    skipna=True
-                ).values
-            )
+        # remember: dt scaling is contained within specific velocity, so
+        # arrival time uncertainty here is in unscaled time steps.
+        arrival_times = unp.uarray(
+            diode_dataframe.diff(axis=0).idxmax(axis=0, skipna=True).values,
+            [0.5, 0.5]
+        )
+        calculated_velocity = sample_specific_velocity / np.diff(arrival_times)
     else:
-        calculated_velocity = np.zeros(len(diode_dataframe.keys())-1)
+        zero = np.zeros(len(diode_dataframe.keys())-1)
+        calculated_velocity = unp.uarray(zero, zero)
 
     if multiprocess:
         return instance, calculated_velocity
@@ -179,6 +183,7 @@ def _diode_filter(
 def calculate_velocity(
         diode_data_location,
         diode_spacing=0.3048,
+        spacing_uncert=0.00079375,
         sample_frequency=1e6,
         lowpass=True,
         multiprocess=False
@@ -193,6 +198,8 @@ def calculate_velocity(
     diode_spacing : float
         Distance between the diodes, in meters (assumed to be uniform between
         all diodes)
+    spacing_uncert : float
+        Uncertainty in diode spacing, in meters
     sample_frequency : float
         Sampling frequency of diode data in Hz
     lowpass : bool
@@ -205,7 +212,10 @@ def calculate_velocity(
     numpy.ndarray
         Array of inter-diode wave speeds
     """
-    specific_velocity = diode_spacing * sample_frequency
+    specific_velocity = un.ufloat(
+        diode_spacing * sample_frequency,
+        spacing_uncert
+    )
 
     if isinstance(diode_data_location, str):
         # a single path was input as a string
