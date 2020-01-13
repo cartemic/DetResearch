@@ -4,11 +4,13 @@ import os
 # third party imports
 import cantera as ct
 import pandas as pd
+import uncertainties as un
 from nptdms import TdmsFile
 from numpy import NaN
 
 # local imports
 from .diodes import find_diode_data, calculate_velocity
+from . import diodes, schlieren, uncertainty
 
 
 class PostProcessDate:
@@ -281,3 +283,317 @@ class PostProcessDate:
                 for k in t.keys():
                     out_key = "/".join(["", test_name, k])
                     store.put(out_key, t[k])
+
+
+def _collect_schlieren_dirs(
+        base_dir,
+        test_date
+):
+    """
+    When reading in camera data from these tests, we will ignore the spatial
+    directory since it contains no schlieren information. It will still be
+    used, but not in this step. Directories containing a `.old` file have a
+    different structure than newer directories, which must be accounted for.
+
+    Parameters
+    ----------
+    base_dir : str
+        Base data directory, (e.g. `/d/Data/Raw/`)
+    test_date : str
+        ISO 8601 formatted date of test data
+
+    Returns
+    -------
+    list
+        ordered list of directories containing diode output
+    """
+    raw_dir = os.path.join(
+        base_dir,
+        test_date
+    )
+    if not os.path.isdir(raw_dir):
+        return []
+
+    contents = os.listdir(raw_dir)
+
+    if ".old" in contents:
+        raw_dir = os.path.join(
+            base_dir,
+            test_date,
+            "Camera"
+        )
+        contents = os.listdir(raw_dir)
+
+    return sorted([
+        os.path.join(raw_dir, item)
+        for item in contents
+        if os.path.isdir(os.path.join(raw_dir, item))
+        and "shot" in item.lower()
+    ])
+
+
+def _get_equivalence_ratio(
+        p_fuel,
+        p_oxidizer,
+        f_a_st
+):
+    """
+    Simple equivalence ratio function
+
+    Parameters
+    ----------
+    p_fuel : float
+        Partial pressure of fuel
+    p_oxidizer : float
+        Partial pressure of oxidizer
+    f_a_st : float
+        Stoichiometric fuel/air ratio
+
+    Returns
+    -------
+    float
+        Mixture equivalence ratio
+    """
+    return p_fuel / p_oxidizer / f_a_st
+
+
+class _ProcessOldData:
+    @classmethod
+    def _collect_test_dirs(
+            cls,
+            base_dir,
+            test_date
+    ):
+        """
+        The first step of reading in an old test directory is to determine
+        which directories contain valid tests. Under the old DAQ system, the
+        .vi would generate a new folder each time it was run. Only tests which
+        successfully generate a `diodes.tdms` file can be considered completed
+        tests. Some of these may still be failed detonations; this issue will
+        be dealt with on joining with schlieren data, which contains
+        information about whether or not a detonation attempt succeeded.
+
+        Parameters
+        ----------
+        base_dir : str
+            Base data directory, (e.g. `/d/Data/Raw/`)
+        test_date : str
+            ISO 8601 formatted date of test data
+
+        Returns
+        -------
+        list
+            ordered list of directories containing diode output
+        """
+        raw_dir = os.path.join(
+            base_dir,
+            test_date,
+            "Sensors"
+        )
+
+        return sorted([
+            root
+            for root, _, files in os.walk(raw_dir, topdown=True)
+            if "diodes.tdms" in files
+        ])
+
+    @classmethod
+    def _get_cutoff_pressure(
+            cls,
+            df_tdms_pressure,
+            kind="fuel",
+    ):
+        """
+        This function accepts a dataframe imported from a `pressure.tdms` file.
+        Old test data was output in amps; this was good and I should probably
+        have kept it that way. Old tests also logged each fill event
+        separately. Extract the desired data, build a confidence interval,
+        apply the calibration, and output the resulting value including
+        uncertainty.
+
+        Parameters
+        ----------
+        df_tdms_pressure : pd.DataFrame
+            Dataframe containing test-specific pressure trace
+        kind : str
+            Kind of cutoff pressure to get, e.g. fuel, oxidizer
+
+        Returns
+        -------
+        un.ufloat
+            Float with applied uncertainty
+        """
+        kind = kind.title()
+        if kind not in {"Fuel", "Oxidizer", "Vacuum", "Diluent"}:
+            raise ValueError("bad kind")
+
+        # in these tests there is no vacuum logging. These are undiluted tests,
+        # which means the diluent pressure is identical to the vacuum pressure.
+        if kind == "Vacuum":
+            kind = "Diluent"
+
+        pressure = df_tdms_pressure[
+                       "/'%s Fill'/'Manifold'" % kind
+                   ].dropna() * uncertainty.PRESSURE_CAL["slope"] + \
+            uncertainty.PRESSURE_CAL["intercept"]
+
+        return un.ufloat(
+            pressure.mean(),
+            uncertainty.u_pressure(pressure, daq_err=False, collapse=True)
+        )
+
+    @classmethod
+    def _get_partial_pressure(
+            cls,
+            df_tdms_pressure,
+            kind="fuel"
+    ):
+        """
+        Fill order: vacuum -> (diluent) -> oxidizer -> fuel
+
+        Parameters
+        ----------
+        df_tdms_pressure : pd.DataFrame
+            Dataframe containing test-specific pressure trace
+        kind : str
+            Kind of cutoff pressure to get, e.g. fuel, oxidizer
+
+        Returns
+        -------
+        un.ufloat
+            Float with applied uncertainty
+        """
+        p_ox = cls._get_cutoff_pressure(df_tdms_pressure, "oxidizer")
+        if kind.lower() == "fuel":
+            return cls._get_cutoff_pressure(df_tdms_pressure, "fuel") - p_ox
+        elif kind.lower() == "oxidizer":
+            return p_ox
+        else:
+            raise ValueError("only fuels and oxidizers in this analysis")
+
+    @classmethod
+    def _get_initial_pressure(
+            cls,
+            df_tdms_pressure
+    ):
+        """
+        In old data, the initial mixture pressure is the fuel cutoff pressure
+
+        Parameters
+        ----------
+        df_tdms_pressure : pd.DataFrame
+            Dataframe containing test-specific pressure trace
+
+        Returns
+        -------
+        un.ufloat
+            Float with applied uncertainty
+        """
+        return cls._get_cutoff_pressure(df_tdms_pressure, kind="fuel")
+
+    @classmethod
+    def _get_initial_temperature(cls, df_tdms_temperature):
+        return un.ufloat(
+            df_tdms_temperature["/'Test Readings'/'Tube'"].mean(),
+            uncertainty.u_temperature(
+                df_tdms_temperature["/'Test Readings'/'Tube'"],
+                tc_type="K",
+                collapse=True
+            )
+        )
+
+    @classmethod
+    def __call__(
+            cls,
+            base_dir,
+            test_date,
+            f_a_st=0.04201680672268907
+    ):
+        """
+
+        Parameters
+        ----------
+        base_dir : str
+            Base data directory, (e.g. `/d/Data/Raw/`)
+        test_date : str
+            ISO 8601 formatted date of test data
+        f_a_st : float
+            Stoichiometric fuel/air ratio for the test mixture
+
+        Returns
+        -------
+        List[pd.DataFrame, dict]
+            A list in which the first item is a dataframe of the processed
+            tube data and the second is a dictionary containing
+            background-subtracted schlieren images
+        """
+        sensor_dirs = cls._collect_test_dirs(base_dir, test_date)
+        schlieren_dirs = _collect_schlieren_dirs(base_dir, test_date)
+        df = pd.DataFrame(
+            columns=["date", "shot", "sensors", "schlieren"],
+        )
+        df["sensors"] = sensor_dirs
+        df["schlieren"] = schlieren_dirs
+        df = df[df["schlieren"].apply(lambda x: "failed" not in x)]
+        df["date"] = test_date
+        df["shot"] = [
+            int(os.path.split(d)[1].lower().replace("shot", "").strip())
+            for d in schlieren_dirs
+        ]
+
+        images = dict()
+
+        for idx, row in df.iterrows():
+            # background subtraction
+            images[
+                "{:s}_shot{:02d}".format(
+                    row["date"],
+                    row["shot"]
+                )
+            ] = schlieren.bg_subtract_all_frames(row["schlieren"])
+
+            # gather pressure data
+            df_tdms_pressure = TdmsFile(
+                os.path.join(
+                    row["sensors"],
+                    "pressure.tdms"
+                )
+            ).as_dataframe()
+            p_init = cls._get_initial_pressure(df_tdms_pressure)
+            p_fuel = cls._get_partial_pressure(df_tdms_pressure, kind="fuel")
+            p_oxidizer = cls._get_partial_pressure(df_tdms_pressure, kind="oxidizer")
+            phi = _get_equivalence_ratio(p_fuel, p_oxidizer, f_a_st)
+
+            # gather temperature data
+            df_tdms_temperature = TdmsFile(
+                os.path.join(
+                    row["sensors"],
+                    "temperature.tdms"
+                )
+            ).as_dataframe()
+            t_init = cls._get_initial_temperature(df_tdms_temperature)
+
+            # wave speed measurement
+            diode_loc = os.path.join(row["sensors"], "diodes.tdms")
+            wave_speed = diodes.calculate_velocity(diode_loc)[0]
+
+            # output results
+            df.at[idx, "phi"] = phi.nominal_value
+            df.at[idx, "u_phi"] = phi.std_dev
+            df.at[idx, "p_0"] = p_init.nominal_value
+            df.at[idx, "u_p_0"] = p_init.std_dev
+            df.at[idx, "t_0"] = t_init.nominal_value
+            df.at[idx, "u_t_0"] = t_init.std_dev
+            df.at[idx, "p_fuel"] = p_fuel.nominal_value
+            df.at[idx, "u_p_fuel"] = p_fuel.std_dev
+            df.at[idx, "p_oxidizer"] = p_oxidizer.nominal_value
+            df.at[idx, "u_p_oxidizer"] = p_oxidizer.std_dev
+            df.at[idx, "wave_speed"] = wave_speed.nominal_value
+            df.at[idx, "u_wave_speed"] = wave_speed.std_dev
+
+            # TODO: rework for multiprocessing
+
+        return df, images
+
+
+process_old_data = _ProcessOldData()
