@@ -3,6 +3,7 @@ import os
 
 # third party imports
 import cantera as ct
+import multiprocessing as mp
 import pandas as pd
 import uncertainties as un
 from nptdms import TdmsFile
@@ -342,16 +343,16 @@ def _get_equivalence_ratio(
 
     Parameters
     ----------
-    p_fuel : float
+    p_fuel : float or un.ufloat
         Partial pressure of fuel
-    p_oxidizer : float
+    p_oxidizer : float or un.ufloat
         Partial pressure of oxidizer
-    f_a_st : float
+    f_a_st : float or un.ufloat
         Stoichiometric fuel/air ratio
 
     Returns
     -------
-    float
+    float or un.ufloat
         Mixture equivalence ratio
     """
     return p_fuel / p_oxidizer / f_a_st
@@ -492,7 +493,24 @@ class _ProcessOldData:
         return cls._get_cutoff_pressure(df_tdms_pressure, kind="fuel")
 
     @classmethod
-    def _get_initial_temperature(cls, df_tdms_temperature):
+    def _get_initial_temperature(
+            cls,
+            df_tdms_temperature
+    ):
+        """
+        Old temperatures need to come from the tube thermocouple, which is
+        type K, because the manifold thermocouple was jacked up at the time.
+
+        Parameters
+        ----------
+        df_tdms_temperature : pd.DataFrame
+            Dataframe containing test-specific temperature trace
+
+        Returns
+        -------
+        un.ufloat
+            Test-averaged initial temperature with applied uncertainty
+        """
         return un.ufloat(
             df_tdms_temperature["/'Test Readings'/'Tube'"].mean(),
             uncertainty.u_temperature(
@@ -507,7 +525,8 @@ class _ProcessOldData:
             cls,
             base_dir,
             test_date,
-            f_a_st=0.04201680672268907
+            f_a_st=0.04201680672268907,
+            multiprocess=False
     ):
         """
 
@@ -518,7 +537,10 @@ class _ProcessOldData:
         test_date : str
             ISO 8601 formatted date of test data
         f_a_st : float
-            Stoichiometric fuel/air ratio for the test mixture
+            Stoichiometric fuel/air ratio for the test mixture. Default value
+            is for propane/air.
+        multiprocess : bool
+            Set to True to parallelize processing of a single day's tests
 
         Returns
         -------
@@ -542,58 +564,124 @@ class _ProcessOldData:
         ]
 
         images = dict()
+        if multiprocess:
+            pool = mp.Pool()
+            results = pool.starmap(
+                cls._process_single_test,
+                [[idx, row, f_a_st] for idx, row in df.iterrows()]
+            )
+            for idx, row_results in results:
+                df.at[idx, "phi"] = row_results["phi"]
+                df.at[idx, "u_phi"] = row_results["u_phi"]
+                df.at[idx, "p_0"] = row_results["p_0"]
+                df.at[idx, "u_p_0"] = row_results["u_p_0"]
+                df.at[idx, "t_0"] = row_results["t_0"]
+                df.at[idx, "u_t_0"] = row_results["u_t_0"]
+                df.at[idx, "p_fuel"] = row_results["p_fuel"]
+                df.at[idx, "u_p_fuel"] = row_results["u_p_fuel"]
+                df.at[idx, "p_oxidizer"] = row_results["p_oxidizer"]
+                df.at[idx, "u_p_oxidizer"] = row_results["u_p_oxidizer"]
+                df.at[idx, "wave_speed"] = row_results["wave_speed"]
+                df.at[idx, "u_wave_speed"] = row_results["u_wave_speed"]
+                images.update(row_results["schlieren"])
 
-        for idx, row in df.iterrows():
-            # background subtraction
-            images[
-                "{:s}_shot{:02d}".format(
-                    row["date"],
-                    row["shot"]
-                )
-            ] = schlieren.bg_subtract_all_frames(row["schlieren"])
+        else:
+            for idx, row in df.iterrows():
+                _, row_results = cls._process_single_test(idx, row, f_a_st)
 
-            # gather pressure data
-            df_tdms_pressure = TdmsFile(
-                os.path.join(
-                    row["sensors"],
-                    "pressure.tdms"
-                )
-            ).as_dataframe()
-            p_init = cls._get_initial_pressure(df_tdms_pressure)
-            p_fuel = cls._get_partial_pressure(df_tdms_pressure, kind="fuel")
-            p_oxidizer = cls._get_partial_pressure(df_tdms_pressure, kind="oxidizer")
-            phi = _get_equivalence_ratio(p_fuel, p_oxidizer, f_a_st)
-
-            # gather temperature data
-            df_tdms_temperature = TdmsFile(
-                os.path.join(
-                    row["sensors"],
-                    "temperature.tdms"
-                )
-            ).as_dataframe()
-            t_init = cls._get_initial_temperature(df_tdms_temperature)
-
-            # wave speed measurement
-            diode_loc = os.path.join(row["sensors"], "diodes.tdms")
-            wave_speed = diodes.calculate_velocity(diode_loc)[0]
-
-            # output results
-            df.at[idx, "phi"] = phi.nominal_value
-            df.at[idx, "u_phi"] = phi.std_dev
-            df.at[idx, "p_0"] = p_init.nominal_value
-            df.at[idx, "u_p_0"] = p_init.std_dev
-            df.at[idx, "t_0"] = t_init.nominal_value
-            df.at[idx, "u_t_0"] = t_init.std_dev
-            df.at[idx, "p_fuel"] = p_fuel.nominal_value
-            df.at[idx, "u_p_fuel"] = p_fuel.std_dev
-            df.at[idx, "p_oxidizer"] = p_oxidizer.nominal_value
-            df.at[idx, "u_p_oxidizer"] = p_oxidizer.std_dev
-            df.at[idx, "wave_speed"] = wave_speed.nominal_value
-            df.at[idx, "u_wave_speed"] = wave_speed.std_dev
-
-            # TODO: rework for multiprocessing
+                # output results
+                df.at[idx, "phi"] = row_results["phi"]
+                df.at[idx, "u_phi"] = row_results["u_phi"]
+                df.at[idx, "p_0"] = row_results["p_0"]
+                df.at[idx, "u_p_0"] = row_results["u_p_0"]
+                df.at[idx, "t_0"] = row_results["t_0"]
+                df.at[idx, "u_t_0"] = row_results["u_t_0"]
+                df.at[idx, "p_fuel"] = row_results["p_fuel"]
+                df.at[idx, "u_p_fuel"] = row_results["u_p_fuel"]
+                df.at[idx, "p_oxidizer"] = row_results["p_oxidizer"]
+                df.at[idx, "u_p_oxidizer"] = row_results["u_p_oxidizer"]
+                df.at[idx, "wave_speed"] = row_results["wave_speed"]
+                df.at[idx, "u_wave_speed"] = row_results["u_wave_speed"]
+                images.update(row_results["schlieren"])
 
         return df, images
+
+    @classmethod
+    def _process_single_test(
+            cls,
+            idx,
+            row,
+            f_a_st
+    ):
+        """
+        Process a single row of test data. This has been separated into its
+        own function to facilitate the use of multiprocessing.
+
+        Parameters
+        ----------
+        idx : int
+            Index of current dataframe row
+        row : pd.Series
+            Current row of test data
+        f_a_st : float
+            Stoichiometric fuel/air ratio for the test mixture.
+
+        Returns
+        -------
+        Tuple(Int, Dict)
+            Calculated test data and associated uncertainty values for the
+            current row
+        """
+        # background subtraction
+        image = {
+            "{:s}_shot{:02d}".format(
+                row["date"],
+                row["shot"]
+            ): schlieren.bg_subtract_all_frames(row["schlieren"])
+        }
+
+        # gather pressure data
+        df_tdms_pressure = TdmsFile(
+            os.path.join(
+                row["sensors"],
+                "pressure.tdms"
+            )
+        ).as_dataframe()
+        p_init = cls._get_initial_pressure(df_tdms_pressure)
+        p_fuel = cls._get_partial_pressure(df_tdms_pressure, kind="fuel")
+        p_oxidizer = cls._get_partial_pressure(df_tdms_pressure, kind="oxidizer")
+        phi = _get_equivalence_ratio(p_fuel, p_oxidizer, f_a_st)
+
+        # gather temperature data
+        df_tdms_temperature = TdmsFile(
+            os.path.join(
+                row["sensors"],
+                "temperature.tdms"
+            )
+        ).as_dataframe()
+        t_init = cls._get_initial_temperature(df_tdms_temperature)
+
+        # wave speed measurement
+        diode_loc = os.path.join(row["sensors"], "diodes.tdms")
+        wave_speed = diodes.calculate_velocity(diode_loc)[0]
+
+        # output results
+        out = dict()
+        out["schlieren"] = image
+        out["phi"] = phi.nominal_value
+        out["u_phi"] = phi.std_dev
+        out["p_0"] = p_init.nominal_value
+        out["u_p_0"] = p_init.std_dev
+        out["t_0"] = t_init.nominal_value
+        out["u_t_0"] = t_init.std_dev
+        out["p_fuel"] = p_fuel.nominal_value
+        out["u_p_fuel"] = p_fuel.std_dev
+        out["p_oxidizer"] = p_oxidizer.nominal_value
+        out["u_p_oxidizer"] = p_oxidizer.std_dev
+        out["wave_speed"] = wave_speed.nominal_value
+        out["u_wave_speed"] = wave_speed.std_dev
+
+        return idx, out
 
 
 process_old_data = _ProcessOldData()
