@@ -4,55 +4,71 @@ import os
 # third party imports
 import cantera as ct
 import multiprocessing as mp
+import numpy as np
 import pandas as pd
 import uncertainties as un
 from nptdms import TdmsFile
 from numpy import NaN
+from uncertainties import unumpy as unp
 
 # local imports
 from .diodes import find_diode_data, calculate_velocity
 from . import diodes, schlieren, uncertainty
 
 
-class PostProcessDate:
-    def __init__(
-            self,
-            date,
-            data_base_dir=os.path.join("D:\\", "Data"),
-            dir_raw="Raw",
-            dir_processed=os.path.join("Processed", "Data"),
-            tdms_state="tube state.tdms",
-            tdms_sensor="sensor log.tdms",
-            csv_conditions="test_conditions.csv",
-            output_file="tube data.h5",
-            diode_spacing=1.0668,  # meters
-            sample_time=pd.Timedelta(seconds=70),
-            u_pressure_reading=62.345029384733806,  # Pascals
-            u_temperature_reading=1.1,  # Kelvin
-    ):
-        self._dir_raw = os.path.join(data_base_dir, dir_raw, date)
-        self._dir_processed = os.path.join(data_base_dir, dir_processed, date)
-        self._loc_state = os.path.join(self._dir_raw, tdms_state)
-        self._loc_sensor = os.path.join(self._dir_raw, tdms_sensor)
-        self._loc_conditions = os.path.join(self._dir_raw, csv_conditions)
-        self._output_file = os.path.join(self._dir_processed, output_file)
-        self.df_test_info = self._load_nominal_conditions()
-        self._diode_spacing = diode_spacing
-        self._sample_time = sample_time
-        self.tests = []
+def _get_f_a_st(
+        fuel="C3H8",
+        oxidizer="O2:1 N2:3.76",
+        mech="gri30.cti"
+):
+    """
+    Calculate the stoichiometric fuel/air ratio using Cantera. Calculates using
+    only x_fuel to allow for compound oxidizer (e.g. air)
 
-        if not os.path.exists(self._loc_state):
-            raise FileNotFoundError(self._loc_state)
-        elif not os.path.exists(self._loc_sensor):
-            raise FileNotFoundError(self._loc_sensor)
-        elif not os.path.exists(self._loc_conditions):
-            raise FileNotFoundError(self._loc_conditions)
+    Parameters
+    ----------
+    fuel : str
+    oxidizer : str
+    mech : str
+        mechanism file to use
 
-    def _load_nominal_conditions(self):
-        df_conditions = pd.read_csv(self._loc_conditions)
+    Returns
+    -------
+    float
+        stoichiometric fuel/air ratio
+    """
+    gas = ct.Solution(mech)
+    gas.set_equivalence_ratio(
+        1,
+        fuel,
+        oxidizer
+    )
+    x_fuel = gas.mole_fraction_dict()[fuel]
+    return x_fuel / (1 - x_fuel)
+
+
+class _ProcessNewData:
+    @staticmethod
+    def _load_nominal_conditions(loc_conditions):
+        """
+        Loads a dataframe of nominal test conditions
+
+        Parameters
+        ----------
+        loc_conditions : str
+            Location of nominal test condition csv
+
+        Returns
+        -------
+        pd.DataFrame
+            Dataframe of nominal test conditions with NaT values for start and
+            end times. These will be populated later, and then used to filter
+            out incomplete tests.
+        """
+        df_conditions = pd.read_csv(loc_conditions)
         df_conditions["datetime"] = pd.to_datetime(
             df_conditions["datetime"],
-            utc=True
+            utc=False
         )
         old_cols = ["diluent_mol_frac", "p_dil", "p_ox", "p_f"]
         new_cols = ["diluent_mol_frac_nominal", "cutoff_diluent",
@@ -65,39 +81,105 @@ class PostProcessDate:
         df_conditions["end"] = pd.NaT
         return df_conditions
 
-    def process_data(self):
-        # TODO: add uncertainty calculation
+    @classmethod
+    def _get_fill_pressures(
+            cls,
+            df_p_row,
+            df_state_row
+    ):
+        """
+        Gather fill pressures from a single-test portion of the pressure
+        section of a test sensor output dataframe.
+
+        Parameters
+        ----------
+        df_p_row : pd.DataFrame
+            Pressure dataframe for a single test
+        df_state_row : pd.DataFrame
+            Dataframe containing tube states and corresponding start/end times,
+            which are used to slice the relevant portions of df_p_row in order
+            to determine fill cutoff pressures.
+
+        Returns
+        -------
+        dict
+            Dictionary containing fuel, oxidizer, diluent, and vacuum cutoff
+            pressures
+        """
+        fill_pressures = dict()
+        for _, state_row in df_state_row.iterrows():
+            nominal = df_p_row[
+                cls._mask_df_by_row_time(df_p_row, state_row)
+            ]["pressure"].values
+            fill_pressures[state_row["state"]] = unp.uarray(
+                nominal,
+                uncertainty.u_pressure(nominal, daq_err=False)
+            ).mean()
+        return fill_pressures
+
+    @classmethod
+    def __call__(
+            cls,
+            base_dir,
+            test_date,
+            diode_spacing=1.0668,
+            sample_time=pd.Timedelta(seconds=70),
+            mech="gri30.cti"
+    ):
+        """
+        Analyze test data from a new data set.
+        TODO: add schlieren stuffs
+        TODO: parallelize
+
+        Parameters
+        ----------
+        base_dir : str
+            Base data directory, (e.g. `/d/Data/Raw/`)
+        test_date : str
+            ISO 8601 formatted date of test data
+        diode_spacing : float
+            Spacing of photo diodes, in meters. Defaults to latest (42 in)
+        sample_time : pd.Timedelta
+            Wait period between tube fill steps during which pressure should
+            be relatively constant unless there is a bad leak
+        mech : str
+            Mechanism file to use for calculating stoichiometric f/a ratio
+
+        Returns
+        -------
+        tuple
+            df_test_info, tests
+        """
+        dir_data = os.path.join(base_dir, test_date)
+        loc_state = os.path.join(dir_data, "tube state.tdms")
+        loc_sensor = os.path.join(dir_data, "sensor log.tdms")
+        loc_conditions = os.path.join(dir_data, "test_conditions.csv")
+
         # collect necessary data before analyzing each test
-        df_sensor = TdmsFile(self._loc_sensor).as_dataframe()
-        df_pressure = self._extract_sensor_data(
+        df_sensor = TdmsFile(loc_sensor).as_dataframe()
+        df_pressure = cls._extract_sensor_data(
             df_sensor,
             which="pressure"
         )
-        df_temperature = self._extract_sensor_data(
+        df_temperature = cls._extract_sensor_data(
             df_sensor,
             which="temperature"
         )
         del df_sensor
-        df_state = TdmsFile(self._loc_state).as_dataframe()
+        df_state = TdmsFile(loc_state).as_dataframe()
         df_state.columns = ["time", "state", "mode"]
-        df_test_times = self._find_test_times(df_state)
-        diode_files = find_diode_data(self._dir_raw)
+        df_test_times = cls._find_test_times(df_state)
+        df_test_info = cls._load_nominal_conditions(loc_conditions)
+        diode_files = find_diode_data(dir_data)
+        tests = [dict() for _ in range(len(df_test_info))]
 
-        for i, row in df_test_times.iterrows():
-            if len(self.tests) == i:
-                self.tests.append(
-                    dict(
-                        pressure=None,
-                        temperature=None,
-                        state=None
-                    )
-                )
-
+        for idx, row in df_test_times.iterrows():
+            # collect pressure and temperature data from the current test
             df_p_row = df_pressure[
-                self._mask_df_by_row_time(df_pressure, row)
+                cls._mask_df_by_row_time(df_pressure, row)
             ].reset_index(drop=True)
             df_t_row = df_temperature[
-                self._mask_df_by_row_time(df_temperature, row)
+                cls._mask_df_by_row_time(df_temperature, row)
             ].reset_index(drop=True)
 
             # Determine cutoff times for each state as follows:
@@ -105,41 +187,39 @@ class PostProcessDate:
             #     fuel: start of diluent fil
             #     diluent: start of oxidizer fill
             #     oxidizer: start of reactant mixing
-            state_mask = self._mask_df_by_row_time(df_state, row, False)
-            df_state_row = pd.DataFrame(data={
-                "state": [
-                    "vacuum",
-                    "fuel",
-                    "diluent",
-                    "oxidizer"
-                ],
-                "end": [
-                    df_state[
-                        state_mask &
-                        (df_state["state"] == "Fuel Fill")
+            state_mask = cls._mask_df_by_row_time(df_state, row, False).values
+            df_state_row = pd.DataFrame(
+                data={
+                    "state": [
+                        "vacuum",
+                        "fuel",
+                        "diluent",
+                        "oxidizer"
+                    ],
+                    "end": [
+                        df_state[
+                            state_mask &
+                            (df_state["state"] == "Fuel Fill")
                         ]["time"].min(),
-                    df_state[
-                        state_mask &
-                        (df_state["state"] == "Diluent Fill")
+                        df_state[
+                            state_mask &
+                            (df_state["state"] == "Diluent Fill")
                         ]["time"].min(),
-                    df_state[
-                        state_mask &
-                        (df_state["state"] == "Oxidizer Fill")
+                        df_state[
+                            state_mask &
+                            (df_state["state"] == "Oxidizer Fill")
                         ]["time"].min(),
-                    df_state[
-                        state_mask &
-                        (df_state["state"] == "Mixing")
+                        df_state[
+                            state_mask &
+                            (df_state["state"] == "Mixing")
                         ]["time"].min(),
-                ]
-            })
-            df_state_row["start"] = df_state_row["end"] - self._sample_time
+                    ]
+                }
+            )
+            df_state_row["start"] = df_state_row["end"] - sample_time
 
             # Get actual fill and partial pressures
-            fill_pressures = dict()
-            for _, state_row in df_state_row.iterrows():
-                fill_pressures[state_row["state"]] = df_p_row[
-                    self._mask_df_by_row_time(df_p_row, state_row)
-                ].mean()[0]
+            fill_pressures = cls._get_fill_pressures(df_p_row, df_state_row)
             partial_pressures = dict(
                 fuel=fill_pressures["fuel"] - fill_pressures["vacuum"],
                 diluent=fill_pressures["diluent"] - fill_pressures["fuel"],
@@ -147,41 +227,25 @@ class PostProcessDate:
             partial_pressures["oxidizer"] = fill_pressures["oxidizer"] \
                 - partial_pressures["fuel"] - partial_pressures["diluent"]
 
-            df_conditions_actual = pd.concat([
-                pd.DataFrame(
-                    {"partial_" + k: v for k, v in partial_pressures.items()},
-                    index=[i]),
-                pd.DataFrame(
-                    {"actual_" + k: v for k, v in fill_pressures.items()},
-                    index=[i])
-            ], axis=1)
-            if not set(self.df_test_info.columns).intersection(
-                    set(df_conditions_actual.columns)):
-                for col in df_conditions_actual.columns:
-                    self.df_test_info[col] = NaN
+            p_init = fill_pressures["oxidizer"].nominal_value
+            u_p_init = fill_pressures["oxidizer"].std_dev
 
             # There may be more test state changes than actual tests.
             # Determine which row of the dataframe best matches the current
             # test and insert data accordingly
             best_row = pd.Series(
-                self.df_test_info["datetime"] < row["start"]
+                df_test_info["datetime"] < row["start"]
             ).cumsum().idxmax()
-            self.df_test_info.loc[
-                best_row,
-                df_conditions_actual.columns
-            ] = df_conditions_actual.values[0]
+
             # I am removing this type inspection for this line because PyCharm
             # seems to think that diode_files is a base iterable rather than
             # a list, even though it is actually a list (per diodes.py).
             # noinspection PyUnresolvedReferences
-            self.df_test_info.at[
-                best_row,
-                "wave_speed"
-            ] = calculate_velocity(
-                diode_files[i],
-                diode_spacing=self._diode_spacing
+            wave_speed = calculate_velocity(
+                diode_files[idx],
+                diode_spacing=diode_spacing
             )[0]
-            self.df_test_info.loc[
+            df_test_info.loc[
                 best_row,
                 ["start", "end"]
             ] = row[["start", "end"]]
@@ -190,34 +254,128 @@ class PostProcessDate:
             # difference in fuel and diluent pressure calculations caused by
             # the state detection method; fix it. Fuel will be the correct
             # value.
-            if self.df_test_info.loc[
+            if df_test_info.loc[
                 best_row,
                 "diluent_mol_frac_nominal"
             ] == 0:
-                self.df_test_info.loc[
-                    best_row,
-                    "actual_diluent"
-                ] = self.df_test_info.loc[best_row, "actual_fuel"]
-                self.df_test_info.loc[best_row, "partial_diluent"] = 0.
+                partial_pressures["diluent"] = un.ufloat(0., 0.)
 
-            # TODO: calculate and store equivalence ratio
-            pass
+            # collect test-averaged temperature
+            test_temp = df_t_row["temperature"].values
+            t_init = unp.uarray(
+                test_temp,
+                uncertainty.u_temperature(test_temp)
+            ).mean()
 
-            # TODO: calculate and store CJ speed
-            pass
+            # calculate equivalence ratio
+            fuel = df_test_info.at[best_row, "fuel"]
+            oxidizer = df_test_info.at[best_row, "oxidizer"]
+            if oxidizer == "air":
+                oxidizer = "O2:1 N2:3.76"
+            phi = _get_equivalence_ratio(
+                partial_pressures["fuel"],
+                partial_pressures["oxidizer"],
+                _get_f_a_st(
+                    fuel,
+                    oxidizer,
+                    mech
+                )
+            )
+
+            df_test_info.at[
+                best_row, "phi"
+            ] = phi.nominal_value
+
+            df_test_info.at[
+                best_row, "u_phi"
+            ] = phi.std_dev
+
+            df_test_info.at[
+                best_row, "p_0"
+            ] = p_init
+
+            df_test_info.at[
+                best_row, "u_p_0"
+            ] = u_p_init
+
+            df_test_info.at[
+                best_row, "t_0"
+            ] = t_init.nominal_value
+
+            df_test_info.at[
+                best_row, "u_t_0"
+            ] = t_init.std_dev
+
+            df_test_info.at[
+                best_row, "p_fuel"
+            ] = partial_pressures["fuel"].nominal_value
+
+            df_test_info.at[
+                best_row, "u_p_fuel"
+            ] = partial_pressures["fuel"].std_dev
+
+            df_test_info.at[
+                best_row, "p_oxidizer"
+            ] = partial_pressures["oxidizer"].nominal_value
+
+            df_test_info.at[
+                best_row, "u_p_oxidizer"
+            ] = partial_pressures["oxidizer"].std_dev
+
+            df_test_info.at[
+                best_row, "p_diluent"
+            ] = partial_pressures["diluent"].nominal_value
+
+            df_test_info.at[
+                best_row, "u_p_diluent"
+            ] = partial_pressures["diluent"].std_dev
+
+            df_test_info.at[
+                best_row, "wave_speed"
+            ] = wave_speed.nominal_value
+
+            df_test_info.at[
+                best_row, "u_wave_speed"
+            ] = wave_speed.std_dev
 
             # store auxiliary test data
-            self.tests[i]["pressure"] = df_p_row
-            self.tests[i]["temperature"] = df_t_row
-            self.tests[i]["state"] = df_state_row
+            tests[best_row] = dict()
+            tests[best_row]["pressure"] = df_p_row
+            tests[best_row]["temperature"] = df_t_row
+            tests[best_row]["state"] = df_state_row
 
         # remove unwanted information from test info dataframe
-        self.df_test_info.dropna(subset=["partial_fuel"], inplace=True)
-        self.df_test_info.reset_index(drop=True, inplace=True)
-        self.df_test_info.drop(columns="datetime", inplace=True)
+        df_test_info.dropna(subset=["p_fuel"], inplace=True)
+        df_test_info.reset_index(drop=True, inplace=True)
+        df_test_info.drop(columns="datetime", inplace=True)
+        tests = [t for t in tests if len(t) > 0]
+        return df_test_info, tests
 
     @staticmethod
-    def _extract_sensor_data(df_sensor, which="pressure", dropna=True):
+    def _extract_sensor_data(
+            df_sensor,
+            which="pressure",
+            dropna=True
+    ):
+        """
+        Extracts temperature or pressure data from a sensor data dataframe
+
+        Parameters
+        ----------
+        df_sensor : pd.DataFrame
+            Dataframe containing full TDMS output from a day of testing
+        which : str
+            Which trace to extract: `pressure` or `temperature`
+        dropna : bool
+            Whether or not to drop nan values. This is necessary because
+            pressure and temperature traces are different lengths, and nptdms/
+            pandas fill the gaps with nans.
+
+        Returns
+        -------
+        pd.DataFrame
+            sub-dataframe containing desired trace
+        """
         if not {"temperature", "pressure"}.intersection({which}):
             raise ValueError("which must be temperature or pressure")
 
@@ -232,6 +390,20 @@ class PostProcessDate:
 
     @staticmethod
     def _find_test_times(df_state):
+        """
+        Searches a dataframe to find portions containing completed
+        detonation tests
+
+        Parameters
+        ----------
+        df_state : pd.DataFrame
+            Dataframe containing tube state transitions
+
+        Returns
+        -------
+        pd.DataFrame
+            Dataframe containing the start and end times of completed tests
+        """
         # start times
         # The tube will only automatically go `Closed -> Vent` at the end of
         # a completed test cycle
@@ -256,7 +428,28 @@ class PostProcessDate:
         return df_test_times
 
     @staticmethod
-    def _mask_df_by_row_time(df_in, test_row, include_ends=True):
+    def _mask_df_by_row_time(
+            df_in,
+            test_row,
+            include_ends=True
+    ):
+        """
+        Mask a dataframe by the start and end times for a particular tube state
+
+        Parameters
+        ----------
+        df_in : pd.DataFrame
+            Dataframe of test data to be sliced
+        test_row : pd.Series
+            Series object containing the start and end times for the desired
+            tube state to be sliced
+        include_ends : bool
+            Decides whether to use >/< or >=/<=
+
+        Returns
+        -------
+        pd.Series
+        """
         if include_ends:
             return (
                     (df_in["time"] >= test_row["start"]) &
@@ -268,22 +461,22 @@ class PostProcessDate:
                     (df_in["time"] < test_row["end"])
             )
 
-    def save_processed_data(self):
-        # TODO: output uncertainty calculation
-        if len(self.tests) == 0:
-            raise AttributeError("No tests have been processed")
-
-        if not os.path.exists(self._dir_processed):
-            os.makedirs(self._dir_processed)
-
-        with pd.HDFStore(self._output_file, "w") as store:
-            if self.df_test_info is not None:
-                store.put("test_info", self.df_test_info)
-            for i, t in enumerate(self.tests):
-                test_name = "test_%d" % i
-                for k in t.keys():
-                    out_key = "/".join(["", test_name, k])
-                    store.put(out_key, t[k])
+    # def save_processed_data(self):
+    #     # TODO: externalize this guy
+    #     if len(self.tests) == 0:
+    #         raise AttributeError("No tests have been processed")
+    #
+    #     if not os.path.exists(self._dir_processed):
+    #         os.makedirs(self._dir_processed)
+    #
+    #     with pd.HDFStore(self._output_file, "w") as store:
+    #         if self.df_test_info is not None:
+    #             store.put("test_info", self.df_test_info)
+    #         for i, t in enumerate(self.tests):
+    #             test_name = "test_%d" % i
+    #             for k in t.keys():
+    #                 out_key = "/".join(["", test_name, k])
+    #                 store.put(out_key, t[k])
 
 
 def _collect_schlieren_dirs(
@@ -438,10 +631,10 @@ class _ProcessOldData:
                    ].dropna() * uncertainty.PRESSURE_CAL["slope"] + \
             uncertainty.PRESSURE_CAL["intercept"]
 
-        return un.ufloat(
-            pressure.mean(),
-            uncertainty.u_pressure(pressure, daq_err=False, collapse=True)
-        )
+        return unp.uarray(
+            pressure,
+            uncertainty.u_pressure(pressure, daq_err=False)
+        ).mean()
 
     @classmethod
     def _get_partial_pressure(
@@ -529,6 +722,7 @@ class _ProcessOldData:
             multiprocess=False
     ):
         """
+        Process data from an old-style data set.
 
         Parameters
         ----------
@@ -648,8 +842,14 @@ class _ProcessOldData:
             )
         ).as_dataframe()
         p_init = cls._get_initial_pressure(df_tdms_pressure)
-        p_fuel = cls._get_partial_pressure(df_tdms_pressure, kind="fuel")
-        p_oxidizer = cls._get_partial_pressure(df_tdms_pressure, kind="oxidizer")
+        p_fuel = cls._get_partial_pressure(
+            df_tdms_pressure,
+            kind="fuel"
+        )
+        p_oxidizer = cls._get_partial_pressure(
+            df_tdms_pressure,
+            kind="oxidizer"
+        )
         phi = _get_equivalence_ratio(p_fuel, p_oxidizer, f_a_st)
 
         # gather temperature data
@@ -684,4 +884,55 @@ class _ProcessOldData:
         return idx, out
 
 
-process_old_data = _ProcessOldData()
+def process_old_data(
+            base_dir,
+            test_date,
+            f_a_st=0.04201680672268907,
+            multiprocess=False
+):
+    """
+    Process data from an old-style data set.
+
+    Parameters
+    ----------
+    base_dir : str
+        Base data directory, (e.g. `/d/Data/Raw/`)
+    test_date : str
+        ISO 8601 formatted date of test data
+    f_a_st : float
+        Stoichiometric fuel/air ratio for the test mixture. Default value
+        is for propane/air.
+    multiprocess : bool
+        Set to True to parallelize processing of a single day's tests
+
+    Returns
+    -------
+    List[pd.DataFrame, dict]
+        A list in which the first item is a dataframe of the processed
+        tube data and the second is a dictionary containing
+        background-subtracted schlieren images
+    """
+    proc = _ProcessOldData()
+    return proc(
+        base_dir,
+        test_date,
+        f_a_st,
+        multiprocess
+    )
+
+
+def process_new_data(
+    base_dir,
+    test_date,
+    diode_spacing=1.0668,
+    sample_time=pd.Timedelta(seconds=70),
+    mech="gri30.cti"
+):
+    proc = _ProcessNewData()
+    return proc(
+        base_dir,
+        test_date,
+        diode_spacing,
+        sample_time,
+        mech
+    )
