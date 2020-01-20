@@ -109,10 +109,19 @@ def _velocity_calculator(
             diode_dataframe.diff(axis=0).idxmax(axis=0, skipna=True).values,
             [0.5, 0.5]
         )
-        calculated_velocity = sample_specific_velocity / np.diff(arrival_times)
+        arrival_diff = np.diff(arrival_times)
+        if arrival_diff > 0:
+            calculated_velocity = sample_specific_velocity / arrival_diff
+        else:
+            # multiply by zero rather than simply define as zero to preserve
+            # ufloat
+            calculated_velocity = 0 * arrival_diff
     else:
-        zero = np.zeros(len(diode_dataframe.keys())-1)
-        calculated_velocity = unp.uarray(zero, zero)
+        calculated_velocity = np.array([0 * sample_specific_velocity])
+
+    if calculated_velocity > 3000:
+        # obvious garbage
+        calculated_velocity *= 0
 
     if multiprocess:
         return instance, calculated_velocity
