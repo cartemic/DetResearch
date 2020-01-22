@@ -226,6 +226,7 @@ class _ProcessNewData:
                 df_tests.at[idx, "wave_speed"] = row_results["wave_speed"]
                 df_tests.at[idx, "u_wave_speed"] = row_results["u_wave_speed"]
 
+        df_tests["date"] = test_date
         return df_tests, images
 
     @classmethod
