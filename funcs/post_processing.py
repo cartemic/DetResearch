@@ -1004,18 +1004,16 @@ class _ProcessOldData:
             tube data and the second is a dictionary containing
             background-subtracted schlieren images
         """
-        sensor_dirs = cls._collect_test_dirs(base_dir, test_date)
-        schlieren_dirs = _collect_schlieren_dirs(base_dir, test_date)
         df = pd.DataFrame(
             columns=["date", "shot", "sensors", "schlieren"],
         )
-        df["sensors"] = sensor_dirs
-        df["schlieren"] = schlieren_dirs
+        df["sensors"] = cls._collect_test_dirs(base_dir, test_date)
+        df["schlieren"] = _collect_schlieren_dirs(base_dir, test_date)
         df = df[df["schlieren"].apply(lambda x: "failed" not in x)]
         df["date"] = test_date
         df["shot"] = [
             int(os.path.split(d)[1].lower().replace("shot", "").strip())
-            for d in schlieren_dirs
+            for d in df["schlieren"].values
         ]
 
         images = dict()
