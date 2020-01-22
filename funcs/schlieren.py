@@ -5,6 +5,7 @@ from datetime import datetime
 # third party imports
 import json
 import numpy as np
+import uncertainties as un
 from matplotlib import pyplot as plt
 from matplotlib import widgets
 from skimage import io
@@ -135,7 +136,7 @@ def spatial_calibration(
         line_color="r",
         cmap="viridis",
         marker_length_inches=0.2,
-        save_output=True,
+        save_output=False,
 ):  # pragma: no cover
     image = io.imread(spatial_file)
     fig, ax = plt.subplots(1, 1)
@@ -165,12 +166,17 @@ def spatial_calibration(
 
     remove_annotations(ax)
     plt.tight_layout()
-    plt.show()
-    line_length_inches = float(
-        input(
-            "number of markers: "
-        )
-    ) * marker_length_inches
+    plt.show(block=True)
+    line_length_px = un.ufloat(
+        float(
+            input(
+                "number of markers: "
+            )
+        ),
+        0.5
+    )
+
+    line_length_inches = line_length_px * marker_length_inches
 
     inches_per_pixel = _calibrate(
         linebuilder.xs,
@@ -319,7 +325,6 @@ class LineBuilder(object):  # pragma: no cover
         self.items = (self.line, *self.circles, *self._end_lines)
 
         self.ind = None
-
         canvas.mpl_connect('button_press_event', self.button_press_callback)
         canvas.mpl_connect('button_release_event', self.button_release_callback)
         canvas.mpl_connect('motion_notify_event', self.motion_notify_callback)
@@ -331,10 +336,7 @@ class LineBuilder(object):  # pragma: no cover
             d = np.sqrt((x-event.xdata)**2 + (y - event.ydata)**2)
             if min(d) > self.epsilon:
                 return None
-            if d[0] < d[1]:
-                return 0
-            else:
-                return 1
+            return int(d[0] > d[1])
 
     def button_press_callback(self, event):
         if event.button != 1:
