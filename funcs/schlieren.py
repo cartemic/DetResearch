@@ -5,9 +5,14 @@ from datetime import datetime
 # third party imports
 import json
 import numpy as np
+import uncertainties as un
 from matplotlib import pyplot as plt
 from matplotlib import widgets
 from skimage import io
+
+# local imports
+from uncertainty import engr_line_thk as u_engr
+u_engr = u_engr.nominal_value
 
 
 def _find_images_in_dir(
@@ -134,7 +139,7 @@ def spatial_calibration(
         spatial_file,
         line_color="r",
         cmap="viridis",
-        marker_length_inches=0.2,
+        marker_length_inches=un.ufloat(0.2, u_engr/2),
         save_output=True,
 ):  # pragma: no cover
     image = io.imread(spatial_file)

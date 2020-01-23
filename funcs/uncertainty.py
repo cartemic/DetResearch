@@ -311,3 +311,9 @@ def _u_pressure_fit(
     intercept = un.ufloat(intercept, u_intercept)
     cal_transducer = un.ufloat(0, u_cal_accuracy)
     return measured * slope + intercept + cal_transducer
+
+
+# Schlieren spatial uncertainty
+# comes from measurements of ENGR paper wost-case line thickness
+# TODO: move .csv into package and auto-calc on load
+engr_line_thk = un.ufloat(0.017100000000000008, 5.590169943749475e-05)
