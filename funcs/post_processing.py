@@ -7,6 +7,7 @@ import multiprocessing as mp
 import pandas as pd
 import uncertainties as un
 from nptdms import TdmsFile
+from numpy import NaN
 from uncertainties import unumpy as unp
 
 # local imports
@@ -113,6 +114,7 @@ class _ProcessNewData:
         df_temperature = cls._extract_sensor_data(df_sensor, "temperature")
         del df_sensor
         df_tests = cls._find_test_times(base_dir, test_date)
+        # todo: raise error if number of tests doesn't match number of fires
         df_schlieren = pd.DataFrame(columns=["shot", "schlieren"])
         df_schlieren["schlieren"] = _collect_schlieren_dirs(
             base_dir, test_date
@@ -224,6 +226,7 @@ class _ProcessNewData:
                 df_tests.at[idx, "wave_speed"] = row_results["wave_speed"]
                 df_tests.at[idx, "u_wave_speed"] = row_results["u_wave_speed"]
 
+        df_tests["date"] = test_date
         return df_tests, images
 
     @classmethod
@@ -1002,18 +1005,16 @@ class _ProcessOldData:
             tube data and the second is a dictionary containing
             background-subtracted schlieren images
         """
-        sensor_dirs = cls._collect_test_dirs(base_dir, test_date)
-        schlieren_dirs = _collect_schlieren_dirs(base_dir, test_date)
         df = pd.DataFrame(
             columns=["date", "shot", "sensors", "schlieren"],
         )
-        df["sensors"] = sensor_dirs
-        df["schlieren"] = schlieren_dirs
+        df["sensors"] = cls._collect_test_dirs(base_dir, test_date)
+        df["schlieren"] = _collect_schlieren_dirs(base_dir, test_date)
         df = df[df["schlieren"].apply(lambda x: "failed" not in x)]
         df["date"] = test_date
         df["shot"] = [
             int(os.path.split(d)[1].lower().replace("shot", "").strip())
-            for d in schlieren_dirs
+            for d in df["schlieren"].values
         ]
 
         images = dict()
@@ -1110,13 +1111,20 @@ class _ProcessOldData:
         phi = _get_equivalence_ratio(p_fuel, p_oxidizer, f_a_st)
 
         # gather temperature data
-        df_tdms_temperature = TdmsFile(
-            os.path.join(
-                row["sensors"],
-                "temperature.tdms"
-            )
-        ).as_dataframe()
-        t_init = cls._get_initial_temperature(df_tdms_temperature)
+        loc_temp_tdms = os.path.join(
+            row["sensors"],
+            "temperature.tdms"
+        )
+        if os.path.exists(loc_temp_tdms):
+            df_tdms_temperature = TdmsFile(
+                os.path.join(
+                    row["sensors"],
+                    "temperature.tdms"
+                )
+            ).as_dataframe()
+            t_init = cls._get_initial_temperature(df_tdms_temperature)
+        else:
+            t_init = un.ufloat(NaN, NaN)
 
         # wave speed measurement
         diode_loc = os.path.join(row["sensors"], "diodes.tdms")
