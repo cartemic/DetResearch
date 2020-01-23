@@ -285,12 +285,10 @@ class _ProcessNewData:
         dil_mf_nom = df_test_nominal["diluent_mol_frac_nominal"]
         phi_nom = df_test_nominal["phi_nominal"]
         p_0_nom = df_test_nominal["p_0_nominal"]
-
         if sample_time is None:
             sample_time = pd.Timedelta(
                 seconds=df_test_nominal["sample_time"]
             )
-            print(sample_time)
 
         # collect current test temperature with uncertainty
         temps = cls._collect_current_test_df(
