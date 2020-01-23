@@ -90,8 +90,9 @@ class _ProcessNewData:
             Base data directory, (e.g. `/d/Data/Raw/`)
         test_date : str
             ISO 8601 formatted date of test data
-        sample_time : pd.Timedelta
-            Length of hold period at the end of a fill state
+        sample_time : None or pd.Timedelta
+            Length of hold period at the end of a fill state. If None is passed,
+            value will be read from nominal test conditions.
         mech : str
             Mechanism for cantera calculations
         diode_spacing : float
@@ -256,8 +257,9 @@ class _ProcessNewData:
             Dataframe of full-day test temperatures
         df_state : pd.DataFrame
             Dataframe of tube state changes, untrimmed
-        sample_time : pd.Timedelta
-            Length of hold period at the end of a fill state
+        sample_time : None or pd.Timedelta
+            Length of hold period at the end of a fill state. If None is passed,
+            value will be read from nominal test conditions.
         test_time_row : pd.Series
             Row of current test in the main test dataframe
         mech : str
@@ -272,6 +274,23 @@ class _ProcessNewData:
             of the test results
         """
         out = dict()
+
+        # collect nominal test conditions
+        df_test_nominal = cls._get_test_nominal(df_nominal, test_time_row)
+        fuel = df_test_nominal["fuel"]
+        oxidizer = df_test_nominal["oxidizer"]
+        if oxidizer.lower() == "air":
+            oxidizer = "O2:1 N2:3.76"
+        diluent = df_test_nominal["diluent"]
+        dil_mf_nom = df_test_nominal["diluent_mol_frac_nominal"]
+        phi_nom = df_test_nominal["phi_nominal"]
+        p_0_nom = df_test_nominal["p_0_nominal"]
+
+        if sample_time is None:
+            sample_time = pd.Timedelta(
+                seconds=df_test_nominal["sample_time"]
+            )
+            print(sample_time)
 
         # collect current test temperature with uncertainty
         temps = cls._collect_current_test_df(
@@ -332,17 +351,6 @@ class _ProcessNewData:
             df_current_test_pressure,
             df_state_cutoff_times
         )
-
-        # collect nominal test conditions
-        df_test_nominal = cls._get_test_nominal(df_nominal, test_time_row)
-        fuel = df_test_nominal["fuel"]
-        oxidizer = df_test_nominal["oxidizer"]
-        if oxidizer.lower() == "air":
-            oxidizer = "O2:1 N2:3.76"
-        diluent = df_test_nominal["diluent"]
-        dil_mf_nom = df_test_nominal["diluent_mol_frac_nominal"]
-        phi_nom = df_test_nominal["phi_nominal"]
-        p_0_nom = df_test_nominal["p_0_nominal"]
 
         # calculate equivalence ratio and diluent mole fraction
         phi = _get_equivalence_ratio(
@@ -1189,11 +1197,36 @@ def process_old_data(
 def process_new_data(
         base_dir,
         test_date,
-        sample_time=pd.Timedelta(seconds=70),
+        sample_time=None,
         mech="gri30.cti",
         diode_spacing=1.0668,
         multiprocess=False
 ):
+    """
+    Process data from a day of testing using the newer directory structure
+
+    Parameters
+    ----------
+    base_dir : str
+        Base data directory, (e.g. `/d/Data/Raw/`)
+    test_date : str
+        ISO 8601 formatted date of test data
+    sample_time : None or pd.Timedelta
+        Length of hold period at the end of a fill state. If None is passed,
+        value will be read from nominal test conditions.
+    mech : str
+        Mechanism for cantera calculations
+    diode_spacing : float
+        Diode spacing, in meters
+    multiprocess : bool
+        Set true to parallelize data analysis
+
+    Returns
+    -------
+    Tuple[pd.DataFrame, Dict]
+        Tuple containing a dataframe of test results and a dictionary of
+        background subtracted schlieren images
+    """
     proc = _ProcessNewData()
     return proc(
         base_dir,
