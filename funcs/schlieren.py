@@ -11,7 +11,7 @@ from matplotlib import widgets
 from skimage import io
 
 # local imports
-from uncertainty import engr_line_thk as u_engr
+from .uncertainty import engr_line_thk as u_engr
 u_engr = u_engr.nominal_value
 
 
