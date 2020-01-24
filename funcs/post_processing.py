@@ -551,7 +551,7 @@ class _ProcessNewData:
         pd.DataFrame
             Dataframe containing start and end times of each test
         """
-        # start times
+        # end times
         # The tube will only automatically go `Closed -> Vent` at the end of
         # a completed test cycle
         loc_state = os.path.join(base_dir, test_date, "tube state.tdms")
@@ -567,7 +567,7 @@ class _ProcessNewData:
         df_test_times.reset_index(drop=True, inplace=True)
         df_test_times["shot"] = df_test_times.index.values
 
-        # end times
+        # start times
         # A test will be considered to have started at the last automatic mix
         # section purge preceding its end time.
         for i, t in enumerate(df_test_times["end"].values):
