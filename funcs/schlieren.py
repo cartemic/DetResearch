@@ -171,16 +171,18 @@ def spatial_calibration(
     remove_annotations(ax)
     plt.tight_layout()
     plt.show(block=True)
-    line_length_px = un.ufloat(
-        float(
-            input(
-                "number of markers: "
-            )
-        ),
-        0.5
-    )
+    num_boxes = float(input("number of markers: "))
 
-    line_length_inches = line_length_px * marker_length_inches
+    # I built the input to this in a bad way. The nominal value is the size of
+    # an engineering paper box, and the std_dev is the resolution error of a
+    # single line. The error should be applied at either end of the calibration
+    # line, i.e. the error should be the same regardless of line length. To
+    # make this happen, I am breaking out the components and applying them as
+    # originally intended.
+    line_length_inches = un.ufloat(
+        num_boxes * marker_length_inches.nominal_value,
+        marker_length_inches.std_dev
+    )
 
     inches_per_pixel = _calibrate(
         linebuilder.xs,
@@ -220,7 +222,12 @@ def _calibrate(
     float
         Pixel linear pitch in in/px
     """
-    return line_length_inches/np.linalg.norm([x_data, y_data], ord=2)
+    line_length_px = un.ufloat(
+        np.linalg.norm([x_data, y_data], ord=2),
+        0.5  # +/- 1/2 pixel
+    )
+
+    return line_length_inches/line_length_px
 
 
 def _save_spatial_calibration(
@@ -286,6 +293,7 @@ class LineBuilder(object):  # pragma: no cover
         canvas = line.figure.canvas
         line.set_alpha(0.7)
         self.canvas = canvas
+        self.canvas.mpl_connect("key_press_event", self._button)
         self.line = line
         self.axes = line.axes
         self.xs = list(line.get_xdata())
@@ -332,6 +340,10 @@ class LineBuilder(object):  # pragma: no cover
         canvas.mpl_connect('button_press_event', self.button_press_callback)
         canvas.mpl_connect('button_release_event', self.button_release_callback)
         canvas.mpl_connect('motion_notify_event', self.motion_notify_callback)
+
+    def _button(self, event):
+        if event.key == "enter":
+            plt.close(self.line.figure)
 
     def get_ind(self, event):
         if event.inaxes is not None:
