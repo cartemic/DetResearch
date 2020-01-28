@@ -7,7 +7,8 @@ import multiprocessing as mp
 import pandas as pd
 import uncertainties as un
 from nptdms import TdmsFile
-from numpy import NaN
+from numpy import NaN, sqrt
+from scipy.stats import t
 from uncertainties import unumpy as unp
 
 # local imports
@@ -291,6 +292,8 @@ class _ProcessNewData:
             )
 
         # collect current test temperature with uncertainty
+        # TODO: move to separate function and update calculation to be like
+        #  new pressure calc
         temps = cls._collect_current_test_df(
             df_temperature,
             test_time_row
@@ -570,9 +573,9 @@ class _ProcessNewData:
         # start times
         # A test will be considered to have started at the last automatic mix
         # section purge preceding its end time.
-        for i, t in enumerate(df_test_times["end"].values):
+        for i, time in enumerate(df_test_times["end"].values):
             df_test_times.at[i, "start"] = df_state[
-                (df_state["time"].values < t) &
+                (df_state["time"].values < time) &
                 (df_state["state"] == "Mix Section Purge") &
                 (df_state["mode"] == "auto")
                 ].iloc[-1].time
@@ -714,12 +717,23 @@ class _ProcessNewData:
             df_state_cutoff_times[df_state_cutoff_times["state"] == state]
         )["pressure"].values
 
+        # calculate sample uncertainty
+        num_samples = len(press)
+        sem = press.std() / sqrt(num_samples)
+        u_sample = un.ufloat(
+            0,
+            sem * t.ppf(0.975, num_samples - 1),
+            tag="sample"
+        )
+
         press = unp.uarray(
             press,
             uncertainty.u_pressure(press, daq_err=False)
         )
 
-        return press.mean()
+        press = press.mean() + u_sample
+
+        return press
 
     @classmethod
     def _collect_current_test_df(
@@ -899,6 +913,7 @@ class _ProcessOldData:
                    ].dropna() * uncertainty.PRESSURE_CAL["slope"] + \
             uncertainty.PRESSURE_CAL["intercept"]
 
+        # TODO: update calculation to be like new pressure calc
         return unp.uarray(
             pressure,
             uncertainty.u_pressure(pressure, daq_err=False)
@@ -972,6 +987,7 @@ class _ProcessOldData:
         un.ufloat
             Test-averaged initial temperature with applied uncertainty
         """
+        # TODO: update calculation to be like new pressure calc
         return un.ufloat(
             df_tdms_temperature["/'Test Readings'/'Tube'"].mean(),
             uncertainty.u_temperature(
