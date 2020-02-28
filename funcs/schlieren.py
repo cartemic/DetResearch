@@ -159,6 +159,7 @@ def spatial_calibration(
         cmap="viridis",
         marker_length_inches=un.ufloat(0.2, u_engr/2),
         save_output=False,
+        px_only=False
 ):  # pragma: no cover
     image = io.imread(spatial_file)
     fig, ax = plt.subplots(1, 1)
@@ -192,11 +193,17 @@ def spatial_calibration(
         marker_length_inches.std_dev
     )
 
-    inches_per_pixel = _calibrate(
-        linebuilder.xs,
-        linebuilder.ys,
-        line_length_inches
-    )
+    # line_length_inches = line_length_px * marker_length_inches
+
+    if px_only:
+        # pixels only
+        return np.linalg.norm([linebuilder.xs, linebuilder.ys], ord=2)
+    else:
+        inches_per_pixel = _calibrate(
+            linebuilder.xs,
+            linebuilder.ys,
+            line_length_inches
+        )
 
     if save_output:
         _save_spatial_calibration(
