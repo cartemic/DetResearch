@@ -287,9 +287,12 @@ class _ProcessNewData:
         phi_nom = df_test_nominal["phi_nominal"]
         p_0_nom = df_test_nominal["p_0_nominal"]
         if sample_time is None:
-            sample_time = pd.Timedelta(
-                seconds=df_test_nominal["sample_time"]
-            )
+            if hasattr(df_test_nominal, "sample_time"):
+                sample_time = pd.Timedelta(
+                    seconds=df_test_nominal["sample_time"]
+                )
+            else:
+                sample_time = pd.Timedelta(seconds=70)
 
         # collect current test temperature with uncertainty
         # TODO: move to separate function and update calculation to be like
