@@ -135,6 +135,24 @@ def remove_annotations(ax):  # pragma: no cover
         ax.spines[s]._visible = False
 
 
+def maximize_window():
+    # https://stackoverflow.com/questions/12439588/how-to-maximize-a-plt-show-window-using-python
+    plt_backend = plt.get_backend()
+    mng = plt.get_current_fig_manager()
+    if "Qt" in plt_backend:
+        mng.window.showMaximized()
+        return True
+    elif "wx" in plt_backend:
+        mng.frame.Maximize(True)
+        return True
+    elif "Tk" in plt_backend:
+        mng.window_state('zoomed')
+        return True
+    else:
+        print("figure out how to maximize for ", plt_backend)
+        return False
+
+
 def spatial_calibration(
         spatial_file,
         line_color="r",
@@ -156,17 +174,7 @@ def spatial_calibration(
     # noinspection PyTypeChecker
     linebuilder = LineBuilder(cal_line)
 
-    # https://stackoverflow.com/questions/12439588/how-to-maximize-a-plt-show-window-using-python
-    plt_backend = plt.get_backend()
-    mng = plt.get_current_fig_manager()
-    if "Qt" in plt_backend:
-        mng.window.showMaximized()
-    elif "wx" in plt_backend:
-        mng.frame.Maximize(True)
-    elif "Tk" in plt_backend:
-        mng.window_state('zoomed')
-    else:
-        print("figure out how to maximize for ", plt_backend)
+    maximize_window()
 
     remove_annotations(ax)
     plt.tight_layout()
@@ -197,6 +205,16 @@ def spatial_calibration(
         )
 
     return inches_per_pixel
+
+
+def collect_measurement(
+        image_array,
+        cmap="gist_gray_r",
+        lc="r"
+):
+    m = MeasurementCollector(image_array, cmap=cmap, lc=lc)
+    maximize_window()
+    return m.get_data()
 
 
 def _calibrate(
@@ -418,3 +436,41 @@ class LineBuilder(object):  # pragma: no cover
         end_line_points = self.calculate_end_line_xy()
         for _line, x, y in zip(self._end_lines, *end_line_points):
             _line.set_data(x, y)
+
+
+class MeasurementCollector(object):  # pragma: no cover
+    # also skipping tests for the same reason as LineBuilder
+    def __init__(self, image, cmap="gist_gray_r", lc="r"):
+        fig, ax = plt.subplots(1, 1)
+        ax.imshow(image, cmap=cmap)
+        remove_annotations(ax)
+        canvas = ax.figure.canvas
+        self.lines = []
+        self.fig = fig
+        self.ax = ax
+        self.lc = lc
+        canvas.mpl_connect("key_press_event", self._button)
+        canvas.mpl_connect('button_press_event', self.button_press_callback)
+
+    def _button(self, event):
+        if event.key == "enter":
+            plt.close(self.fig)
+
+    def button_press_callback(self, event):
+        if event.button == 1:
+            # left click
+            self.lines.append(self.ax.axhline(event.ydata, color=self.lc))
+        elif event.button == 2:
+            # middle click
+            plt.close(self.fig)
+        elif event.button == 3:
+            # right click
+            if self.lines:
+                # noinspection PyProtectedMember
+                self.lines[-1]._visible = False
+                del self.lines[-1]
+                self.fig.canvas.draw()
+
+    def get_data(self):
+        points = self.fig.ginput(-1, timeout=-1)
+        return sorted(np.array([p[1] for p in points]))
