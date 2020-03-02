@@ -248,7 +248,10 @@ def _calibrate(
         Pixel linear pitch in in/px
     """
     line_length_px = un.ufloat(
-        np.linalg.norm([x_data, y_data], ord=2),
+        np.sqrt(
+            np.square(np.diff(x_data)) +
+            np.square(np.diff(y_data))
+        ),
         0.5  # +/- 1/2 pixel
     )
 
