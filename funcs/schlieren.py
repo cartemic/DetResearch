@@ -157,7 +157,7 @@ def spatial_calibration(
         spatial_file,
         line_color="r",
         cmap="viridis",
-        marker_length_inches=un.ufloat(0.2, u_engr/2),
+        marker_length_mm=un.ufloat(0.2, u_engr / 2)*25.4,
         save_output=False,
         px_only=False
 ):  # pragma: no cover
@@ -188,30 +188,28 @@ def spatial_calibration(
     # line, i.e. the error should be the same regardless of line length. To
     # make this happen, I am breaking out the components and applying them as
     # originally intended.
-    line_length_inches = un.ufloat(
-        num_boxes * marker_length_inches.nominal_value,
-        marker_length_inches.std_dev
+    line_length_mm = un.ufloat(
+        num_boxes * marker_length_mm.nominal_value,
+        marker_length_mm.std_dev
     )
-
-    # line_length_inches = line_length_px * marker_length_inches
 
     if px_only:
         # pixels only
         return np.linalg.norm([linebuilder.xs, linebuilder.ys], ord=2)
     else:
-        inches_per_pixel = _calibrate(
+        mm_per_px = _calibrate(
             linebuilder.xs,
             linebuilder.ys,
-            line_length_inches
+            line_length_mm
         )
 
     if save_output:
         _save_spatial_calibration(
-            inches_per_pixel=inches_per_pixel,
+            mm_per_px=mm_per_px,
             spatial_file_path=spatial_file
         )
 
-    return inches_per_pixel
+    return mm_per_px
 
 
 def collect_measurement(
@@ -227,11 +225,11 @@ def collect_measurement(
 def _calibrate(
         x_data,
         y_data,
-        line_length_inches
+        line_length_mm
 ):
     """
-    Calculates a calibration factor to convert pixels to inches by dividing
-    the known line length in inches by the L2 norm between two pixels.
+    Calculates a calibration factor to convert pixels to mm by dividing
+    the known line length in mm by the L2 norm between two pixels.
 
     Parameters
     ----------
@@ -239,13 +237,13 @@ def _calibrate(
         X locations of two points
     y_data : iterable
         Y locations of two points
-    line_length_inches : float
-        Length, in inches, of the line between (x0, y0), (x1, y1)
+    line_length_mm : float
+        Length, in mm, of the line between (x0, y0), (x1, y1)
 
     Returns
     -------
     float
-        Pixel linear pitch in in/px
+        Pixel linear pitch in mm/px
     """
     line_length_px = un.ufloat(
         np.sqrt(
@@ -255,11 +253,11 @@ def _calibrate(
         0.5  # +/- 1/2 pixel
     )
 
-    return line_length_inches/line_length_px
+    return line_length_mm / line_length_px
 
 
 def _save_spatial_calibration(
-        inches_per_pixel,
+        mm_per_px,
         spatial_file_path
 ):
     fname_saved_calibration = "spatial calibration.json"
@@ -271,7 +269,7 @@ def _save_spatial_calibration(
     save_statement = "Saved to {:s}!".format(path_out)
 
     current_info = {
-            "in/px": inches_per_pixel,
+            "in/px": mm_per_px,
             "cal date": str(datetime.now())
     }
 
