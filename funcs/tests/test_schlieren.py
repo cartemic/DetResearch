@@ -25,7 +25,7 @@ def test_collect_shot_images():
     assert all([
         len(dir_count) == correct
         for dir_count, correct in zip(
-            sc.collect_shot_images(os.path.dirname(BG_DIR)),
+            sc.find_shot_images(os.path.dirname(BG_DIR)),
             correct_counts
         )
     ])

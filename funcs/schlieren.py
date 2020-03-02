@@ -43,7 +43,7 @@ def _find_images_in_dir(
     ])
 
 
-def collect_shot_images(
+def find_shot_images(
         dir_shot,
         data_type=".tif"
 ):
@@ -111,7 +111,7 @@ def bg_subtract_all_frames(dir_raw_shot):
     list
         List of background subtracted arrays
     """
-    pth_list_bg, pth_list_frames = collect_shot_images(dir_raw_shot)
+    pth_list_bg, pth_list_frames = find_shot_images(dir_raw_shot)
     bg = average_frames(pth_list_bg)
     return [(io.imread(frame) - bg + 2**15) for frame in pth_list_frames]
 
@@ -135,7 +135,7 @@ def remove_annotations(ax):  # pragma: no cover
         ax.spines[s]._visible = False
 
 
-def maximize_window():
+def _maximize_window():
     # https://stackoverflow.com/questions/12439588/how-to-maximize-a-plt-show-window-using-python
     plt_backend = plt.get_backend()
     mng = plt.get_current_fig_manager()
@@ -175,7 +175,7 @@ def spatial_calibration(
     # noinspection PyTypeChecker
     linebuilder = LineBuilder(cal_line)
 
-    maximize_window()
+    _maximize_window()
 
     remove_annotations(ax)
     plt.tight_layout()
@@ -212,13 +212,13 @@ def spatial_calibration(
     return mm_per_px
 
 
-def collect_measurement(
+def measure_single_frame(
         image_array,
         cmap="gist_gray_r",
         lc="r"
 ):
     m = MeasurementCollector(image_array, cmap=cmap, lc=lc)
-    maximize_window()
+    _maximize_window()
     return m.get_data()
 
 
