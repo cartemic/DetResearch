@@ -1,10 +1,12 @@
 # third party imports
 import numpy as np
+import uncertainties as un
 from skimage import io
 from uncertainties import unumpy as unp
 
 # local imports
-from . import uncertainty as un
+from .uncertainty import add_uncertainty_terms, u_cell
+u_cell = u_cell["soot_foil"]
 
 
 def get_px_deltas_from_lines(
@@ -38,9 +40,9 @@ def get_px_deltas_from_lines(
         deltas = np.append(deltas, diffs)
 
     if apply_uncertainty:
-        uncert = un.add_uncertainty_terms([
-            un.u_cell["soot_foil"]["delta_px"]["b"],
-            un.u_cell["soot_foil"]["delta_px"]["p"]
+        uncert = add_uncertainty_terms([
+            u_cell["delta_px"]["b"],
+            u_cell["delta_px"]["p"]
         ])
         deltas = unp.uarray(
             deltas,
@@ -48,3 +50,44 @@ def get_px_deltas_from_lines(
         )
 
     return deltas
+
+
+def get_cell_size_from_deltas(
+        deltas,
+        l_px_i,
+        l_mm_i,
+        estimator=np.median
+):
+    """
+    Converts pixel triple point deltas to cell size
+
+    Parameters
+    ----------
+    deltas : np.array or pandas.Series
+    l_px_i : float
+        nominal value of spatial calibration factor (px)
+    l_mm_i : float
+        nominal value of spatial calibration factor (mm)
+    estimator : function
+        function used to estimate cell size from triple point measurements
+
+    Returns
+    -------
+    un.ufloat
+        estimated cell size
+    """
+    l_px_i = un.ufloat(
+        l_px_i,
+        add_uncertainty_terms([
+            u_cell["l_px"]["b"],
+            u_cell["l_px"]["p"]
+        ])
+    )
+    l_mm_i = un.ufloat(
+        l_mm_i,
+        add_uncertainty_terms([
+            u_cell["l_mm"]["b"],
+            u_cell["l_mm"]["p"]
+        ])
+    )
+    return 2 * estimator(deltas) * l_mm_i / l_px_i

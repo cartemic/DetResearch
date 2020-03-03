@@ -11,8 +11,46 @@ from matplotlib import widgets
 from skimage import io
 
 # local imports
-from .uncertainty import engr_line_thk as u_engr
-u_engr = u_engr.nominal_value
+from .uncertainty import add_uncertainty_terms, u_cell
+from ._dev import d_drive
+u_cell = u_cell["schlieren"]
+
+
+def get_spatial_loc(
+        date,
+        which="near"
+):
+    _dir_date = os.path.join(
+        d_drive,
+        "Data",
+        "Raw",
+        date
+    )
+    if not os.path.exists(_dir_date):
+        raise NotADirectoryError("directory not found")
+
+    _near = "near.tif"
+    _far = "far.tif"
+    if ".old" in os.listdir(_dir_date):
+        _base = os.path.join(
+            _dir_date,
+            "Camera",
+            "spatial"
+        )
+    else:
+        _base = os.path.join(
+            _dir_date,
+            "spatial"
+        )
+
+    if which == "near":
+        return os.path.join(_base, _near)
+    elif which == "far":
+        return os.path.join(_base, _far)
+    elif which == "both":
+        return [os.path.join(_base, _near), os.path.join(_base, _far)]
+    else:
+        raise ValueError("bad value of `which`")
 
 
 def _find_images_in_dir(
@@ -153,13 +191,14 @@ def _maximize_window():
         return False
 
 
-def spatial_calibration(
+def collect_spatial_calibration(
         spatial_file,
         line_color="r",
         cmap="viridis",
-        marker_length_mm=un.ufloat(0.2, u_engr / 2)*25.4,
+        marker_length_mm=0.2*25.4,
         save_output=False,
-        px_only=False
+        px_only=False,
+        apply_uncertainy=True
 ):  # pragma: no cover
     image = io.imread(spatial_file)
     fig, ax = plt.subplots(1, 1)
@@ -188,19 +227,24 @@ def spatial_calibration(
     # line, i.e. the error should be the same regardless of line length. To
     # make this happen, I am breaking out the components and applying them as
     # originally intended.
-    line_length_mm = un.ufloat(
-        num_boxes * marker_length_mm.nominal_value,
-        marker_length_mm.std_dev
-    )
+    line_length_mm = num_boxes * marker_length_mm
+    if apply_uncertainy:
+        line_length_mm = un.ufloat(
+            line_length_mm,
+            add_uncertainty_terms([
+                u_cell["l_mm"]["b"],
+                u_cell["l_mm"]["p"]
+            ])
+        )
 
     if px_only:
-        # pixels only
-        return np.linalg.norm([linebuilder.xs, linebuilder.ys], ord=2)
+        return _get_cal_delta_px(linebuilder.xs, linebuilder.ys)
     else:
         mm_per_px = _calibrate(
             linebuilder.xs,
             linebuilder.ys,
-            line_length_mm
+            line_length_mm,
+            apply_uncertainty=apply_uncertainy
         )
 
     if save_output:
@@ -222,10 +266,21 @@ def measure_single_frame(
     return m.get_data()
 
 
+def _get_cal_delta_px(
+        x_data,
+        y_data
+):
+    return np.sqrt(
+            np.square(np.diff(x_data)) +
+            np.square(np.diff(y_data))
+    )
+
+
 def _calibrate(
         x_data,
         y_data,
-        line_length_mm
+        line_length_mm,
+        apply_uncertainty=True
 ):
     """
     Calculates a calibration factor to convert pixels to mm by dividing
@@ -239,19 +294,24 @@ def _calibrate(
         Y locations of two points
     line_length_mm : float
         Length, in mm, of the line between (x0, y0), (x1, y1)
+    apply_uncertainty : bool
+        Applies pixel uncertainty if True
 
     Returns
     -------
-    float
+    float or un.ufloat
         Pixel linear pitch in mm/px
     """
-    line_length_px = un.ufloat(
-        np.sqrt(
-            np.square(np.diff(x_data)) +
-            np.square(np.diff(y_data))
-        ),
-        0.5  # +/- 1/2 pixel
-    )
+    line_length_px = _get_cal_delta_px(x_data, y_data)
+
+    if apply_uncertainty:
+        line_length_px = un.ufloat(
+            line_length_px,
+            add_uncertainty_terms([
+                u_cell["l_px"]["b"],
+                u_cell["l_px"]["p"]
+            ])
+        )
 
     return line_length_mm / line_length_px
 
@@ -381,7 +441,10 @@ class LineBuilder(object):  # pragma: no cover
             return int(d[0] > d[1])
 
     def button_press_callback(self, event):
-        if event.button != 1:
+        if event.button == 2:
+            # middle click
+            plt.close(self.axes.get_figure())
+        elif event.button != 1:
             return
         self.ind = self.get_ind(event)
 
@@ -482,3 +545,41 @@ class MeasurementCollector(object):  # pragma: no cover
     def get_data(self):
         points = self.fig.ginput(-1, timeout=-1)
         return sorted(np.array([p[1] for p in points]))
+
+
+def get_cell_size_from_delta(
+        delta,
+        l_px_i,
+        l_mm_i
+):
+    """
+    Converts pixel triple point deltas to cell size
+
+    Parameters
+    ----------
+    delta : dddddddddun.ufloat
+    l_px_i : float
+        nominal value of spatial calibration factor (px)
+    l_mm_i : float
+        nominal value of spatial calibration factor (mm)
+
+    Returns
+    -------
+    un.ufloat
+        estimated cell size
+    """
+    l_px_i = un.ufloat(
+        l_px_i,
+        add_uncertainty_terms([
+            u_cell["l_px"]["b"],
+            u_cell["l_px"]["p"]
+        ])
+    )
+    l_mm_i = un.ufloat(
+        l_mm_i,
+        add_uncertainty_terms([
+            u_cell["l_mm"]["b"],
+            u_cell["l_mm"]["p"]
+        ])
+    )
+    return 2 * delta * l_mm_i / l_px_i
