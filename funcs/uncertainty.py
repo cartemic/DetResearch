@@ -14,6 +14,11 @@ _dir_data = os.path.join(
     "data"
 )
 
+
+def add_uncertainty_terms(terms):
+    return np.sqrt(np.sum(np.square(terms)))
+
+
 # Cell size
 # pixel and caliper bias uncertainties, which are used for both schlieren and
 # soot foil measurements
@@ -44,7 +49,7 @@ u_cell = {
 
 # Soot Foil
 with pd.HDFStore(
-        os.path.join(_dir_data, "R_cell_size_soot_foil.h5" ),
+        os.path.join(_dir_data, "R_cell_size_soot_foil.h5"),
         "r"
 ) as store:
     _rep_median = np.ones(len(store["data"]["replicate"].unique()))
