@@ -4,6 +4,14 @@ Functions for reorganizing a file's imports nicely
 # stdlib imports
 import distutils.sysconfig as sysconfig
 import os
+import platform
+
+
+_d_map = {
+    "Linux": "/d",
+    "Windows": "D:\\"
+}
+d_drive = _d_map[platform.system()]
 
 
 def std_modules():
