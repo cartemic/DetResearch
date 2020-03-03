@@ -9,6 +9,87 @@ from scipy.stats import t, sem
 
 ureg = pint.UnitRegistry()
 quant = ureg.Quantity
+_dir_data = os.path.join(
+    os.path.dirname(__file__),
+    "data"
+)
+
+# Cell size
+# pixel and caliper bias uncertainties, which are used for both schlieren and
+# soot foil measurements
+_u_b_px = 0.5
+_u_b_caliper = 0.005
+
+
+# empty cell size uncertainty template
+def _u_dict():
+    return {
+        "b": np.NaN,
+        "p": np.NaN
+    }
+
+
+def _sub_dict():
+    return {
+        "delta_px": _u_dict(),
+        "l_px": _u_dict(),
+        "l_mm": _u_dict(),
+    }
+
+
+u_cell = {
+    "schlieren": _sub_dict(),
+    "soot_foil": _sub_dict()
+}
+
+# Soot Foil
+with pd.HDFStore(
+        os.path.join(_dir_data, "R_cell_size_soot_foil.h5" ),
+        "r"
+) as store:
+    _rep_median = np.ones(len(store["data"]["replicate"].unique()))
+    for i, (_, df_r) in enumerate(store["data"].groupby("replicate")):
+        _rep_median[i] = np.median(df_r["delta"].dropna().values)
+_u_p_delta_px_i_soot_foil = np.std(_rep_median) / np.sqrt(len(_rep_median))
+_u_p_l_px_i_soot_foil = pd.read_csv(
+    os.path.join(_dir_data, "R_L_px_soot_foil.csv")
+)["px_ruler"].sem()
+_u_p_l_mm_i_soot_foil = pd.read_csv(
+    os.path.join(_dir_data, "R_L_mm_soot_foil.csv")
+)["mm_ruler"].sem()
+u_cell["soot_foil"]["delta_px"]["b"] = _u_b_px
+u_cell["soot_foil"]["delta_px"]["p"] = _u_p_delta_px_i_soot_foil
+u_cell["soot_foil"]["l_px"]["b"] = _u_b_px
+u_cell["soot_foil"]["l_px"]["p"] = _u_p_l_px_i_soot_foil
+u_cell["soot_foil"]["l_mm"]["b"] = _u_b_caliper
+u_cell["soot_foil"]["l_mm"]["p"] = _u_p_l_mm_i_soot_foil
+
+# Schlieren
+with pd.HDFStore(
+        os.path.join(_dir_data, "R_cell_size_schlieren.h5"),
+        "r"
+) as store:
+    _rep_median = np.ones(len(store["data"]["replicate"].unique()))
+    for i, (_, df_r) in enumerate(store["data"].groupby("replicate")):
+        _rep_median[i] = np.median(df_r["delta_px"].dropna().values)
+_u_p_delta_px_i_schlieren = np.std(_rep_median) / np.sqrt(len(_rep_median))
+with pd.HDFStore(
+        os.path.join(_dir_data, "R_L_px_schlieren.h5"),
+        "r"
+) as store:
+    _u_p_l_px_i_schlieren = store.data["near"].sem()
+_u_p_l_mm_i_schlieren = pd.read_csv(
+    os.path.join(
+        _dir_data,
+        "R_L_mm_schlieren.csv"
+    )
+)["mm_18_squares"].sem()
+u_cell["schlieren"]["delta_px"]["b"] = _u_b_px
+u_cell["schlieren"]["delta_px"]["p"] = _u_p_delta_px_i_schlieren
+u_cell["schlieren"]["l_px"]["b"] = _u_b_px
+u_cell["schlieren"]["l_px"]["p"] = _u_p_l_px_i_schlieren
+u_cell["schlieren"]["l_mm"]["b"] = _u_b_caliper
+u_cell["schlieren"]["l_mm"]["p"] = _u_p_l_mm_i_schlieren
 
 # Temperature -- T type thermocouple in manifold is used for temp calculations.
 # Old datasets use K type tube thermocouple.
@@ -18,7 +99,7 @@ quant = ureg.Quantity
 # daq: NI 9211 operating instructions and specifications p 26
 #      using Typ (Autozero on)
 DF_9211 = pd.read_csv(
-    os.path.join(os.path.dirname(__file__), "data", "tc_err.csv")
+    os.path.join(_dir_data, "tc_err.csv")
 )
 TEMP_STD = {
     "T": (1.0, 0.0075),
@@ -311,9 +392,3 @@ def _u_pressure_fit(
     intercept = un.ufloat(intercept, u_intercept)
     cal_transducer = un.ufloat(0, u_cal_accuracy)
     return measured * slope + intercept + cal_transducer
-
-
-# Schlieren spatial uncertainty
-# comes from measurements of ENGR paper wost-case line thickness
-# TODO: move .csv into package and auto-calc on load
-engr_line_thk = un.ufloat(0.017100000000000008, 5.590169943749475e-05)
