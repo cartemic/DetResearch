@@ -60,6 +60,60 @@ def solution_with_inerts(
     )
 
 
+def wrapped_cvsolve(
+        gas,
+        sd,
+        max_tries=5,
+        t_end=1e-6
+):
+    """
+    Look jack, I don't have time for your `breaking` malarkey
+
+    Try cvsolve a handful of times with increasing max time lengths to see if
+    maybe it's just being mean.
+
+    Parameters
+    ----------
+    gas : ct.Solution
+        gas object to work on
+    sd : module
+        locally modified sdtoolbox
+    max_tries : int
+        how motivated are you
+    t_end : float
+        initial end time, which is doubled each iteration
+
+    Returns
+    -------
+    idk whatever was supposed to come out in the first place, it's late
+    """
+    tries = 0
+    # if you don't reset the Solution's properties it'll go crazy during the
+    # iteration process. Iterations are supposed to be independent, so that's...
+    # you know, pretty bad
+    init_tpx = gas.TPX
+    while tries < max_tries:
+        gas.TPX = init_tpx
+        tries += 1
+        if tries < max_tries:
+            try:
+                out = sd.cv.cvsolve(
+                    gas,
+                    t_end=t_end
+                )
+                break
+            except:
+                pass
+        else:
+            # let it break if it's gonna break after max tries
+            out = sd.cv.cvsolve(
+                gas,
+                t_end=t_end
+            )
+        t_end *= 2
+    return out
+
+
 class CellSize:
     """
     A class that, when called, calculates detonation cell sizes using the
@@ -217,10 +271,26 @@ class CellSize:
         self.Ts, Ps = gas.TP
         Ta = self.Ts * 1.02
         gas.TPX = Ta, Ps, q
-        cv_out_0 = sd.cv.cvsolve(gas)
+
+        max_tries = 10
+        base_t_end = 1e-6
+        # cv_out_0 = sd.cv.cvsolve(gas)
+        cv_out_0 = wrapped_cvsolve(
+            gas,
+            sd,
+            max_tries,
+            base_t_end
+        )
+
         Tb = self.Ts * 0.98
         gas.TPX = Tb, Ps, q
-        cv_out_1 = sd.cv.cvsolve(gas)
+        # cv_out_1 = sd.cv.cvsolve(gas, t_end=10e-6)
+        cv_out_1 = wrapped_cvsolve(
+            gas,
+            sd,
+            max_tries,
+            base_t_end
+        )
 
         # Approximate effective activation energy for CV explosion
         tau_a = cv_out_0['ind_time']
