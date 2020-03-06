@@ -54,7 +54,7 @@ def study_with_progress_bar(
 
 if __name__ == '__main__':
     import warnings
-    # warnings.simplefilter('ignore')
+    warnings.simplefilter('ignore')
     # inert = 'AR'
     _inert = 'None'
     # _mechanism = 'Mevel2017.cti'
@@ -69,7 +69,7 @@ if __name__ == '__main__':
     # diluent = 'AR'
     _diluent = 'None'
     _diluent_mol_frac = 0
-    _perturbation_fraction = 1e-6
+    _perturbation_fraction = 1e-12
 
     t = db.Table(
         'sensitivity.sqlite',
@@ -98,7 +98,7 @@ if __name__ == '__main__':
         ]):
             reactions.append(rxn)
 
-    # pbar = tqdm(total=len(reactions))
+    pbar = tqdm(total=len(reactions))
 
     _lock = Lock()
     # p = Pool(initializer=init, initargs=(_lock,))
@@ -122,7 +122,7 @@ if __name__ == '__main__':
     #         ] for i in range(len(reactions))
     #     ]
     # )
-    for i in range(5):# range(len(reactions)):
+    for i in range(len(reactions)):
         perform_study(
             _mechanism,
             _initial_temp,
@@ -137,5 +137,5 @@ if __name__ == '__main__':
             i,
             _lock
         )
-        # pbar.update(1)
+        pbar.update(1)
     print("woo!")
