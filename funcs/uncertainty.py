@@ -55,13 +55,25 @@ with pd.HDFStore(
     _rep_median = np.ones(len(store["data"]["replicate"].unique()))
     for i, (_, df_r) in enumerate(store["data"].groupby("replicate")):
         _rep_median[i] = np.median(df_r["delta"].dropna().values)
-_u_p_delta_px_i_soot_foil = np.std(_rep_median) / np.sqrt(len(_rep_median))
-_u_p_l_px_i_soot_foil = pd.read_csv(
+_df = len(_rep_median) - 1
+_u_p_delta_px_i_soot_foil = np.std(_rep_median) / np.sqrt(_df + 1) * \
+                            t.ppf(0.975, _df)
+del _rep_median, _df
+
+_df_soot_foil_px = pd.read_csv(
     os.path.join(_dir_data, "R_L_px_soot_foil.csv")
-)["px_ruler"].sem()
-_u_p_l_mm_i_soot_foil = pd.read_csv(
+)["px_ruler"]
+_u_p_l_px_i_soot_foil = _df_soot_foil_px.sem() * \
+                        t.ppf(0.975, len(_df_soot_foil_px)-1)
+del _df_soot_foil_px
+
+_df_soot_foil_mm = pd.read_csv(
     os.path.join(_dir_data, "R_L_mm_soot_foil.csv")
-)["mm_ruler"].sem()
+)["mm_ruler"]
+_u_p_l_mm_i_soot_foil = _df_soot_foil_mm.sem() * \
+                        t.ppf(0.975, len(_df_soot_foil_mm)-1)
+del _df_soot_foil_mm
+
 u_cell["soot_foil"]["delta_px"]["b"] = _u_b_px
 u_cell["soot_foil"]["delta_px"]["p"] = _u_p_delta_px_i_soot_foil
 u_cell["soot_foil"]["l_px"]["b"] = _u_b_px
@@ -77,18 +89,28 @@ with pd.HDFStore(
     _rep_median = np.ones(len(store["data"]["replicate"].unique()))
     for i, (_, df_r) in enumerate(store["data"].groupby("replicate")):
         _rep_median[i] = np.median(df_r["delta_px"].dropna().values)
-_u_p_delta_px_i_schlieren = np.std(_rep_median) / np.sqrt(len(_rep_median))
+_df = len(_rep_median) - 1
+_u_p_delta_px_i_schlieren = np.std(_rep_median) / np.sqrt(_df + 1) * \
+                            t.ppf(0.975, _df)
+del _rep_median, _df
+
 with pd.HDFStore(
         os.path.join(_dir_data, "R_L_px_schlieren.h5"),
         "r"
 ) as store:
-    _u_p_l_px_i_schlieren = store.data["near"].sem()
-_u_p_l_mm_i_schlieren = pd.read_csv(
+    _u_p_l_px_i_schlieren = store.data["near"].sem() * \
+                            t.ppf(0.975, len(store.data)-1)
+
+_df_schlieren_mm = pd.read_csv(
     os.path.join(
         _dir_data,
         "R_L_mm_schlieren.csv"
     )
-)["mm_18_squares"].sem()
+)["mm_18_squares"]
+_u_p_l_mm_i_schlieren = _df_schlieren_mm.sem() * \
+                        t.ppf(0.975, len(_df_schlieren_mm)-1)
+del _df_schlieren_mm
+
 u_cell["schlieren"]["delta_px"]["b"] = _u_b_px
 u_cell["schlieren"]["delta_px"]["p"] = _u_p_delta_px_i_schlieren
 u_cell["schlieren"]["l_px"]["b"] = _u_b_px
