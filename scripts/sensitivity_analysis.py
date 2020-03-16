@@ -69,7 +69,7 @@ if __name__ == '__main__':
     # diluent = 'AR'
     _diluent = 'None'
     _diluent_mol_frac = 0
-    _perturbation_fraction = 1e-12
+    _perturbation_fraction = 1e-2
 
     t = db.Table(
         'sensitivity.sqlite',
