@@ -92,10 +92,13 @@ def wrapped_cvsolve(
     # iteration process. Iterations are supposed to be independent, so that's...
     # you know, pretty bad
     init_tpx = gas.TPX
-    while tries < max_tries:
+    out = None
+    while tries <= max_tries:
         gas.TPX = init_tpx
         tries += 1
         if tries < max_tries:
+            # this exception is broad on purpose.
+            # noinspection PyBroadException
             try:
                 out = sd.cv.cvsolve(
                     gas,
@@ -111,6 +114,52 @@ def wrapped_cvsolve(
                 t_end=t_end
             )
         t_end *= 2
+    return out
+
+
+def wrapped_zndsolve(
+        gas,
+        base_gas,
+        cj_speed,
+        t_end,
+        max_step,
+        sd,
+        max_tries=5
+):
+    tries = 0
+    init_tpx = gas.TPX
+    init_tpx_base = base_gas.TPX
+    out = None
+    while tries <= max_tries:
+        # retry the simulation if the initial time step doesn't work
+        # drop time step by one order of magnitude every failure
+        gas.TPX = init_tpx
+        base_gas.TPX = init_tpx_base
+        tries += 1
+        if tries < max_tries:
+            try:
+                out = sd.znd.zndsolve(
+                    gas,
+                    base_gas,
+                    cj_speed,
+                    advanced_output=True,
+                    t_end=t_end,
+                    max_step=max_step
+                )
+                break
+            except ct.CanteraError:
+                pass
+        else:
+            # let it break if it's gonna break after max tries
+            out = sd.znd.zndsolve(
+                gas,
+                base_gas,
+                cj_speed,
+                advanced_output=True,
+                t_end=t_end,
+                max_step=max_step
+            )
+        max_step /= 10.
     return out
 
 
@@ -246,12 +295,14 @@ class CellSize:
                     1 + perturbation_fraction)
 
         # SOLVE ZND DETONATION ODES
-        out = sd.znd.zndsolve(
-            gas,
-            self.base_gas,
-            cj_speed,
-            advanced_output=True,
-            t_end=2e-3
+        out = wrapped_zndsolve(
+            gas=gas,
+            base_gas=self.base_gas,
+            cj_speed=cj_speed,
+            t_end=2e-3,
+            max_step=1e-4,
+            sd=sd,
+            max_tries=5
         )
 
         # Find CV parameters including effective activation energy
@@ -269,8 +320,8 @@ class CellSize:
                     1 + perturbation_fraction)
 
         self.Ts, Ps = gas.TP
-        Ta = self.Ts * 1.02
-        gas.TPX = Ta, Ps, q
+        temp_a = self.Ts * 1.02
+        gas.TPX = temp_a, Ps, q
 
         max_tries = 10
         base_t_end = 1e-6
@@ -282,8 +333,8 @@ class CellSize:
             base_t_end
         )
 
-        Tb = self.Ts * 0.98
-        gas.TPX = Tb, Ps, q
+        temp_b = self.Ts * 0.98
+        gas.TPX = temp_b, Ps, q
         # cv_out_1 = sd.cv.cvsolve(gas, t_end=10e-6)
         cv_out_1 = wrapped_cvsolve(
             gas,
@@ -299,7 +350,7 @@ class CellSize:
             self.activation_energy = 0
         else:
             self.activation_energy = 1 / self.Ts * (
-                    np.log(tau_a / tau_b) / ((1 / Ta) - (1 / Tb))
+                    np.log(tau_a / tau_b) / ((1 / temp_a) - (1 / temp_b))
             )
 
         #  Find Gavrikov induction time based on 50% limiting species
@@ -310,25 +361,25 @@ class CellSize:
             limit_species = 'O2'
         limit_species_loc = gas.species_index(limit_species)
         gas.TPX = self.Ts, Ps, q
-        X_initial = gas.mole_fraction_dict()[limit_species]
+        mf_initial = gas.mole_fraction_dict()[limit_species]
         gas.equilibrate('UV')
-        X_final = gas.mole_fraction_dict()[limit_species]
-        T_final = gas.T
-        X_gav = 0.5*(X_initial - X_final) + X_final
+        mf_final = gas.mole_fraction_dict()[limit_species]
+        temp_final = gas.T
+        mf_gav = 0.5*(mf_initial - mf_final) + mf_final
         t_gav = np.nanmax(
             np.concatenate([
                 cv_out_0['time'][
-                    cv_out_0['speciesX'][limit_species_loc] > X_gav
+                    cv_out_0['speciesX'][limit_species_loc] > mf_gav
                 ],
                 [0]
             ])
         )
 
         #  Westbrook time based on 50% temperature rise
-        T_west = 0.5*(T_final - self.Ts) + self.Ts
+        temp_west = 0.5*(temp_final - self.Ts) + self.Ts
         t_west = np.nanmax(
             np.concatenate([
-                cv_out_0['time'][cv_out_0['T'] < T_west],
+                cv_out_0['time'][cv_out_0['T'] < temp_west],
                 [0]
             ])
         )
@@ -443,8 +494,8 @@ class CellSize:
             Estimated cell size (m)
         """
         # Load parameters
-        T_0 = self.T1  # initial reactant temperature (K)
-        T_vn = self.Ts
+        temp_0 = self.T1  # initial reactant temperature (K)
+        temp_vn = self.Ts
 
         # Coefficients from Table 1
         a = -0.007843787493
@@ -461,7 +512,7 @@ class CellSize:
         m = 1.453392165
 
         # Equation 5
-        gav_y = T_vn / T_0
+        gav_y = temp_vn / temp_0
         cell_size = np.power(
             10,
             gav_y * (a * gav_y - b) + self.activation_energy *
