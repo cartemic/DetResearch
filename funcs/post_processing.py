@@ -1,5 +1,6 @@
 # stdlib imports
 import os
+import warnings
 
 # third party imports
 import cantera as ct
@@ -108,6 +109,13 @@ class _ProcessNewData:
             background subtracted schlieren images
         """
         dir_data = os.path.join(base_dir, test_date)
+        df_tests = cls._find_test_times(base_dir, test_date)
+        n_found_tests = len(df_tests)
+        n_shot_dirs = len([d for d in os.listdir(dir_data) if "Shot" in d])
+        if n_found_tests == 0:
+            raise ValueError("No tests detected in sensor log.tdms")
+        elif n_found_tests != n_shot_dirs:
+            raise ValueError("Number of tests does not match number of shots")
         df_nominal = cls._load_nominal_conditions(dir_data)
         df_sensor = TdmsFile(os.path.join(
             dir_data, "sensor log.tdms"
@@ -115,8 +123,6 @@ class _ProcessNewData:
         df_pressure = cls._extract_sensor_data(df_sensor, "pressure")
         df_temperature = cls._extract_sensor_data(df_sensor, "temperature")
         del df_sensor
-        df_tests = cls._find_test_times(base_dir, test_date)
-        # todo: raise error if number of tests doesn't match number of fires
         df_schlieren = pd.DataFrame(columns=["shot", "schlieren"])
         df_schlieren["schlieren"] = _collect_schlieren_dirs(
             base_dir, test_date
