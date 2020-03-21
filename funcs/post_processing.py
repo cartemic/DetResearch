@@ -193,6 +193,14 @@ class _ProcessNewData:
                 df_tests.at[idx, "u_dil_mf"] = row_results["u_dil_mf"]
                 df_tests.at[idx, "wave_speed"] = row_results["wave_speed"]
                 df_tests.at[idx, "u_wave_speed"] = row_results["u_wave_speed"]
+                df_tests.at[idx, "cutoff_fuel"] = row_results["cutoff_fuel"]
+                df_tests.at[idx, "cutoff_vacuum"] = row_results["cutoff_vacuum"]
+                df_tests.at[idx, "cutoff_diluent"] = row_results["cutoff_diluent"]
+                df_tests.at[idx, "cutoff_oxidizer"] = row_results["cutoff_oxidizer"]
+                df_tests.at[idx, "u_cutoff_fuel"] = row_results["u_cutoff_fuel"]
+                df_tests.at[idx, "u_cutoff_vacuum"] = row_results["u_cutoff_vacuum"]
+                df_tests.at[idx, "u_cutoff_diluent"] = row_results["u_cutoff_diluent"]
+                df_tests.at[idx, "u_cutoff_oxidizer"] = row_results["u_cutoff_oxidizer"]
 
         else:
             for idx, test_time_row in df_tests.iterrows():
@@ -233,6 +241,14 @@ class _ProcessNewData:
                 df_tests.at[idx, "u_dil_mf"] = row_results["u_dil_mf"]
                 df_tests.at[idx, "wave_speed"] = row_results["wave_speed"]
                 df_tests.at[idx, "u_wave_speed"] = row_results["u_wave_speed"]
+                df_tests.at[idx, "cutoff_fuel"] = row_results["cutoff_fuel"]
+                df_tests.at[idx, "cutoff_vacuum"] = row_results["cutoff_vacuum"]
+                df_tests.at[idx, "cutoff_diluent"] = row_results["cutoff_diluent"]
+                df_tests.at[idx, "cutoff_oxidizer"] = row_results["cutoff_oxidizer"]
+                df_tests.at[idx, "u_cutoff_fuel"] = row_results["u_cutoff_fuel"]
+                df_tests.at[idx, "u_cutoff_vacuum"] = row_results["u_cutoff_vacuum"]
+                df_tests.at[idx, "u_cutoff_diluent"] = row_results["u_cutoff_diluent"]
+                df_tests.at[idx, "u_cutoff_oxidizer"] = row_results["u_cutoff_oxidizer"]
 
         df_tests["date"] = test_date
         return df_tests, images
@@ -422,6 +438,14 @@ class _ProcessNewData:
         out["u_dil_mf"] = dil_mf.std_dev
         out["wave_speed"] = wave_speed.nominal_value
         out["u_wave_speed"] = wave_speed.std_dev
+        out["cutoff_fuel"] = p_cutoff_fuel.nominal_value
+        out["cutoff_vacuum"] = p_cutoff_vac.nominal_value
+        out["cutoff_diluent"] = p_cutoff_oxidizer.nominal_value
+        out["cutoff_oxidizer"] = p_cutoff_diluent.nominal_value
+        out["u_cutoff_fuel"] = p_cutoff_fuel.std_dev
+        out["u_cutoff_vacuum"] = p_cutoff_vac.std_dev
+        out["u_cutoff_diluent"] = p_cutoff_oxidizer.std_dev
+        out["u_cutoff_oxidizer"] = p_cutoff_diluent.std_dev
 
         return idx, out
 
@@ -740,7 +764,12 @@ class _ProcessNewData:
             uncertainty.u_pressure(press, daq_err=False)
         )
 
-        press = press.mean() + u_sample
+        try:
+            press = press.mean() + u_sample
+        except:
+            print(state)
+            print(df_state_cutoff_times[df_state_cutoff_times["state"] == state])
+            press.mean()
 
         return press
 
