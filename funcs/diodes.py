@@ -22,7 +22,8 @@ from uncertainties import unumpy as unp
 
 def find_diode_data(
         data_directory='',
-        base_file_name='diodes.tdms'
+        base_file_name='diodes.tdms',
+        ignore_hidden=True
 ):
     """
     Finds all diode data for a day of testing
@@ -48,11 +49,15 @@ def find_diode_data(
         )
 
     # get a list of directories containing base file name
-    diode_data_locations = [
-        os.path.join(location[0], base_file_name)
-        for location in os.walk(data_directory)
-        if base_file_name in location[2]
-    ]
+    diode_data_locations = []
+    for location in os.walk(data_directory):
+        if base_file_name in location[2]:
+            if ignore_hidden and "." in location[0]:
+                pass
+            else:
+                diode_data_locations.append(
+                    os.path.join(location[0], base_file_name)
+                )
 
     # raise an error if no folders contain diode output
     if not len(diode_data_locations):
@@ -60,7 +65,7 @@ def find_diode_data(
             'No instances of ' + base_file_name + ' found'
         )
 
-    return diode_data_locations
+    return sorted(diode_data_locations)
 
 
 def _velocity_calculator(
