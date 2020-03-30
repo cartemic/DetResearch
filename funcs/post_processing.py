@@ -612,6 +612,7 @@ class _ProcessNewData:
                 (df_state["state"] == "Mix Section Purge") &
                 (df_state["mode"] == "auto")
                 ].iloc[-1].time
+        df_test_times["start"] = pd.to_datetime(df_test_times["start"])
 
         return df_test_times
 
