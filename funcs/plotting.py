@@ -4,6 +4,13 @@ import pandas as pd
 from matplotlib import pyplot as plt
 
 
+def change_axis_legend_cols(axis, ncol):
+    # https://stackoverflow.com/a/56576849
+    h_, l_ = axis.get_legend_handles_labels()
+    axis.legend_.remove()
+    axis.legend(h_, l_, ncol=ncol)
+
+
 def subscript(
         s,
         reason='plot'
