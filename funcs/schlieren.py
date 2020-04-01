@@ -6,6 +6,7 @@ from datetime import datetime
 import json
 import numpy as np
 import uncertainties as un
+import uncertainties.unumpy as unp
 from matplotlib import pyplot as plt
 from matplotlib import widgets
 from skimage import io
@@ -544,7 +545,14 @@ class MeasurementCollector(object):  # pragma: no cover
 
     def get_data(self):
         points = self.fig.ginput(-1, timeout=-1)
-        return sorted(np.array([p[1] for p in points]))
+        points = unp.uarray(
+            sorted(np.array([p[1] for p in points])),
+            add_uncertainty_terms([
+                u_cell["delta_px"]["b"],
+                u_cell["delta_px"]["p"]
+            ])
+        )
+        return points
 
 
 def get_cell_size_from_delta(
@@ -557,7 +565,7 @@ def get_cell_size_from_delta(
 
     Parameters
     ----------
-    delta : dddddddddun.ufloat
+    delta : un.ufloat
     l_px_i : float
         nominal value of spatial calibration factor (px)
     l_mm_i : float
