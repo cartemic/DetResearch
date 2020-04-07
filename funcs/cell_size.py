@@ -15,6 +15,8 @@ http://shepherd.caltech.edu/EDL/PublicResources/sdt/
 import numpy as np
 import cantera as ct
 
+from .specific_heat_matching import diluted_species_dict
+
 OriginalSolution = ct.Solution
 
 
@@ -417,20 +419,28 @@ class CellSize:
             self.oxidizer
         )
         if self.diluent is not None and self.diluent_mol_frac > 0:
-            # dilute the gas!
-            mole_fractions = gas.mole_fraction_dict()
-            new_fuel_fraction = (1 - self.diluent_mol_frac) * \
-                mole_fractions[self.fuel]
-            new_oxidizer_fraction = (1 - self.diluent_mol_frac) * \
-                mole_fractions[self.oxidizer]
-            gas.X = '{0}: {1} {2}: {3} {4}: {5}'.format(
+            # # dilute the gas!
+            # mole_fractions = gas.mole_fraction_dict()
+            # new_fuel_fraction = (1 - self.diluent_mol_frac) * \
+            #     mole_fractions[self.fuel]
+            # new_oxidizer_fraction = (1 - self.diluent_mol_frac) * \
+            #     mole_fractions[self.oxidizer]
+            # gas.X = '{0}: {1} {2}: {3} {4}: {5}'.format(
+            #     self.diluent,
+            #     self.diluent_mol_frac,
+            #     self.fuel,
+            #     new_fuel_fraction,
+            #     self.oxidizer,
+            #     new_oxidizer_fraction
+            # )
+            # no need to write this twice. Use the function written for
+            # building test matrices
+            gas.X = diluted_species_dict(
+                gas.mole_fraction_dict(),
                 self.diluent,
-                self.diluent_mol_frac,
-                self.fuel,
-                new_fuel_fraction,
-                self.oxidizer,
-                new_oxidizer_fraction
+                self.diluent_mol_frac
             )
+
         gas.TP = self.initial_temp, self.initial_press
         if self.perturbed_reaction >= 0:
             gas.set_multiplier(
