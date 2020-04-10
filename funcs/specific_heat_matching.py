@@ -52,7 +52,6 @@ def diluted_species_dict(
 
     new_total_moles = sum(spec.values())
     for s in spec.keys():
-        print(s, spec[s])
         spec[s] /= new_total_moles
     return spec
 
