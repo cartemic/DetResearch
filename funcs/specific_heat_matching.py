@@ -3,19 +3,58 @@ import numpy as np
 from scipy.optimize import minimize
 
 
-def diluted_species_dict(spec, diluent, diluent_mol_frac):
-    if diluent not in spec.keys():
-        spec = {k: v * (1 - diluent_mol_frac) for k, v in spec.items()}
-        spec[diluent] = diluent_mol_frac
-        return spec
-    else:
-        if diluent_mol_frac != 0:
-            spec[diluent] += 1 / (1 / diluent_mol_frac - 1)
+def diluted_species_dict(
+        spec,
+        diluent,
+        diluent_mol_frac
+):
+    """
+    Creates a dictionary of mole fractions diluted by a given amount with a
+    given gas mixture
 
-        new_total_moles = sum(spec.values())
-        for s in spec.keys():
-            spec[s] /= new_total_moles
-        return spec
+    Parameters
+    ----------
+    spec : dict
+        Mole fraction dictionary (gas.mole_fraction_dict() from undiluted)
+    diluent : str
+        String of diluents using cantera's format, e.g. "CO2" or "N2:1 NO:0.01"
+    diluent_mol_frac : float
+        mole fraction of diluent to add
+
+    Returns
+    -------
+    dict
+        new mole_fraction_dict to be inserted into the cantera solution object
+    """
+    # collect total diluent moles
+    moles_dil = 0.
+    diluent_dict = dict()
+    split_diluents = diluent.split(" ")
+    if len(split_diluents) > 1:
+        for d in split_diluents:
+            key, value = d.split(":")
+            value = float(value)
+            diluent_dict[key] = value
+            moles_dil += value
+    else:
+        diluent_dict[diluent] = 1
+        moles_dil = 1
+
+    for key in diluent_dict.keys():
+        diluent_dict[key] /= moles_dil
+
+    for key, value in diluent_dict.items():
+        if key not in spec.keys():
+            spec[key] = 0
+
+        if diluent_mol_frac != 0:
+            spec[key] += diluent_dict[key] / (1 / diluent_mol_frac - 1)
+
+    new_total_moles = sum(spec.values())
+    for s in spec.keys():
+        print(s, spec[s])
+        spec[s] /= new_total_moles
+    return spec
 
 
 def spec_heat_error(
