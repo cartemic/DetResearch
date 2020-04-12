@@ -107,7 +107,7 @@ def wrapped_cvsolve(
                     t_end=t_end
                 )
                 break
-            except:
+            except:  # noqa: E722
                 pass
         else:
             # let it break if it's gonna break after max tries
@@ -216,6 +216,9 @@ class CellSize:
             inert=None,
             perturbed_reaction=-1,
             perturbation_fraction=1e-2,
+            max_tries_znd=5,
+            max_step_znd=1e-4,
+            max_tries_cv=10
     ):
         # sdt import is here to avoid any module-level weirdness stemming from
         # Solution object modification
@@ -302,9 +305,9 @@ class CellSize:
             base_gas=self.base_gas,
             cj_speed=cj_speed,
             t_end=2e-3,
-            max_step=1e-4,
+            max_step=max_step_znd,
             sd=sd,
-            max_tries=5
+            max_tries=max_tries_znd
         )
 
         # Find CV parameters including effective activation energy
@@ -325,13 +328,12 @@ class CellSize:
         temp_a = self.Ts * 1.02
         gas.TPX = temp_a, Ps, q
 
-        max_tries = 10
         base_t_end = 1e-6
         # cv_out_0 = sd.cv.cvsolve(gas)
         cv_out_0 = wrapped_cvsolve(
             gas,
             sd,
-            max_tries,
+            max_tries_cv,
             base_t_end
         )
 
@@ -341,7 +343,7 @@ class CellSize:
         cv_out_1 = wrapped_cvsolve(
             gas,
             sd,
-            max_tries,
+            max_tries_cv,
             base_t_end
         )
 
