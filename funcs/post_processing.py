@@ -195,12 +195,18 @@ class _ProcessNewData:
                 df_tests.at[idx, "u_wave_speed"] = row_results["u_wave_speed"]
                 df_tests.at[idx, "cutoff_fuel"] = row_results["cutoff_fuel"]
                 df_tests.at[idx, "cutoff_vacuum"] = row_results["cutoff_vacuum"]
-                df_tests.at[idx, "cutoff_diluent"] = row_results["cutoff_diluent"]
-                df_tests.at[idx, "cutoff_oxidizer"] = row_results["cutoff_oxidizer"]
-                df_tests.at[idx, "u_cutoff_fuel"] = row_results["u_cutoff_fuel"]
-                df_tests.at[idx, "u_cutoff_vacuum"] = row_results["u_cutoff_vacuum"]
-                df_tests.at[idx, "u_cutoff_diluent"] = row_results["u_cutoff_diluent"]
-                df_tests.at[idx, "u_cutoff_oxidizer"] = row_results["u_cutoff_oxidizer"]
+                df_tests.at[idx, "cutoff_diluent"] = \
+                    row_results["cutoff_diluent"]
+                df_tests.at[idx, "cutoff_oxidizer"] = \
+                    row_results["cutoff_oxidizer"]
+                df_tests.at[idx, "u_cutoff_fuel"] = \
+                    row_results["u_cutoff_fuel"]
+                df_tests.at[idx, "u_cutoff_vacuum"] = \
+                    row_results["u_cutoff_vacuum"]
+                df_tests.at[idx, "u_cutoff_diluent"] = \
+                    row_results["u_cutoff_diluent"]
+                df_tests.at[idx, "u_cutoff_oxidizer"] = \
+                    row_results["u_cutoff_oxidizer"]
 
         else:
             for idx, test_time_row in df_tests.iterrows():
@@ -243,14 +249,27 @@ class _ProcessNewData:
                 df_tests.at[idx, "u_wave_speed"] = row_results["u_wave_speed"]
                 df_tests.at[idx, "cutoff_fuel"] = row_results["cutoff_fuel"]
                 df_tests.at[idx, "cutoff_vacuum"] = row_results["cutoff_vacuum"]
-                df_tests.at[idx, "cutoff_diluent"] = row_results["cutoff_diluent"]
-                df_tests.at[idx, "cutoff_oxidizer"] = row_results["cutoff_oxidizer"]
-                df_tests.at[idx, "u_cutoff_fuel"] = row_results["u_cutoff_fuel"]
-                df_tests.at[idx, "u_cutoff_vacuum"] = row_results["u_cutoff_vacuum"]
-                df_tests.at[idx, "u_cutoff_diluent"] = row_results["u_cutoff_diluent"]
-                df_tests.at[idx, "u_cutoff_oxidizer"] = row_results["u_cutoff_oxidizer"]
+                df_tests.at[idx, "cutoff_diluent"] = \
+                    row_results["cutoff_diluent"]
+                df_tests.at[idx, "cutoff_oxidizer"] = \
+                    row_results["cutoff_oxidizer"]
+                df_tests.at[idx, "u_cutoff_fuel"] = \
+                    row_results["u_cutoff_fuel"]
+                df_tests.at[idx, "u_cutoff_vacuum"] = \
+                    row_results["u_cutoff_vacuum"]
+                df_tests.at[idx, "u_cutoff_diluent"] = \
+                    row_results["u_cutoff_diluent"]
+                df_tests.at[idx, "u_cutoff_oxidizer"] = \
+                    row_results["u_cutoff_oxidizer"]
 
         df_tests["date"] = test_date
+        # keep diluent dtype consistent as object. Using notna because pd.where
+        # works backwards compared with np.where and also my brain.
+        df_tests["diluent"].where(
+            df_tests["diluent"].notna(),
+            "None",
+            inplace=True
+        )
         return df_tests, images
 
     @classmethod
@@ -765,12 +784,7 @@ class _ProcessNewData:
             uncertainty.u_pressure(press, daq_err=False)
         )
 
-        try:
-            press = press.mean() + u_sample
-        except:
-            print(state)
-            print(df_state_cutoff_times[df_state_cutoff_times["state"] == state])
-            press.mean()
+        press = press.mean() + u_sample
 
         return press
 
