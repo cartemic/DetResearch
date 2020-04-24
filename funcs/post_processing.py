@@ -16,6 +16,9 @@ from ._dev import d_drive
 from .diodes import find_diode_data, calculate_velocity
 
 
+_DIR = os.path.split(__file__)[0]
+
+
 def _get_f_a_st(
         fuel="C3H8",
         oxidizer="O2:1 N2:3.76",
@@ -1423,7 +1426,7 @@ def process_multiple_days(
     
     Parameters
     ----------
-    dates_to_process : List[Str]
+    dates_to_process : List[Str] or str
         List of dates to post process as YYYY-MM-DD
     directory_structure : str
         How raw data is stored on disk. Can be "old" or "new", but probably
@@ -1439,8 +1442,13 @@ def process_multiple_days(
         Whether or not to overwrite existing processed data in the processed
         data HDF5 database
     """
+    if hasattr(dates_to_process, "lower"):
+        # it's a string. make it a list.
+        dates_to_process = [dates_to_process]
+
     with pd.HDFStore(
         os.path.join(
+            _DIR,
             "data",
             "tube_data_template.h5"
         ),
