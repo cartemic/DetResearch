@@ -12,6 +12,7 @@ from tables import NoSuchNodeError
 from uncertainties import unumpy as unp
 
 from . import diodes, schlieren, uncertainty
+from ._dev import d_drive
 from .diodes import find_diode_data, calculate_velocity
 
 
@@ -1398,3 +1399,110 @@ def get_existing_tests(
         existing_tests = ""
 
     return existing_tests
+
+
+def process_multiple_days(
+        dates_to_process,
+        directory_structure="new",
+        loc_processed_h5=os.path.join(
+            d_drive,
+            "Data",
+            "Processed",
+            "tube_data.h5"
+        ),
+        raw_base_dir=os.path.join(
+            d_drive,
+            "Data",
+            "Raw"
+        ),
+        multiprocess=True,
+        overwrite=False
+):
+    """
+    Process multiple days worth of tube data
+    
+    Parameters
+    ----------
+    dates_to_process : List[Str]
+        List of dates to post process as YYYY-MM-DD
+    directory_structure : str
+        How raw data is stored on disk. Can be "old" or "new", but probably
+         should be "new"
+    loc_processed_h5 : str
+        Location of processed data HDF5
+    raw_base_dir : str
+        Base directory where raw data directories are located. You shouldn't
+        need to change this.
+    multiprocess : bool
+        Whether to use multiprocessing for each day to speed things up
+    overwrite : bool
+        Whether or not to overwrite existing processed data in the processed
+        data HDF5 database
+    """
+    with pd.HDFStore(
+        os.path.join(
+            "data",
+            "tube_data_template.h5"
+        ),
+        "r"
+    ) as store:
+        df_out = store["data"]
+
+    for day in dates_to_process:
+        if directory_structure == "old":
+            df_day, day_schlieren = process_old_data(
+                raw_base_dir,
+                day,
+                multiprocess=multiprocess
+            )
+            df_day.drop(
+                "sensors",
+                axis=1,
+                inplace=True
+            )
+
+            # these were not included and I'm not using the old structure
+            # anymore so it's not important enough to fix
+            df_day["dil_mf"] = 0.
+            df_day["dil_mf_nom"] = 0.
+            df_day["diluent"] = "None"
+            df_day["fuel"] = "C3H8"
+            df_day["oxidizer"] = "air"
+            df_day["p_0_nom"] = 101325.
+            df_day["p_diluent"] = df_day["p_fuel"]
+            df_day["phi_nom"] = 1.
+            df_day["u_dil_mf"] = 0.
+            df_day["u_p_diluent"] = df_day["u_p_fuel"]
+
+        else:
+            df_day, day_schlieren = process_new_data(
+                raw_base_dir,
+                day,
+                multiprocess=multiprocess
+            )
+
+        # force df_day to match desired structure
+        df_day = pd.concat((df_out, df_day), sort=False, ignore_index=True)
+
+        day = "d" + day.replace("-", "_")
+        with pd.HDFStore(loc_processed_h5, "a") as store:
+            existing_tests = get_existing_tests(store)
+
+            for _, row in df_day.iterrows():
+                store_processed_test(
+                    row,
+                    existing_tests,
+                    overwrite,
+                    store
+                )
+
+            for img_key in day_schlieren.keys():
+                for i, img in enumerate(day_schlieren[img_key]):
+                    store_processed_schlieren(
+                        day,
+                        img,
+                        img_key,
+                        i,
+                        overwrite,
+                        store
+                    )
