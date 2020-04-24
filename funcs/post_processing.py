@@ -1,21 +1,18 @@
-# stdlib imports
+import multiprocessing as mp
 import os
 import warnings
 
-# third party imports
 import cantera as ct
-import multiprocessing as mp
 import pandas as pd
 import uncertainties as un
 from nptdms import TdmsFile
 from numpy import NaN, sqrt
 from scipy.stats import t
-from uncertainties import unumpy as unp
 from tables import NoSuchNodeError
+from uncertainties import unumpy as unp
 
-# local imports
-from .diodes import find_diode_data, calculate_velocity
 from . import diodes, schlieren, uncertainty
+from .diodes import find_diode_data, calculate_velocity
 
 
 def _get_f_a_st(
@@ -1306,3 +1303,98 @@ def process_new_data(
         diode_spacing,
         multiprocess
     )
+
+
+def store_processed_schlieren(
+        day,
+        img,
+        img_key,
+        frame_no,
+        overwrite,
+        store
+):
+    current_frame_loc = "schlieren/{:s}/{:s}/frame_{:02d}".format(
+        day,
+        img_key[-6:],
+        frame_no
+    )
+    if not overwrite and "/" + current_frame_loc in store.keys():
+        w_str = "Ignoring {:s}.".format(
+            current_frame_loc
+        )
+        warnings.warn(w_str)
+        pass
+    else:
+        store.put(
+            current_frame_loc,
+            pd.DataFrame(img)
+        )
+
+
+def row_dateshot_string(df_row):
+    return "_".join(df_row[["date", "shot"]].astype(str))
+
+
+def to_df_dtyped(df_or_series):
+    out = df_or_series.copy()
+    if isinstance(out, pd.Series):
+        out = out.to_frame().T
+    elif not isinstance(out, pd.DataFrame):
+        raise TypeError("argument must be a dataframe or series")
+
+    cols_numeric = ["shot", "t_0", "u_t_0", "p_0_nom", "p_0", "u_p_0",
+                    "phi_nom", "phi", "u_phi", "p_fuel", "u_p_fuel",
+                    "p_oxidizer", "u_p_oxidizer", "p_diluent", "u_p_diluent",
+                    "dil_mf_nom", "dil_mf", "u_dil_mf", "wave_speed",
+                    "u_wave_speed", "cutoff_fuel", "cutoff_vacuum",
+                    "cutoff_diluent", "cutoff_oxidizer", "u_cutoff_fuel",
+                    "u_cutoff_vacuum", "u_cutoff_diluent", "u_cutoff_oxidizer"]
+    cols_dt = ["start", "end"]
+    for c in cols_numeric:
+        out[c] = pd.to_numeric(out[c])
+    for c in cols_dt:
+        out[c] = pd.to_datetime(out[c])
+    return out
+
+
+def store_processed_test(
+        test_row,
+        existing_tests,
+        overwrite,
+        store
+):
+    current_test = row_dateshot_string(test_row)
+    if current_test in existing_tests:
+        if overwrite:
+            mask = existing_tests == current_test
+            store["data"][mask] = test_row.values
+        else:
+            w_str = "Ignoring {:s} shot {:d}.".format(
+                test_row["date"],
+                test_row["shot"]
+            )
+            warnings.warn(w_str)
+            pass
+    else:
+        store.append(
+            "data",
+            to_df_dtyped(test_row),
+            min_itemsize={
+                "schlieren": 50,
+                "diodes": 50
+            }
+        )
+
+
+def get_existing_tests(
+        store
+):
+    try:
+        existing_tests = store["data"].apply(
+            row_dateshot_string,
+            axis=1
+        ).values
+    except KeyError or NoSuchNodeError:
+        existing_tests = ""
+
+    return existing_tests
