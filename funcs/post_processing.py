@@ -11,6 +11,7 @@ from nptdms import TdmsFile
 from numpy import NaN, sqrt
 from scipy.stats import t
 from uncertainties import unumpy as unp
+from tables import NoSuchNodeError
 
 # local imports
 from .diodes import find_diode_data, calculate_velocity
@@ -322,7 +323,9 @@ class _ProcessNewData:
         fuel = df_test_nominal["fuel"]
         oxidizer = df_test_nominal["oxidizer"]
         if oxidizer.lower() == "air":
-            oxidizer = "O2:1 N2:3.76"
+            oxidizer_species = "O2:1 N2:3.76"
+        else:
+            oxidizer_species = oxidizer
         diluent = df_test_nominal["diluent"]
         dil_mf_nom = df_test_nominal["diluent_mol_frac_nominal"]
         phi_nom = df_test_nominal["phi_nominal"]
@@ -403,7 +406,7 @@ class _ProcessNewData:
             p_oxidizer,
             _get_f_a_st(
                 fuel,
-                oxidizer,
+                oxidizer_species,
                 mech
             )
         )
