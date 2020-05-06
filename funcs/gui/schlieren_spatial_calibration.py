@@ -6,7 +6,7 @@ from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 
-from ui import calWindow
+from funcs.gui.ui import calWindow
 
 
 class CalWindow(QDialog, calWindow.Ui_MainWindow):
@@ -58,7 +58,7 @@ class CalWindow(QDialog, calWindow.Ui_MainWindow):
         if hasattr(self.store, "close"):
             # noinspection PyCallingNonCallable
             self.store.close()
-0
+
     def load_hdf5(self):
         self.btnLoadHDF5.clearFocus()
         self.inpStartShot.setFocus()
