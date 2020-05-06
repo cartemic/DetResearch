@@ -13,119 +13,377 @@ This script uses SDToolbox, which can be found at
 http://shepherd.caltech.edu/EDL/PublicResources/sdt/
 """
 import numpy as np
-import sdtoolbox as sd
 import cantera as ct
+
+from .specific_heat_matching import diluted_species_dict
+
+OriginalSolution = ct.Solution
+
+
+def _enforce_species_list(species):
+    if isinstance(species, str):
+        species = [species.upper()]
+    elif hasattr(species, '__iter__') and \
+            all([isinstance(s, str) for s in species]):
+        species = [s.upper() for s in species]
+    else:
+        if hasattr(species, '__iter__'):
+            bad_type = [
+                type(item) for item in species if not isinstance(item, str)
+            ]
+        else:
+            bad_type = type(species)
+
+        raise TypeError('Bad species type: %s' % bad_type)
+
+    return species
+
+
+# noinspection PyArgumentList
+def solution_with_inerts(
+        mech,
+        inert_species
+):
+    inert_species = _enforce_species_list(inert_species)
+    species = ct.Species.listFromFile(mech)
+    reactions = []
+    for rxn in ct.Reaction.listFromFile(mech):
+        if not any([
+            s in list(rxn.reactants) + list(rxn.products)
+            for s in inert_species
+        ]):
+            reactions.append(rxn)
+
+    return OriginalSolution(
+        thermo='IdealGas',
+        species=species,
+        reactions=reactions,
+        kinetics='GasKinetics'
+    )
+
+
+def wrapped_cvsolve(
+        gas,
+        sd,
+        max_tries=5,
+        t_end=1e-6
+):
+    """
+    Look jack, I don't have time for your `breaking` malarkey
+
+    Try cvsolve a handful of times with increasing max time lengths to see if
+    maybe it's just being mean.
+
+    Parameters
+    ----------
+    gas : ct.Solution
+        gas object to work on
+    sd : module
+        locally modified sdtoolbox
+    max_tries : int
+        how motivated are you
+    t_end : float
+        initial end time, which is doubled each iteration
+
+    Returns
+    -------
+    idk whatever was supposed to come out in the first place, it's late
+    """
+    tries = 0
+    # if you don't reset the Solution's properties it'll go crazy during the
+    # iteration process. Iterations are supposed to be independent, so that's...
+    # you know, pretty bad
+    init_tpx = gas.TPX
+    out = None
+    while tries <= max_tries:
+        gas.TPX = init_tpx
+        tries += 1
+        if tries < max_tries:
+            # this exception is broad on purpose.
+            # noinspection PyBroadException
+            try:
+                out = sd.cv.cvsolve(
+                    gas,
+                    t_end=t_end
+                )
+                break
+            except:  # noqa: E722
+                pass
+        else:
+            # let it break if it's gonna break after max tries
+            out = sd.cv.cvsolve(
+                gas,
+                t_end=t_end
+            )
+        t_end *= 2
+    return out
+
+
+def wrapped_zndsolve(
+        gas,
+        base_gas,
+        cj_speed,
+        t_end,
+        max_step,
+        sd,
+        max_tries=5
+):
+    tries = 0
+    init_tpx = gas.TPX
+    init_tpx_base = base_gas.TPX
+    out = None
+    while tries <= max_tries:
+        # retry the simulation if the initial time step doesn't work
+        # drop time step by one order of magnitude every failure
+        gas.TPX = init_tpx
+        base_gas.TPX = init_tpx_base
+        tries += 1
+        if tries < max_tries:
+            try:
+                out = sd.znd.zndsolve(
+                    gas,
+                    base_gas,
+                    cj_speed,
+                    advanced_output=True,
+                    t_end=t_end,
+                    max_step=max_step
+                )
+                break
+            except ct.CanteraError:
+                pass
+        else:
+            # let it break if it's gonna break after max tries
+            out = sd.znd.zndsolve(
+                gas,
+                base_gas,
+                cj_speed,
+                advanced_output=True,
+                t_end=t_end,
+                max_step=max_step
+            )
+        max_step /= 10.
+    return out
 
 
 class CellSize:
     """
-    todo: docstring pls
+    A class that, when called, calculates detonation cell sizes using the
+    methods of Westbrook, Ng, and Gavrikov. Based on the script
+    demo_ZND_CJ_cell.m which can be found at
+    http://shepherd.caltech.edu/EDL/PublicResources/sdt/nb/sdt_intro.slides.html
+
+    Inputs
+    ------
+    base_mechanism : str
+        Base chemical mechanism for Cantera calculations
+    initial_temp : float
+        Initial mixture temperature in Kelvin
+    initial_press : float
+        Initial mixture temperature in Pascals
+    fuel : str
+        Fuel
+    oxidizer : str
+        Oxidizer
+    equivalence : float
+        Equivalence ratio
+    diluent : str
+        Diluent
+    diluent_mol_frac : float
+        Mole fraction of diluent
+    cj_speed : float
+        Chapman-Jouguet wave speed of the mixture specified above
+    inert : str or None
+        Specie to deactivate (must be deactivated in CJ speed calculation as
+        well). Defaults to None
+    perturbed_reaction : int
+        Reaction number to perturb. Defaults to -1, meaning that no reaction is
+        perturbed
+    perturbation_fraction : float
+        Fraction by which to perturb the specified reaction's forward and
+        reverse rate constants, i.e. dk/k. Defaults to 1e-2 (1%)
     """
     def __call__(
             self,
-            P1,
-            T1,
+            base_mechanism,
+            initial_temp,
+            initial_press,
             fuel,
             oxidizer,
-            phi,
-            mech,
-            diluent=None,
-            diluent_mol_frac=0
-    ):
-        self.T1 = T1
-        gas1 = self._build_gas_object(
-            mech,
-            fuel,
-            oxidizer,
-            phi,
+            equivalence,
             diluent,
-            diluent_mol_frac
-        )
-        q = gas1.X
-        cj_speed = sd.postshock.CJspeed(P1, T1, q, mech)
-        gas1.TP = T1, P1
+            diluent_mol_frac,
+            cj_speed,
+            inert=None,
+            perturbed_reaction=-1,
+            perturbation_fraction=1e-2,
+            max_tries_znd=5,
+            max_step_znd=1e-4,
+            max_tries_cv=10
+    ):
+        # sdt import is here to avoid any module-level weirdness stemming from
+        # Solution object modification
+        import sdtoolbox as sd
+
+        # self.mechanism will change with inert species, but base will not
+        self.mechanism = base_mechanism
+        self.base_mechanism = base_mechanism
+        self.initial_temp = initial_temp
+        self.initial_press = initial_press
+        self.fuel = fuel
+        self.oxidizer = oxidizer
+        self.equivalence = equivalence
+        self.diluent = diluent
+        self.diluent_mol_frac = diluent_mol_frac
+        self.inert = inert
+        self.T1 = initial_temp
+        self.perturbed_reaction = perturbed_reaction
+        self.perturbation_fraction = perturbation_fraction
+
+        if perturbed_reaction != -1:
+            # alter ct.Solution within sdtoolbox so that it returns perturbed
+            # reaction results
+            def my_solution(mech):
+                if inert is None:
+                    original_gas = OriginalSolution(mech)
+                else:
+                    original_gas = solution_with_inerts(
+                        mech,
+                        inert
+                    )
+                original_gas.set_multiplier(
+                    1 + perturbation_fraction,
+                    perturbed_reaction
+                )
+                return original_gas
+            sd.postshock.ct.Solution = my_solution
+
+        self.base_gas = self._build_gas_object()
+        q = self.base_gas.X
+
+        if perturbed_reaction >= 0:
+            assert (self.base_gas.multiplier(perturbed_reaction) ==
+                    1 + perturbation_fraction)
+        for rxn in range(self.base_gas.n_reactions):
+            if rxn != perturbed_reaction:
+                assert self.base_gas.multiplier(rxn) == 1
 
         # FIND EQUILIBRIUM POST SHOCK STATE FOR GIVEN SPEED
         gas = sd.postshock.PostShock_eq(
             cj_speed,
-            P1,
-            T1,
+            initial_press,
+            initial_temp,
             q,
-            mech
+            self.mechanism
         )
-        u_cj = cj_speed * gas1.density / gas.density
+
+        if perturbed_reaction >= 0:
+            assert (gas.multiplier(perturbed_reaction) ==
+                    1 + perturbation_fraction)
+        for rxn in range(gas.n_reactions):
+            if rxn != perturbed_reaction:
+                assert gas.multiplier(rxn) == 1
+
+        u_cj = cj_speed * self.base_gas.density / gas.density
         self.cj_speed = u_cj
 
         # FIND FROZEN POST SHOCK STATE FOR GIVEN SPEED
         gas = sd.postshock.PostShock_fr(
             cj_speed,
-            P1,
-            T1,
+            initial_press,
+            initial_temp,
             q,
-            mech
+            self.mechanism
         )
 
+        if perturbed_reaction >= 0:
+            assert (gas.multiplier(perturbed_reaction) ==
+                    1 + perturbation_fraction)
+
         # SOLVE ZND DETONATION ODES
-        out = sd.znd.zndsolve(
-            gas,
-            gas1,
-            cj_speed,
-            advanced_output=True,
-            t_end=2e-3
+        out = wrapped_zndsolve(
+            gas=gas,
+            base_gas=self.base_gas,
+            cj_speed=cj_speed,
+            t_end=2e-3,
+            max_step=max_step_znd,
+            sd=sd,
+            max_tries=max_tries_znd
         )
 
         # Find CV parameters including effective activation energy
-        gas.TPX = T1, P1, q
+        gas.TPX = initial_temp, initial_press, q
         gas = sd.postshock.PostShock_fr(
             cj_speed,
-            P1,
-            T1,
+            initial_press,
+            initial_temp,
             q,
-            mech
+            self.mechanism
         )
+
+        if perturbed_reaction >= 0:
+            assert (gas.multiplier(perturbed_reaction) ==
+                    1 + perturbation_fraction)
+
         self.Ts, Ps = gas.TP
-        Ta = self.Ts * 1.02
-        gas.TPX = Ta, Ps, q
-        CVout1 = sd.cv.cvsolve(gas)
-        Tb = self.Ts * 0.98
-        gas.TPX = Tb, Ps, q
-        CVout2 = sd.cv.cvsolve(gas)
+        temp_a = self.Ts * 1.02
+        gas.TPX = temp_a, Ps, q
+
+        base_t_end = 1e-6
+        # cv_out_0 = sd.cv.cvsolve(gas)
+        cv_out_0 = wrapped_cvsolve(
+            gas,
+            sd,
+            max_tries_cv,
+            base_t_end
+        )
+
+        temp_b = self.Ts * 0.98
+        gas.TPX = temp_b, Ps, q
+        # cv_out_1 = sd.cv.cvsolve(gas, t_end=10e-6)
+        cv_out_1 = wrapped_cvsolve(
+            gas,
+            sd,
+            max_tries_cv,
+            base_t_end
+        )
 
         # Approximate effective activation energy for CV explosion
-        taua = CVout1['ind_time']
-        taub = CVout2['ind_time']
-        if taua == 0 or taub == 0:
+        tau_a = cv_out_0['ind_time']
+        tau_b = cv_out_1['ind_time']
+        if tau_a == 0 or tau_b == 0:
             self.activation_energy = 0
         else:
             self.activation_energy = 1 / self.Ts * (
-                    np.log(taua / taub) / ((1 / Ta) - (1 / Tb))
+                    np.log(tau_a / tau_b) / ((1 / temp_a) - (1 / temp_b))
             )
 
         #  Find Gavrikov induction time based on 50% limiting species
         #  consumption, fuel for lean mixtures, oxygen for rich mixtures
-        if phi >= 1:
+        if equivalence <= 1:
             limit_species = fuel
         else:
             limit_species = 'O2'
         limit_species_loc = gas.species_index(limit_species)
         gas.TPX = self.Ts, Ps, q
-        X_initial = gas.mole_fraction_dict()[limit_species]
+        mf_initial = gas.mole_fraction_dict()[limit_species]
         gas.equilibrate('UV')
-        X_final = gas.mole_fraction_dict()[limit_species]
-        T_final = gas.T
-        X_gav = 0.5*(X_initial - X_final) + X_final
+        mf_final = gas.mole_fraction_dict()[limit_species]
+        temp_final = gas.T
+        mf_gav = 0.5*(mf_initial - mf_final) + mf_final
         t_gav = np.nanmax(
             np.concatenate([
-                CVout1['time'][CVout1['speciesX'][limit_species_loc] > X_gav],
+                cv_out_0['time'][
+                    cv_out_0['speciesX'][limit_species_loc] > mf_gav
+                ],
                 [0]
             ])
         )
 
         #  Westbrook time based on 50% temperature rise
-        T_west = 0.5*(T_final - self.Ts) + self.Ts
+        temp_west = 0.5*(temp_final - self.Ts) + self.Ts
         t_west = np.nanmax(
             np.concatenate([
-                CVout1['time'][CVout1['T'] < T_west],
+                cv_out_0['time'][cv_out_0['T'] < temp_west],
                 [0]
             ])
         )
@@ -147,37 +405,49 @@ class CellSize:
             'Gavrikov': self._cell_size_gavrikov(),
             'Ng': self._cell_size_ng()
         }
+
         return self.cell_size
 
-    @staticmethod
-    def _build_gas_object(
-            mech,
-            fuel,
-            oxidizer,
-            phi,
-            diluent,
-            diluent_mol_frac
-    ):
-        gas = ct.Solution(mech)
+    def _build_gas_object(self):
+        if self.inert is None:
+            gas = ct.Solution(self.mechanism)
+        else:
+            # this will change self.mechanism to the new one with inerts
+            gas = solution_with_inerts(self.mechanism, self.inert)
+
         gas.set_equivalence_ratio(
-            phi,
-            fuel,
-            oxidizer
+            self.equivalence,
+            self.fuel,
+            self.oxidizer
         )
-        if diluent is not None and diluent_mol_frac > 0:
-            # dilute the gas!
-            mole_fractions = gas.mole_fraction_dict()
-            new_fuel_fraction = (1 - diluent_mol_frac) * \
-                mole_fractions[fuel]
-            new_oxidizer_fraction = (1 - diluent_mol_frac) * \
-                mole_fractions[oxidizer]
-            gas.X = '{0}: {1} {2}: {3} {4}: {5}'.format(
-                diluent,
-                diluent_mol_frac,
-                fuel,
-                new_fuel_fraction,
-                oxidizer,
-                new_oxidizer_fraction
+        if self.diluent is not None and self.diluent_mol_frac > 0:
+            # # dilute the gas!
+            # mole_fractions = gas.mole_fraction_dict()
+            # new_fuel_fraction = (1 - self.diluent_mol_frac) * \
+            #     mole_fractions[self.fuel]
+            # new_oxidizer_fraction = (1 - self.diluent_mol_frac) * \
+            #     mole_fractions[self.oxidizer]
+            # gas.X = '{0}: {1} {2}: {3} {4}: {5}'.format(
+            #     self.diluent,
+            #     self.diluent_mol_frac,
+            #     self.fuel,
+            #     new_fuel_fraction,
+            #     self.oxidizer,
+            #     new_oxidizer_fraction
+            # )
+            # no need to write this twice. Use the function written for
+            # building test matrices
+            gas.X = diluted_species_dict(
+                gas.mole_fraction_dict(),
+                self.diluent,
+                self.diluent_mol_frac
+            )
+
+        gas.TP = self.initial_temp, self.initial_press
+        if self.perturbed_reaction >= 0:
+            gas.set_multiplier(
+                1 + self.perturbation_fraction,
+                self.perturbed_reaction
             )
         return gas
 
@@ -236,8 +506,8 @@ class CellSize:
             Estimated cell size (m)
         """
         # Load parameters
-        T_0 = self.T1  # initial reactant temperature (K)
-        T_vn = self.Ts
+        temp_0 = self.T1  # initial reactant temperature (K)
+        temp_vn = self.Ts
 
         # Coefficients from Table 1
         a = -0.007843787493
@@ -254,7 +524,7 @@ class CellSize:
         m = 1.453392165
 
         # Equation 5
-        gav_y = T_vn / T_0
+        gav_y = temp_vn / temp_0
         cell_size = np.power(
             10,
             gav_y * (a * gav_y - b) + self.activation_energy *
@@ -284,6 +554,6 @@ class CellSize:
         return 29 * self.induction_length['Westbrook']
 
 
-if __name__ == '__main__':
+if __name__ == '__main__':  # pragma: no cover
     import subprocess
     subprocess.check_call('pytest -vv tests/test_cell_size.py')

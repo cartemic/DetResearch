@@ -16,11 +16,14 @@ from nptdms import TdmsFile
 from tkinter import filedialog as fd
 from tkinter import Tk
 import scipy.signal as signal
+import uncertainties as un
+from uncertainties import unumpy as unp
 
 
 def find_diode_data(
         data_directory='',
-        base_file_name='diodes.tdms'
+        base_file_name='diodes.tdms',
+        ignore_hidden=True
 ):
     """
     Finds all diode data for a day of testing
@@ -46,11 +49,15 @@ def find_diode_data(
         )
 
     # get a list of directories containing base file name
-    diode_data_locations = [
-        os.path.join(location[0], base_file_name)
-        for location in os.walk(data_directory)
-        if base_file_name in location[2]
-    ]
+    diode_data_locations = []
+    for location in os.walk(data_directory):
+        if base_file_name in location[2]:
+            if ignore_hidden and "." in location[0]:
+                pass
+            else:
+                diode_data_locations.append(
+                    os.path.join(location[0], base_file_name)
+                )
 
     # raise an error if no folders contain diode output
     if not len(diode_data_locations):
@@ -58,12 +65,11 @@ def find_diode_data(
             'No instances of ' + base_file_name + ' found'
         )
 
-    return diode_data_locations
+    return sorted(diode_data_locations)
 
 
 def _velocity_calculator(
         diode_data_file,
-        sample_rate,
         sample_specific_velocity,
         apply_lowpass,
         multiprocess=False,
@@ -91,24 +97,19 @@ def _velocity_calculator(
         apply_lowpass
     )
 
-    # make sure something happened during the test by averaging over a single
-    # period of 60Hz noise. If only 60Hz noise is present, the rolling average
-    # will be less than zero.
-    noise_period = int(sample_rate/60)
-    data_is_useful = all(
-        [value > 0 for value in
-         diode_dataframe.rolling(noise_period).mean().max().values]
+    arrival_times = unp.uarray(
+        diode_dataframe.diff(axis=0).idxmax(axis=0, skipna=True).values,
+        [0.5, 0.5]
     )
-
-    if data_is_useful:
-        calculated_velocity = sample_specific_velocity / np.diff(
-                diode_dataframe.diff(axis=0).idxmax(
-                    axis=0,
-                    skipna=True
-                ).values
-            )
+    arrival_diff = np.diff(arrival_times)
+    if arrival_diff > 0:
+        calculated_velocity = sample_specific_velocity / arrival_diff
     else:
-        calculated_velocity = np.zeros(len(diode_dataframe.keys())-1)
+        calculated_velocity = unp.uarray([0.], [0.])
+
+    if calculated_velocity > 3000:
+        # obvious garbage
+        calculated_velocity *= 0
 
     if multiprocess:
         return instance, calculated_velocity
@@ -179,6 +180,7 @@ def _diode_filter(
 def calculate_velocity(
         diode_data_location,
         diode_spacing=0.3048,
+        spacing_uncert=0.00079375,
         sample_frequency=1e6,
         lowpass=True,
         multiprocess=False
@@ -193,6 +195,8 @@ def calculate_velocity(
     diode_spacing : float
         Distance between the diodes, in meters (assumed to be uniform between
         all diodes)
+    spacing_uncert : float
+        Uncertainty in diode spacing, in meters
     sample_frequency : float
         Sampling frequency of diode data in Hz
     lowpass : bool
@@ -205,13 +209,15 @@ def calculate_velocity(
     numpy.ndarray
         Array of inter-diode wave speeds
     """
-    specific_velocity = diode_spacing * sample_frequency
+    specific_velocity = un.ufloat(
+        diode_spacing * sample_frequency,
+        spacing_uncert
+    )
 
     if isinstance(diode_data_location, str):
         # a single path was input as a string
         return _velocity_calculator(
             diode_data_location,
-            sample_frequency,
             specific_velocity,
             lowpass,
             multiprocess
@@ -224,7 +230,6 @@ def calculate_velocity(
             mp_result = pool.starmap(
                 _velocity_calculator,
                 [[location,
-                  sample_frequency,
                   specific_velocity,
                   lowpass,
                   multiprocess,
@@ -245,7 +250,6 @@ def calculate_velocity(
             return np.array(list(map(
                 _velocity_calculator,
                 [location for location in diode_data_location],
-                [sample_frequency for _ in range(len(diode_data_location))],
                 [specific_velocity for _ in range(len(diode_data_location))],
                 [lowpass for _ in range(len(diode_data_location))],
                 [multiprocess for _ in range(len(diode_data_location))]

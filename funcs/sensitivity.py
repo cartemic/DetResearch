@@ -1,268 +1,295 @@
-# -*- coding: utf-8 -*-
-"""
-PURPOSE:
-    Tools for ZND detonation simulation and chemical sensitivity analysis using
-    cantera
-
-CREATED BY:
-    Mick Carter
-    Oregon State University
-    CIRE and Propulsion Lab
-    cartemic@oregonstate.edu
-"""
-
-import cantera as ct
-import os
+from funcs import cell_size
+from funcs import database as db
+import sdtoolbox as sd
 
 
-def _find_specie_in_str(specie, equation_str):
-    """
-    does what it says on the label
-
-    Parameters
-    ----------
-    specie : str
-        Desired chemical specie
-    equation_str : str
-        Equation string to search
-
-    Returns
-    -------
-    found_specie : bool
-        True if species is found, False if not
-
-    """
-    check_length = len(specie) + 1
-    found_specie = ' %s ' % specie in equation_str \
-        or equation_str[:check_length] == '%s ' % specie \
-        or equation_str[-check_length:] == ' %s' % specie \
-
-    return found_specie
-
-
-def _check_input_filetype(fname, extension):
-    if fname[-len(extension):] != extension:
-        raise NameError('{0:s} is not a {1:s} file'.format(fname, extension))
-
-
-def _check_output_filetype(fname, extension):
-    if fname[-len(extension):] != extension:
-        fname += extension
-    return fname
-
-
-def _enforce_species_list(species):
-    if isinstance(species, str):
-        species = [species.upper()]
-    elif hasattr(species, '__iter__'):
-        species = [s.upper() for s in species]
-    else:
-        raise TypeError('Bad species type: %s' % type(species))
-
-    return species
-
-
-def _get_file_locations(mech, out_file):
-    mech_dir = os.path.join(
-        os.path.split(ct.__file__)[0],
-        'data'
+def check_stored_base_cj_speed(
+        table,
+        mechanism,
+        initial_temp,
+        initial_press,
+        fuel,
+        oxidizer,
+        equivalence,
+        diluent,
+        diluent_mol_frac,
+        inert,
+):
+    current_data = table.fetch_test_rows(
+            mechanism=mechanism,
+            initial_temp=initial_temp,
+            initial_press=initial_press,
+            fuel=fuel,
+            oxidizer=oxidizer,
+            equivalence=equivalence,
+            diluent=diluent,
+            diluent_mol_frac=diluent_mol_frac,
+            inert=inert
     )
-    in_loc = os.path.join(
-        mech_dir,
-        mech
+    return len(current_data['cj_speed']) == 1
+
+
+def check_stored_base_calcs(
+        table,
+        mechanism,
+        initial_temp,
+        initial_press,
+        fuel,
+        oxidizer,
+        equivalence,
+        diluent,
+        diluent_mol_frac,
+        inert,
+):
+    current_data = table.fetch_test_rows(
+            mechanism=mechanism,
+            initial_temp=initial_temp,
+            initial_press=initial_press,
+            fuel=fuel,
+            oxidizer=oxidizer,
+            equivalence=equivalence,
+            diluent=diluent,
+            diluent_mol_frac=diluent_mol_frac,
+            inert=inert
     )
-    out_loc = os.path.join(
-        mech_dir,
-        out_file
+    return all([
+        current_data['ind_len_west'][0] > 0,
+        current_data['ind_len_gav'][0] > 0,
+        current_data['ind_len_ng'][0] > 0,
+        current_data['cell_size_west'][0] > 0,
+        current_data['cell_size_gav'][0] > 0,
+        current_data['cell_size_ng'][0] > 0,
+    ])
+
+
+def perform_study(
+        mech,
+        init_temp,
+        init_press,
+        equivalence,
+        fuel,
+        oxidizer,
+        diluent,
+        diluent_mol_frac,
+        inert,
+        perturbation_fraction,
+        perturbed_reaction_no,
+        db_lock
+):
+    CellSize = cell_size.CellSize()
+    gas = cell_size.solution_with_inerts(mech, inert)
+    gas.TP = init_temp, init_press
+    gas.set_equivalence_ratio(
+        equivalence,
+        fuel,
+        oxidizer
+    )
+    db_name = 'sensitivity.sqlite'
+    table_name = 'data'
+    current_table = db.Table(
+        database=db_name,
+        table_name=table_name
+
     )
 
-    if not os.path.exists(in_loc):
-        raise FileNotFoundError(
-            '%s not found in cantera data directory' % mech
+    with db_lock:
+        # check for stored cj speed
+        stored_cj = check_stored_base_cj_speed(
+            table=current_table,
+            mechanism=mech,
+            initial_temp=init_temp,
+            initial_press=init_press,
+            fuel=fuel,
+            oxidizer=oxidizer,
+            equivalence=equivalence,
+            diluent=diluent,
+            diluent_mol_frac=diluent_mol_frac,
+            inert=inert
+        )
+        if not stored_cj:
+            # calculate and store cj speed
+            cj_speed = sd.postshock.CJspeed(
+                P1=init_press,
+                T1=init_temp,
+                q=gas.mole_fraction_dict(),
+                mech=mech
+            )
+            rxn_table_id = current_table.store_test_row(
+                mechanism=mech,
+                initial_temp=init_temp,
+                initial_press=init_press,
+                fuel=fuel,
+                oxidizer=oxidizer,
+                equivalence=equivalence,
+                diluent=diluent,
+                diluent_mol_frac=diluent_mol_frac,
+                inert=inert,
+                cj_speed=cj_speed,
+                ind_len_west=0,
+                ind_len_gav=0,
+                ind_len_ng=0,
+                cell_size_west=0,
+                cell_size_gav=0,
+                cell_size_ng=0,
+                overwrite_existing=False
+            )
+        else:
+            # stored cj speed exists
+            current_data = current_table.fetch_test_rows(
+                mechanism=mech,
+                initial_temp=init_temp,
+                initial_press=init_press,
+                fuel=fuel,
+                oxidizer=oxidizer,
+                equivalence=equivalence,
+                diluent=diluent,
+                diluent_mol_frac=diluent_mol_frac,
+                inert=inert
+            )
+            [rxn_table_id] = current_data['rxn_table_id']
+            [cj_speed] = current_data['cj_speed']
+            del current_data
+        del stored_cj
+
+        # check for stored base reaction data
+        stored_rxns = current_table.check_for_stored_base_data(rxn_table_id)
+        if not stored_rxns:
+            current_table.store_base_rxn_table(
+                rxn_table_id=rxn_table_id,
+                gas=gas
+                )
+        del stored_rxns
+
+        stored_base_calcs = check_stored_base_calcs(
+            table=current_table,
+            mechanism=mech,
+            initial_temp=init_temp,
+            initial_press=init_press,
+            fuel=fuel,
+            oxidizer=oxidizer,
+            equivalence=equivalence,
+            diluent=diluent,
+            diluent_mol_frac=diluent_mol_frac,
+            inert=inert
+        )
+        if not stored_base_calcs:
+            # calculate base cell size
+            base_cell_calcs = CellSize(
+                base_mechanism=mech,
+                cj_speed=cj_speed,
+                initial_temp=init_temp,
+                initial_press=init_press,
+                fuel=fuel,
+                oxidizer=oxidizer,
+                equivalence=equivalence,
+                diluent=diluent,
+                diluent_mol_frac=diluent_mol_frac,
+                inert=inert,
+            )
+            base_ind_len = CellSize.induction_length
+            current_table.store_test_row(
+                mechanism=mech,
+                initial_temp=init_temp,
+                initial_press=init_press,
+                fuel=fuel,
+                oxidizer=oxidizer,
+                equivalence=equivalence,
+                diluent=diluent,
+                diluent_mol_frac=diluent_mol_frac,
+                inert=inert,
+                cj_speed=cj_speed,
+                ind_len_west=base_ind_len['Westbrook'],
+                ind_len_gav=base_ind_len['Gavrikov'],
+                ind_len_ng=base_ind_len['Ng'],
+                cell_size_west=base_cell_calcs['Westbrook'],
+                cell_size_gav=base_cell_calcs['Gavrikov'],
+                cell_size_ng=base_cell_calcs['Ng'],
+                overwrite_existing=True
+            )
+        else:
+            # look up base calcs from db
+            current_data = current_table.fetch_test_rows(
+                mechanism=mech,
+                initial_temp=init_temp,
+                initial_press=init_press,
+                fuel=fuel,
+                oxidizer=oxidizer,
+                equivalence=equivalence,
+                diluent=diluent,
+                diluent_mol_frac=diluent_mol_frac,
+                inert=inert
+            )
+            base_ind_len = {
+                'Westbrook': current_data['ind_len_west'][0],
+                'Gavrikov': current_data['ind_len_gav'][0],
+                'Ng': current_data['ind_len_ng'][0],
+            }
+            base_cell_calcs = {
+                'Westbrook': current_data['cell_size_west'][0],
+                'Gavrikov': current_data['cell_size_gav'][0],
+                'Ng': current_data['cell_size_ng'][0],
+            }
+            del current_data
+        del stored_base_calcs
+
+    # calculate perturbed cell size
+    pert_cell_calcs = CellSize(
+        base_mechanism=mech,
+        cj_speed=cj_speed,
+        initial_temp=init_temp,
+        initial_press=init_press,
+        fuel=fuel,
+        oxidizer=oxidizer,
+        equivalence=equivalence,
+        diluent=diluent,
+        diluent_mol_frac=diluent_mol_frac,
+        inert=inert,
+        perturbed_reaction=perturbed_reaction_no
+    )
+    pert_ind_len = CellSize.induction_length
+
+    # calculate sensitivities
+    sens_ind_len_west = (pert_ind_len['Westbrook'] -
+                         base_ind_len['Westbrook']) / \
+                        (base_ind_len['Westbrook'] * perturbation_fraction)
+    sens_cell_size_west = (pert_cell_calcs['Westbrook'] -
+                           base_cell_calcs['Westbrook']) / \
+                          (base_cell_calcs['Westbrook'] * perturbation_fraction)
+    sens_ind_len_gav = (pert_ind_len['Gavrikov'] -
+                        base_ind_len['Gavrikov']) / \
+                       (base_ind_len['Gavrikov'] * perturbation_fraction)
+    sens_cell_size_gav = (pert_cell_calcs['Gavrikov'] -
+                          base_cell_calcs['Gavrikov']) / \
+                         (base_cell_calcs['Gavrikov'] * perturbation_fraction)
+    sens_ind_len_ng = (pert_ind_len['Ng'] -
+                       base_ind_len['Ng']) / \
+                      (base_ind_len['Ng'] * perturbation_fraction)
+    sens_cell_size_ng = (pert_cell_calcs['Ng'] -
+                         base_cell_calcs['Ng']) / \
+                        (base_cell_calcs['Ng'] * perturbation_fraction)
+
+    with db_lock:
+        current_table.store_perturbed_row(
+            rxn_table_id=rxn_table_id,
+            rxn_no=perturbed_reaction_no,
+            rxn=CellSize.base_gas.reaction_equation(perturbed_reaction_no),
+            k_i=CellSize.base_gas.forward_rate_constants[perturbed_reaction_no],
+            ind_len_west=pert_ind_len['Westbrook'],
+            ind_len_gav=pert_ind_len['Gavrikov'],
+            ind_len_ng=pert_ind_len['Ng'],
+            cell_size_west=pert_cell_calcs['Westbrook'],
+            cell_size_gav=pert_cell_calcs['Gavrikov'],
+            cell_size_ng=pert_cell_calcs['Ng'],
+            sens_ind_len_west=sens_ind_len_west,
+            sens_ind_len_gav=sens_ind_len_gav,
+            sens_ind_len_ng=sens_ind_len_ng,
+            sens_cell_size_west=sens_cell_size_west,
+            sens_cell_size_gav=sens_cell_size_gav,
+            sens_cell_size_ng=sens_cell_size_ng,
+            overwrite_existing=True
         )
 
-    return[mech_dir, in_loc, out_loc]
 
-
-def get_species_reactions(gas_object, species):
-    """
-    Finds all reactions in a cantera gas object containing the desired species
-
-    Parameters
-    ----------
-    gas_object : ct.Solution
-        Cantera gas object containing reaction equations
-
-    species : str or iterable
-        String or iterable of the specie(s) to find the reactions for
-
-    Returns
-    -------
-    reaction_keys : list
-        List of all equations containing the input species
-    """
-    if isinstance(species, str):
-        # we are gonna treat this like a list
-        species = [species.upper()]
-    else:
-        # make sure everything is upper case to make cantera happy
-        species = [s.upper() for s in species]
-
-    reaction_keys = []
-    equations = gas_object.reaction_equations()
-
-    for s in species:
-        reaction_keys += [
-            eqn for eqn in equations if _find_specie_in_str(s, eqn)
-        ]
-
-    return reaction_keys
-
-
-def make_inert_cti(mech, species, out_file):
-    """
-    Parses a .cti mechanism file to find the location of desired chemical
-    species, turns them inert, and saves the inert mechanism with the desired
-    file name.
-    Parameters
-    ----------
-    mech : str
-        name of mechanism to search, e.g. `gri30.cti`
-    species : str or iterable[str]
-        specie(s) to search for
-    out_file : str
-        name of output file, e.g. `gri30_inert_co.cti
-
-    Returns
-    -------
-
-    """
-    file_type = '.cti'
-    _check_input_filetype(mech, file_type)
-    out_file = _check_output_filetype(out_file, file_type)
-    species = _enforce_species_list(species)
-    mech_dir, in_loc, out_loc = _get_file_locations(mech, out_file)
-
-    with open(in_loc, 'r') as f:
-        data_in = f.read()
-
-    data_header_length = 97
-    rxn_indicator = '#  Reaction'
-    start_loc = data_in.find(rxn_indicator)
-    start_loc = data_in[start_loc + data_header_length:].find(rxn_indicator) + \
-        start_loc + data_header_length + 1
-    header = data_in[:start_loc]
-    to_scan = data_in[start_loc:]
-    rxn_indicator = '#'
-    scanned = to_scan.split(rxn_indicator)[1:]
-    new_rxns = ''
-
-    for loc, rxn in enumerate(scanned):
-        # if any of the desired species are in the current reaction, delete
-        # it from the mechanism
-        rxn = rxn_indicator + rxn
-        eqn_start = rxn.find('\"')+1
-        eqn_end = rxn[eqn_start:].find('\"') + eqn_start
-        eqn = rxn[eqn_start:eqn_end]
-        if not any([_find_specie_in_str(s, eqn) for s in species]):
-            new_rxns += rxn
-
-    new_mech = header + '\n\n' + new_rxns
-    with open(out_loc, 'w') as f:
-        f.writelines(new_mech)
-        f.flush()
-
-
-def make_inert_xml(mech, species, out_file):
-    """
-    Parses an .xml mechanism file to find the location of desired chemical
-    species so they can be turned off
-    Parameters
-    ----------
-    mech : str
-        name of mechanism to search, e.g. `gri30.xml`
-    species : str or iterable
-        specie(s) to search for
-    out_file : str
-        name of output file, e.g. `gri30_inert_co.xml
-
-    Returns
-    -------
-
-    """
-    file_type = '.xml'
-    _check_input_filetype(mech, file_type)
-    out_file = _check_output_filetype(out_file, file_type)
-    species = _enforce_species_list(species)
-    mech_dir, in_loc, out_loc = _get_file_locations(mech, out_file)
-
-    with open(in_loc, 'r') as f:
-        data_in = f.read()
-
-    indicator = '<reactionData id="reaction_data">'
-    start_loc = data_in.find(indicator) + len(indicator) + 1
-    header = data_in[:start_loc]
-    to_scan = data_in[start_loc:]
-    rxn_indicator = '<!-- reaction'
-    scanned = to_scan.split(rxn_indicator)[1:]
-    new_rxns = ''
-
-    for loc, rxn in enumerate(scanned):
-        # if any of the desired species are in the current reaction, delete
-        # it from the mechanism
-        rxn = rxn_indicator + rxn
-        eqn_indicators = ['<equation>', '</equation>']
-        eqn_start = rxn.find(eqn_indicators[0]) + len(eqn_indicators[0])
-        eqn_end = rxn.find(eqn_indicators[1])
-        eqn = rxn[eqn_start:eqn_end]
-
-        if not any([_find_specie_in_str(s, eqn) for s in species]):
-            new_rxns += rxn
-
-    new_mech = header + '\n\n' + new_rxns
-    with open(out_loc, 'w') as f:
-        f.writelines(new_mech)
-        f.flush()
-
-
-if __name__ == '__main__':
-    # build a test mechanism with inert oxygen
-    base_mech = 'gri30'
-    test_mech = 'test_mech'
-    file_types = ['.cti', '.xml']
-    funcs = [make_inert_cti, make_inert_xml]
-    inert_species = ['O2']
-    init_temp = 1000
-    init_press = ct.one_atm
-    for ftype, func in zip(file_types, funcs):
-        mechs = [base_mech + ftype, test_mech + ftype]
-        _, _, file_out = _get_file_locations(mechs[0], mechs[1])
-
-        func(mechs[0], inert_species, mechs[1])
-        gases = [ct.Solution(m) for m in mechs]
-        for idx, g in enumerate(gases):
-            g.set_equivalence_ratio(1, 'H2', 'O2')
-            init_mf = g.mole_fraction_dict()['O2']
-            g.TP = init_temp, init_press
-            r = ct.Reactor(g)
-            n = ct.ReactorNet([r])
-            n.advance_to_steady_state()
-            print(mechs[idx])
-            print('-'*len(mechs[idx]))
-            print('# reactions:     {:1.0f}'.format(
-                len(g.reaction_equations()))
-            )
-            print('final temp:      {:1.0f} K'.format(
-                r.thermo.TP[0])
-            )
-            print('final pressure:  {:1.0f} atm'.format(
-                r.thermo.TP[1]/ct.one_atm)
-            )
-            print('Y_02 init/final: {:0.3f} / {:0.3f}'.format(
-                init_mf,
-                r.thermo.mole_fraction_dict()['O2']
-            ))
-            print()
-
-        # clean up
-        os.remove(file_out)
+def init(l):
+    global db_lock
+    db_lock = l
