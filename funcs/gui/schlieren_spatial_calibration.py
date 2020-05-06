@@ -1,4 +1,5 @@
 import sys
+import os
 
 import numpy as np
 import pandas as pd
@@ -7,6 +8,7 @@ from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 
 from funcs.gui.ui import calWindow
+from funcs._dev import d_drive
 
 
 class CalWindow(QDialog, calWindow.Ui_MainWindow):
@@ -62,14 +64,22 @@ class CalWindow(QDialog, calWindow.Ui_MainWindow):
     def load_hdf5(self):
         self.btnLoadHDF5.clearFocus()
         self.inpStartShot.setFocus()
-        default_path = "/d/Data/Processed/Data/"
+        default_path = os.path.join(
+            d_drive,
+            "Data",
+            "Processed",
+            "Data"
+        )
+        print(default_path)
         # noinspection PyArgumentList
         f = QFileDialog.getOpenFileName(
             parent=QFileDialog(),
             caption="Load Data Store",
             directory=default_path,
             filter="*.h5 *.hdf5",
+            options=QFileDialog.DontUseNativeDialog
         )[0]
+        print(f)
         if len(f) > 0:
             self.store = pd.HDFStore(f)
             self.cboxSelectDate.clear()
