@@ -1,14 +1,17 @@
-import sys
 import os
+import sys
 
 import numpy as np
 import pandas as pd
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
+from matplotlib.figure import Figure
 
-from funcs.gui.ui import calWindow
-from funcs._dev import d_drive
+from .ui import calWindow
+from .._dev import d_drive
+from ..schlieren import collect_spatial_calibration
 
 
 class CalWindow(QDialog, calWindow.Ui_MainWindow):
@@ -20,6 +23,7 @@ class CalWindow(QDialog, calWindow.Ui_MainWindow):
         self.store = None
         self.df = None
         self.date = None
+        self.calibration = None
 
         # don't let user check boxes
         # done this way because fully disabling them doesn't allow the GUI to
@@ -53,6 +57,8 @@ class CalWindow(QDialog, calWindow.Ui_MainWindow):
         self.btnExit.clicked.connect(sys.exit)
         self.btnLoadHDF5.clicked.connect(self.load_hdf5)
         self.cboxSelectDate.activated.connect(self.select_date)
+        self.chkUseDate2.clicked.connect(self.use_second_date)
+        self.btnLoadAndCalibrate.clicked.connect(self.load_and_calibrate)
         for item in (self.inpStartShot, self.inpEndShot):
             item.editingFinished.connect(self.check_stored_calibrations)
 
@@ -70,7 +76,6 @@ class CalWindow(QDialog, calWindow.Ui_MainWindow):
             "Processed",
             "Data"
         )
-        print(default_path)
         # noinspection PyArgumentList
         f = QFileDialog.getOpenFileName(
             parent=QFileDialog(),
@@ -79,26 +84,56 @@ class CalWindow(QDialog, calWindow.Ui_MainWindow):
             filter="*.h5 *.hdf5",
             options=QFileDialog.DontUseNativeDialog
         )[0]
-        print(f)
         if len(f) > 0:
             self.store = pd.HDFStore(f)
-            self.cboxSelectDate.clear()
             self.df = self.store["data"]
-            self.cboxSelectDate.addItems(self.df["date"].unique())
-            for item in (
-                self.inpStartShot,
-                self.inpEndShot,
-                self.btnLoadAndCalibrate,
-                self.btnStoreCalibration
-            ):
-                item.setEnabled(True)
-            self.select_date()
+            if "spatial_factor" in self.df.keys():
+                dates = self.df["date"].unique()
+                self.cboxSelectDate.clear()
+                for item in (
+                    self.cboxSelectDate,
+                    self.cboxSelectDate2
+                ):
+                    item.addItems(dates)
+                for item in (
+                    self.cboxSelectDate,
+                    self.inpStartShot,
+                    self.inpEndShot,
+                    self.btnLoadAndCalibrate,
+                    self.btnStoreCalibration,
+                    self.lblStartShot,
+                    self.lblEndShot,
+                    self.lblSelectDate,
+                    self.chkUseDate2,
+                ):
+                    item.setEnabled(True)
+                self.select_date()
+            else:
+                warning_box = QMessageBox()
+                warning_box.setIcon(QMessageBox.Warning)
+                warning_box.setText("spatial_factor not a valid key")
+                warning_box.setWindowTitle("Invalid HDF5 Store!")
+                warning_box.setStandardButtons(QMessageBox.Ok)
+                # warning_box.setWindowIcon()
+                warning_box.exec_()
 
     def select_date(self):
         self.check_stored_calibrations()
         self.date = self.cboxSelectDate.currentText()
         self.check_stored_calibrations()
         # set start and end shot
+
+    def use_second_date(self):
+        enable = self.chkUseDate2.isChecked()
+        for item in (
+            self.cboxSelectDate2,
+            self.inpStartShot2,
+            self.inpEndShot2,
+            self.lblSelectDate2,
+            self.lblStartShot2,
+            self.lblEndShot2,
+        ):
+            item.setEnabled(enable)
 
     def check_stored_calibrations(self):
         df_date = self.df[self.df["date"] == self.date]
@@ -140,14 +175,38 @@ class CalWindow(QDialog, calWindow.Ui_MainWindow):
         self.chkStoredCenterline.setPalette(pal)
 
     def load_spatial_file(self):
-        pass
+        date = self.cboxSelectDate.currentText()
+        default_path = os.path.join(
+            d_drive,
+            "Data",
+            "Raw",
+            date
+        )
+        # noinspection PyArgumentList
+        f = QFileDialog.getOpenFileName(
+            parent=QFileDialog(),
+            caption="Load Spatial Image",
+            directory=default_path,
+            filter="*.tif",
+            options=QFileDialog.DontUseNativeDialog
+        )[0]
+        if len(f) > 0:
+            return f
 
-    def calibrate(self):
-        pass
+    @staticmethod
+    def get_calibration(img_path):
+        return collect_spatial_calibration(img_path)
 
     def load_and_calibrate(self):
-        self.load_spatial_file()
-        self.calibrate()
+        img_path = self.load_spatial_file()
+        w = PlotWindow()
+        print(
+            collect_spatial_calibration(
+                img_path,
+                plot_window=w,
+                msg_box=LineCountDialog
+            )
+        )
 
     def check_overwrite_calibration(self):
         pass
@@ -159,8 +218,81 @@ class CalWindow(QDialog, calWindow.Ui_MainWindow):
         pass
 
 
+class PlotWindow(QDialog):
+    resized = pyqtSignal()
+
+    def __init__(self):
+        super().__init__()
+
+        title = "Schlieren Spatial Calibration"
+        self.setWindowTitle(title)
+        self.canvas = Canvas(self)
+        self.ax = self.canvas.axes
+        self.canvas.mpl_connect(
+            'button_press_event',
+            self.button_press_callback
+        )
+        self.resized.connect(self.resize_canvas)
+
+    def resizeEvent(self, event):
+        self.resized.emit()
+        return super(PlotWindow, self).resizeEvent(event)
+
+    def resize_canvas(self):
+        w = self.frameGeometry().width()
+        h = self.frameGeometry().height()
+        self.canvas.resize(w, h)
+
+    def imshow(self, img):
+        self.ax.imshow(img)
+        self.ax.axis("off")
+
+        # FigureCanvasQTAgg.setSizePolicy(
+        #     self.canvas,
+        #     QSizePolicy.Expanding,
+        #     QSizePolicy.Expanding,
+        # )
+        FigureCanvasQTAgg.updateGeometry(self.canvas)
+        self.showMaximized()
+
+    def button_press_callback(self, event):
+        if event.button == 2:
+            # middle click
+            self.close()
+
+
+class Canvas(FigureCanvasQTAgg):
+    def __init__(self, parent=None):
+
+        fig = Figure()
+        self.axes = fig.add_subplot(111)
+
+        FigureCanvasQTAgg.__init__(self, fig)
+        self.setParent(parent)
+
+
+class LineCountDialog(QInputDialog):
+    def __init__(self):
+        super().__init__()
+        self.center()
+        user_input = self.getInt(self, "Input number of boxes", "# Boxes:")
+        if user_input[1] is False:
+            self.num_boxes = np.NaN
+        else:
+            self.num_boxes = user_input[0]
+
+    def center(self):
+        resolution = QDesktopWidget().screenGeometry()
+        self.move(
+            (resolution.width() - self.frameSize().width()) / 2,
+            (resolution.height() - self.frameSize().height()) / 2
+        )
+
+
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    form = CalWindow()
-    form.show()
-    app.exec_()
+    pass
+    # this doesn't work within this file for relative import reasons
+    # app = QApplication(sys.argv)
+    # form = CalWindow()
+    # form.show()
+    # app.exec_()
