@@ -1,7 +1,6 @@
 """
 Functions for reorganizing a file's imports nicely
 """
-# stdlib imports
 import distutils.sysconfig as sysconfig
 import os
 import platform

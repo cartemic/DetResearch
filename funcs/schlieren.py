@@ -1,9 +1,7 @@
-# stdlib imports
+import json
 import os
 from datetime import datetime
 
-# third party imports
-import json
 import numpy as np
 import uncertainties as un
 import uncertainties.unumpy as unp
@@ -11,9 +9,9 @@ from matplotlib import pyplot as plt
 from matplotlib import widgets
 from skimage import io
 
-# local imports
-from .uncertainty import add_uncertainty_terms, u_cell
 from ._dev import d_drive
+from .uncertainty import add_uncertainty_terms, u_cell
+
 u_cell = u_cell["schlieren"]
 
 
@@ -199,7 +197,7 @@ def collect_spatial_calibration(
         marker_length_mm=0.2*25.4,
         save_output=False,
         px_only=False,
-        apply_uncertainy=True
+        apply_uncertainty=True
 ):  # pragma: no cover
     image = io.imread(spatial_file)
     fig, ax = plt.subplots(1, 1)
@@ -229,7 +227,7 @@ def collect_spatial_calibration(
     # make this happen, I am breaking out the components and applying them as
     # originally intended.
     line_length_mm = num_boxes * marker_length_mm
-    if apply_uncertainy:
+    if apply_uncertainty:
         line_length_mm = un.ufloat(
             line_length_mm,
             add_uncertainty_terms([
@@ -245,7 +243,7 @@ def collect_spatial_calibration(
             linebuilder.xs,
             linebuilder.ys,
             line_length_mm,
-            apply_uncertainty=apply_uncertainy
+            apply_uncertainty=apply_uncertainty
         )
 
     if save_output:
@@ -484,6 +482,7 @@ class LineBuilder(object):  # pragma: no cover
         self.line.set_data(self.xs, self.ys)
         self.set_end_lines()
         for c, x, y in zip(self.circles, self.xs, self.ys):
+            # noinspection PyArgumentList
             c.set_center((x, y))
 
         self.canvas.restore_region(self.background)

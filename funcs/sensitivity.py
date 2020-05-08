@@ -1,6 +1,7 @@
+import sdtoolbox as sd
+
 from funcs import cell_size
 from funcs import database as db
-import sdtoolbox as sd
 
 
 def check_stored_base_cj_speed(

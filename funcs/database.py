@@ -9,11 +9,11 @@ CREATED BY:
     CIRE and Propulsion Lab
     cartemic@oregonstate.edu
 """
-import sqlite3
 import inspect
-import warnings
 import os
+import sqlite3
 import uuid
+import warnings
 
 
 def _formatwarnmsg_impl(msg):  # pragma: no cover
@@ -1010,10 +1010,10 @@ class Table:
             )
             info = cur.fetchall()
             labels = self.pert_columns(rxn_table_id)
-            data = {l: [] for l in labels}
+            data = {lbl: [] for lbl in labels}
             for row in info:
-                for l, d in zip(labels, row):
-                    data[l].append(d)
+                for lbl, d in zip(labels, row):
+                    data[lbl].append(d)
 
             return data
 
@@ -1090,10 +1090,10 @@ class Table:
             )
             info = cur.fetchall()
             labels = self.test_columns()
-            data = {l: [] for l in labels}
+            data = {lbl: [] for lbl in labels}
             for row in info:
-                for l, d in zip(labels, row):
-                    data[l].append(d)
+                for lbl, d in zip(labels, row):
+                    data[lbl].append(d)
 
             return data
 

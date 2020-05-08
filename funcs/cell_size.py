@@ -12,8 +12,8 @@ in the following report:
 This script uses SDToolbox, which can be found at
 http://shepherd.caltech.edu/EDL/PublicResources/sdt/
 """
-import numpy as np
 import cantera as ct
+import numpy as np
 
 from .specific_heat_matching import diluted_species_dict
 
