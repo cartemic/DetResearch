@@ -97,11 +97,17 @@ def _velocity_calculator(
         apply_lowpass
     )
 
-    arrival_times = unp.uarray(
-        diode_dataframe.diff(axis=0).idxmax(axis=0, skipna=True).values,
-        [0.5, 0.5]
-    )
-    arrival_diff = np.diff(arrival_times)
+    try:
+        arrival_times = unp.uarray(
+            diode_dataframe.diff(axis=0).idxmax(axis=0, skipna=True).values,
+            [0.5, 0.5]
+        )
+        arrival_diff = np.diff(arrival_times)
+
+    except ValueError:
+        # empty array, return zero velocity
+        arrival_diff = unp.uarray([0], [0])
+
     if arrival_diff > 0:
         calculated_velocity = sample_specific_velocity / arrival_diff
     else:
