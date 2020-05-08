@@ -15,7 +15,6 @@ from . import diodes, schlieren, uncertainty
 from ._dev import d_drive
 from .diodes import find_diode_data, calculate_velocity
 
-
 _DIR = os.path.split(__file__)[0]
 
 
@@ -212,6 +211,7 @@ class _ProcessNewData:
 
         else:
             for idx, test_time_row in df_tests.iterrows():
+                # noinspection PyTypeChecker
                 _, row_results = cls._process_single_test(
                     idx,
                     df_nominal,
@@ -424,9 +424,7 @@ class _ProcessNewData:
             # do bg subtraction
             date = os.path.split(
                 os.path.dirname(
-                    os.path.dirname(
-                        test_time_row["diodes"]
-                    )
+                    test_time_row["schlieren"]
                 )
             )[1]
             out["schlieren"] = {
