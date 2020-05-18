@@ -10,6 +10,8 @@ from numpy import NaN, sqrt
 from scipy.stats import t
 from tables import NoSuchNodeError
 from uncertainties import unumpy as unp
+import numpy as np
+import string
 
 from . import diodes, schlieren, uncertainty
 from ._dev import d_drive
@@ -43,6 +45,9 @@ def _get_f_a_st(
     float
         stoichiometric fuel/air ratio
     """
+    if oxidizer.lower() == "air":
+        oxidizer = "O2:1 N2:3.76"
+
     gas = ct.Solution(mech)
     gas.set_equivalence_ratio(
         1,
@@ -149,6 +154,344 @@ def _get_equivalence_ratio(
         Mixture equivalence ratio
     """
     return p_fuel / p_oxidizer / f_a_st
+
+
+class _ProcessStructure0:
+    @classmethod
+    def _collect_test_dirs(
+            cls,
+            base_dir,
+            test_date
+    ):
+        """
+        The first step of reading in an old test directory is to determine
+        which directories contain valid tests. Under the old DAQ system, the
+        .vi would generate a new folder each time it was run. Only tests which
+        successfully generate a `diodes.tdms` file can be considered completed
+        tests. Some of these may still be failed detonations; this issue will
+        be dealt with on joining with schlieren data, which contains
+        information about whether or not a detonation attempt succeeded.
+
+        Parameters
+        ----------
+        base_dir : str
+            Base data directory, (e.g. `/d/Data/Raw/`)
+        test_date : str
+            ISO 8601 formatted date of test data
+
+        Returns
+        -------
+        list
+            ordered list of directories containing diode output
+        """
+        raw_dir = os.path.join(
+            base_dir,
+            test_date,
+            "Sensors"
+        )
+
+        return sorted([
+            root
+            for root, _, files in os.walk(raw_dir, topdown=True)
+            if "diodes.tdms" in files
+        ])
+
+    @classmethod
+    def _get_cutoff_pressure(
+            cls,
+            df_tdms_pressure,
+            kind="fuel",
+    ):
+        """
+        This function accepts a dataframe imported from a `pressure.tdms` file.
+        Old test data was output in amps; this was good and I should probably
+        have kept it that way. Old tests also logged each fill event
+        separately. Extract the desired data, build a confidence interval,
+        apply the calibration, and output the resulting value including
+        uncertainty.
+
+        Parameters
+        ----------
+        df_tdms_pressure : pd.DataFrame
+            Dataframe containing test-specific pressure trace
+        kind : str
+            Kind of cutoff pressure to get, e.g. fuel, oxidizer
+
+        Returns
+        -------
+        un.ufloat
+            Float with applied uncertainty
+        """
+        kind = kind.title()
+        if kind not in {"Fuel", "Oxidizer", "Vacuum", "Diluent"}:
+            raise ValueError("bad kind")
+
+        # in these tests there is no vacuum logging. These are undiluted tests,
+        # which means the diluent pressure is identical to the vacuum pressure.
+        if kind == "Vacuum":
+            kind = "Diluent"
+
+        pressure = df_tdms_pressure[
+                       "/'%s Fill'/'Manifold'" % kind
+                   ].dropna() * uncertainty.PRESSURE_CAL["slope"] + \
+            uncertainty.PRESSURE_CAL["intercept"]
+
+        # TODO: update calculation to be like new pressure calc
+        return unp.uarray(
+            pressure,
+            uncertainty.u_pressure(pressure, daq_err=False)
+        ).mean()
+
+    @classmethod
+    def _get_partial_pressure(
+            cls,
+            df_tdms_pressure,
+            kind="fuel"
+    ):
+        """
+        Fill order: vacuum -> (diluent) -> oxidizer -> fuel
+
+        Parameters
+        ----------
+        df_tdms_pressure : pd.DataFrame
+            Dataframe containing test-specific pressure trace
+        kind : str
+            Kind of cutoff pressure to get, e.g. fuel, oxidizer
+
+        Returns
+        -------
+        un.ufloat
+            Float with applied uncertainty
+        """
+        p_ox = cls._get_cutoff_pressure(df_tdms_pressure, "oxidizer")
+        if kind.lower() == "fuel":
+            return cls._get_cutoff_pressure(df_tdms_pressure, "fuel") - p_ox
+        elif kind.lower() == "oxidizer":
+            return p_ox
+        else:
+            raise ValueError("only fuels and oxidizers in this analysis")
+
+    @classmethod
+    def _get_initial_pressure(
+            cls,
+            df_tdms_pressure
+    ):
+        """
+        In old data, the initial mixture pressure is the fuel cutoff pressure
+
+        Parameters
+        ----------
+        df_tdms_pressure : pd.DataFrame
+            Dataframe containing test-specific pressure trace
+
+        Returns
+        -------
+        un.ufloat
+            Float with applied uncertainty
+        """
+        return cls._get_cutoff_pressure(df_tdms_pressure, kind="fuel")
+
+    @classmethod
+    def _get_initial_temperature(
+            cls,
+            df_tdms_temperature
+    ):
+        """
+        Old temperatures need to come from the tube thermocouple, which is
+        type K, because the manifold thermocouple was jacked up at the time.
+
+        Parameters
+        ----------
+        df_tdms_temperature : pd.DataFrame
+            Dataframe containing test-specific temperature trace
+
+        Returns
+        -------
+        un.ufloat
+            Test-averaged initial temperature with applied uncertainty
+        """
+        # TODO: update calculation to be like new pressure calc
+        return un.ufloat(
+            df_tdms_temperature["/'Test Readings'/'Tube'"].mean(),
+            uncertainty.u_temperature(
+                df_tdms_temperature["/'Test Readings'/'Tube'"],
+                tc_type="K",
+                collapse=True
+            )
+        )
+
+    @classmethod
+    def __call__(
+            cls,
+            base_dir,
+            test_date,
+            f_a_st=0.04201680672268907,
+            multiprocess=False
+    ):
+        """
+        Process data from an old-style data set.
+
+        Parameters
+        ----------
+        base_dir : str
+            Base data directory, (e.g. `/d/Data/Raw/`)
+        test_date : str
+            ISO 8601 formatted date of test data
+        f_a_st : float
+            Stoichiometric fuel/air ratio for the test mixture. Default value
+            is for propane/air.
+        multiprocess : bool
+            Set to True to parallelize processing of a single day's tests
+
+        Returns
+        -------
+        List[pd.DataFrame, dict]
+            A list in which the first item is a dataframe of the processed
+            tube data and the second is a dictionary containing
+            background-subtracted schlieren images
+        """
+        df = pd.DataFrame(
+            columns=["date", "shot", "sensors", "schlieren"],
+        )
+        df["sensors"] = cls._collect_test_dirs(base_dir, test_date)
+        df["schlieren"] = _collect_schlieren_dirs(base_dir, test_date)
+        df = df[df["schlieren"].apply(lambda x: "failed" not in x)]
+        df["date"] = test_date
+        df["shot"] = [
+            int(os.path.split(d)[1].lower().replace("shot", "").strip())
+            for d in df["schlieren"].values
+        ]
+
+        images = dict()
+        if multiprocess:
+            pool = mp.Pool()
+            results = pool.starmap(
+                cls._process_single_test,
+                [[idx, row, f_a_st] for idx, row in df.iterrows()]
+            )
+            for idx, row_results in results:
+                df.at[idx, "phi"] = row_results["phi"]
+                df.at[idx, "u_phi"] = row_results["u_phi"]
+                df.at[idx, "p_0"] = row_results["p_0"]
+                df.at[idx, "u_p_0"] = row_results["u_p_0"]
+                df.at[idx, "t_0"] = row_results["t_0"]
+                df.at[idx, "u_t_0"] = row_results["u_t_0"]
+                df.at[idx, "p_fuel"] = row_results["p_fuel"]
+                df.at[idx, "u_p_fuel"] = row_results["u_p_fuel"]
+                df.at[idx, "p_oxidizer"] = row_results["p_oxidizer"]
+                df.at[idx, "u_p_oxidizer"] = row_results["u_p_oxidizer"]
+                df.at[idx, "wave_speed"] = row_results["wave_speed"]
+                df.at[idx, "u_wave_speed"] = row_results["u_wave_speed"]
+                images.update(row_results["schlieren"])
+
+        else:
+            for idx, row in df.iterrows():
+                _, row_results = cls._process_single_test(idx, row, f_a_st)
+
+                # output results
+                df.at[idx, "phi"] = row_results["phi"]
+                df.at[idx, "u_phi"] = row_results["u_phi"]
+                df.at[idx, "p_0"] = row_results["p_0"]
+                df.at[idx, "u_p_0"] = row_results["u_p_0"]
+                df.at[idx, "t_0"] = row_results["t_0"]
+                df.at[idx, "u_t_0"] = row_results["u_t_0"]
+                df.at[idx, "p_fuel"] = row_results["p_fuel"]
+                df.at[idx, "u_p_fuel"] = row_results["u_p_fuel"]
+                df.at[idx, "p_oxidizer"] = row_results["p_oxidizer"]
+                df.at[idx, "u_p_oxidizer"] = row_results["u_p_oxidizer"]
+                df.at[idx, "wave_speed"] = row_results["wave_speed"]
+                df.at[idx, "u_wave_speed"] = row_results["u_wave_speed"]
+                images.update(row_results["schlieren"])
+
+        return df, images
+
+    @classmethod
+    def _process_single_test(
+            cls,
+            idx,
+            row,
+            f_a_st
+    ):
+        """
+        Process a single row of test data. This has been separated into its
+        own function to facilitate the use of multiprocessing.
+
+        Parameters
+        ----------
+        row : pd.Series
+            Current row of test data
+        f_a_st : float
+            Stoichiometric fuel/air ratio for the test mixture.
+
+        Returns
+        -------
+        Tuple(Int, Dict)
+            Calculated test data and associated uncertainty values for the
+            current row
+        """
+        # background subtraction
+        image = {
+            "{:s}_shot{:02d}".format(
+                row["date"],
+                row["shot"]
+            ): schlieren.bg_subtract_all_frames(row["schlieren"])
+        }
+
+        # gather pressure data
+        df_tdms_pressure = TdmsFile(
+            os.path.join(
+                row["sensors"],
+                "pressure.tdms"
+            )
+        ).as_dataframe()
+        p_init = cls._get_initial_pressure(df_tdms_pressure)
+        p_fuel = cls._get_partial_pressure(
+            df_tdms_pressure,
+            kind="fuel"
+        )
+        p_oxidizer = cls._get_partial_pressure(
+            df_tdms_pressure,
+            kind="oxidizer"
+        )
+        phi = _get_equivalence_ratio(p_fuel, p_oxidizer, f_a_st)
+
+        # gather temperature data
+        loc_temp_tdms = os.path.join(
+            row["sensors"],
+            "temperature.tdms"
+        )
+        if os.path.exists(loc_temp_tdms):
+            df_tdms_temperature = TdmsFile(
+                os.path.join(
+                    row["sensors"],
+                    "temperature.tdms"
+                )
+            ).as_dataframe()
+            t_init = cls._get_initial_temperature(df_tdms_temperature)
+        else:
+            t_init = un.ufloat(NaN, NaN)
+
+        # wave speed measurement
+        diode_loc = os.path.join(row["sensors"], "diodes.tdms")
+        wave_speed = diodes.calculate_velocity(diode_loc)[0]
+
+        # output results
+        out = dict()
+        out["schlieren"] = image
+        out["phi"] = phi.nominal_value
+        out["u_phi"] = phi.std_dev
+        out["p_0"] = p_init.nominal_value
+        out["u_p_0"] = p_init.std_dev
+        out["t_0"] = t_init.nominal_value
+        out["u_t_0"] = t_init.std_dev
+        out["p_fuel"] = p_fuel.nominal_value
+        out["u_p_fuel"] = p_fuel.std_dev
+        out["p_oxidizer"] = p_oxidizer.nominal_value
+        out["u_p_oxidizer"] = p_oxidizer.std_dev
+        out["wave_speed"] = wave_speed.nominal_value
+        out["u_wave_speed"] = wave_speed.std_dev
+
+        return idx, out
 
 
 class _ProcessStructure1:
@@ -470,7 +813,11 @@ class _ProcessStructure1:
         # TODO: since current detonations use air as an oxidizer, add vacuum
         #  cutoff pressure to oxidizer partial pressure. Change this if non-air
         #  oxidizers are  used
-        p_oxidizer = p_cutoff_oxidizer - p_cutoff_diluent + p_cutoff_vac
+        # using minimum in case of fill order change
+        p_oxidizer = p_cutoff_oxidizer - np.nanmin((
+            p_cutoff_diluent,
+            p_cutoff_fuel
+        )) + p_cutoff_vac
 
         # oxidizer is the last fill state, which means that p_0 == p_oxidizer
         p_0 = cls._get_cutoff_pressure(
@@ -892,342 +1239,310 @@ class _ProcessStructure1:
         return df_to_slice[cls._mask_df_by_row_time(df_to_slice, test_time_row)]
 
 
-class _ProcessStructure0:
-    @classmethod
-    def _collect_test_dirs(
-            cls,
-            base_dir,
-            test_date
+class _ProcessStructure2:
+    @staticmethod
+    def collect_shot_directories(
+            dir_raw,
+            date
     ):
-        """
-        The first step of reading in an old test directory is to determine
-        which directories contain valid tests. Under the old DAQ system, the
-        .vi would generate a new folder each time it was run. Only tests which
-        successfully generate a `diodes.tdms` file can be considered completed
-        tests. Some of these may still be failed detonations; this issue will
-        be dealt with on joining with schlieren data, which contains
-        information about whether or not a detonation attempt succeeded.
-
-        Parameters
-        ----------
-        base_dir : str
-            Base data directory, (e.g. `/d/Data/Raw/`)
-        test_date : str
-            ISO 8601 formatted date of test data
-
-        Returns
-        -------
-        list
-            ordered list of directories containing diode output
-        """
-        raw_dir = os.path.join(
-            base_dir,
-            test_date,
-            "Sensors"
+        dir_search = os.path.join(dir_raw, date)
+        return sorted(
+            os.path.join(dir_search, d)
+            for d in os.listdir(dir_search)
+            if "shot" in d.lower()
         )
 
-        return sorted([
-            root
-            for root, _, files in os.walk(raw_dir, topdown=True)
-            if "diodes.tdms" in files
-        ])
-
-    @classmethod
-    def _get_cutoff_pressure(
-            cls,
-            df_tdms_pressure,
-            kind="fuel",
+    @staticmethod
+    def get_shot_no_from_dir(
+            dir_shot
     ):
-        """
-        This function accepts a dataframe imported from a `pressure.tdms` file.
-        Old test data was output in amps; this was good and I should probably
-        have kept it that way. Old tests also logged each fill event
-        separately. Extract the desired data, build a confidence interval,
-        apply the calibration, and output the resulting value including
-        uncertainty.
+        return int("".join(
+            (i for i in os.path.split(dir_shot)[1]
+             if i in string.digits)
+        ))
 
-        Parameters
-        ----------
-        df_tdms_pressure : pd.DataFrame
-            Dataframe containing test-specific pressure trace
-        kind : str
-            Kind of cutoff pressure to get, e.g. fuel, oxidizer
-
-        Returns
-        -------
-        un.ufloat
-            Float with applied uncertainty
-        """
-        kind = kind.title()
-        if kind not in {"Fuel", "Oxidizer", "Vacuum", "Diluent"}:
-            raise ValueError("bad kind")
-
-        # in these tests there is no vacuum logging. These are undiluted tests,
-        # which means the diluent pressure is identical to the vacuum pressure.
-        if kind == "Vacuum":
-            kind = "Diluent"
-
-        pressure = df_tdms_pressure[
-                       "/'%s Fill'/'Manifold'" % kind
-                   ].dropna() * uncertainty.PRESSURE_CAL["slope"] + \
-            uncertainty.PRESSURE_CAL["intercept"]
-
-        # TODO: update calculation to be like new pressure calc
-        return unp.uarray(
-            pressure,
-            uncertainty.u_pressure(pressure, daq_err=False)
-        ).mean()
-
-    @classmethod
-    def _get_partial_pressure(
-            cls,
-            df_tdms_pressure,
-            kind="fuel"
-    ):
-        """
-        Fill order: vacuum -> (diluent) -> oxidizer -> fuel
-
-        Parameters
-        ----------
-        df_tdms_pressure : pd.DataFrame
-            Dataframe containing test-specific pressure trace
-        kind : str
-            Kind of cutoff pressure to get, e.g. fuel, oxidizer
-
-        Returns
-        -------
-        un.ufloat
-            Float with applied uncertainty
-        """
-        p_ox = cls._get_cutoff_pressure(df_tdms_pressure, "oxidizer")
-        if kind.lower() == "fuel":
-            return cls._get_cutoff_pressure(df_tdms_pressure, "fuel") - p_ox
-        elif kind.lower() == "oxidizer":
-            return p_ox
-        else:
-            raise ValueError("only fuels and oxidizers in this analysis")
-
-    @classmethod
-    def _get_initial_pressure(
-            cls,
-            df_tdms_pressure
-    ):
-        """
-        In old data, the initial mixture pressure is the fuel cutoff pressure
-
-        Parameters
-        ----------
-        df_tdms_pressure : pd.DataFrame
-            Dataframe containing test-specific pressure trace
-
-        Returns
-        -------
-        un.ufloat
-            Float with applied uncertainty
-        """
-        return cls._get_cutoff_pressure(df_tdms_pressure, kind="fuel")
-
-    @classmethod
-    def _get_initial_temperature(
-            cls,
-            df_tdms_temperature
-    ):
-        """
-        Old temperatures need to come from the tube thermocouple, which is
-        type K, because the manifold thermocouple was jacked up at the time.
-
-        Parameters
-        ----------
-        df_tdms_temperature : pd.DataFrame
-            Dataframe containing test-specific temperature trace
-
-        Returns
-        -------
-        un.ufloat
-            Test-averaged initial temperature with applied uncertainty
-        """
-        # TODO: update calculation to be like new pressure calc
-        return un.ufloat(
-            df_tdms_temperature["/'Test Readings'/'Tube'"].mean(),
-            uncertainty.u_temperature(
-                df_tdms_temperature["/'Test Readings'/'Tube'"],
-                tc_type="K",
-                collapse=True
+    @staticmethod
+    def population_uncertainty(data):
+        num_samples = len(data)
+        if num_samples > 0:
+            sem = np.std(data) / sqrt(num_samples)
+            return un.ufloat(
+                0,
+                sem * t.ppf(0.975, num_samples - 1),
+                tag="sample"
             )
-        )
-
-    @classmethod
-    def __call__(
-            cls,
-            base_dir,
-            test_date,
-            f_a_st=0.04201680672268907,
-            multiprocess=False
-    ):
-        """
-        Process data from an old-style data set.
-
-        Parameters
-        ----------
-        base_dir : str
-            Base data directory, (e.g. `/d/Data/Raw/`)
-        test_date : str
-            ISO 8601 formatted date of test data
-        f_a_st : float
-            Stoichiometric fuel/air ratio for the test mixture. Default value
-            is for propane/air.
-        multiprocess : bool
-            Set to True to parallelize processing of a single day's tests
-
-        Returns
-        -------
-        List[pd.DataFrame, dict]
-            A list in which the first item is a dataframe of the processed
-            tube data and the second is a dictionary containing
-            background-subtracted schlieren images
-        """
-        df = pd.DataFrame(
-            columns=["date", "shot", "sensors", "schlieren"],
-        )
-        df["sensors"] = cls._collect_test_dirs(base_dir, test_date)
-        df["schlieren"] = _collect_schlieren_dirs(base_dir, test_date)
-        df = df[df["schlieren"].apply(lambda x: "failed" not in x)]
-        df["date"] = test_date
-        df["shot"] = [
-            int(os.path.split(d)[1].lower().replace("shot", "").strip())
-            for d in df["schlieren"].values
-        ]
-
-        images = dict()
-        if multiprocess:
-            pool = mp.Pool()
-            results = pool.starmap(
-                cls._process_single_test,
-                [[idx, row, f_a_st] for idx, row in df.iterrows()]
-            )
-            for idx, row_results in results:
-                df.at[idx, "phi"] = row_results["phi"]
-                df.at[idx, "u_phi"] = row_results["u_phi"]
-                df.at[idx, "p_0"] = row_results["p_0"]
-                df.at[idx, "u_p_0"] = row_results["u_p_0"]
-                df.at[idx, "t_0"] = row_results["t_0"]
-                df.at[idx, "u_t_0"] = row_results["u_t_0"]
-                df.at[idx, "p_fuel"] = row_results["p_fuel"]
-                df.at[idx, "u_p_fuel"] = row_results["u_p_fuel"]
-                df.at[idx, "p_oxidizer"] = row_results["p_oxidizer"]
-                df.at[idx, "u_p_oxidizer"] = row_results["u_p_oxidizer"]
-                df.at[idx, "wave_speed"] = row_results["wave_speed"]
-                df.at[idx, "u_wave_speed"] = row_results["u_wave_speed"]
-                images.update(row_results["schlieren"])
 
         else:
-            for idx, row in df.iterrows():
-                _, row_results = cls._process_single_test(idx, row, f_a_st)
-
-                # output results
-                df.at[idx, "phi"] = row_results["phi"]
-                df.at[idx, "u_phi"] = row_results["u_phi"]
-                df.at[idx, "p_0"] = row_results["p_0"]
-                df.at[idx, "u_p_0"] = row_results["u_p_0"]
-                df.at[idx, "t_0"] = row_results["t_0"]
-                df.at[idx, "u_t_0"] = row_results["u_t_0"]
-                df.at[idx, "p_fuel"] = row_results["p_fuel"]
-                df.at[idx, "u_p_fuel"] = row_results["u_p_fuel"]
-                df.at[idx, "p_oxidizer"] = row_results["p_oxidizer"]
-                df.at[idx, "u_p_oxidizer"] = row_results["u_p_oxidizer"]
-                df.at[idx, "wave_speed"] = row_results["wave_speed"]
-                df.at[idx, "u_wave_speed"] = row_results["u_wave_speed"]
-                images.update(row_results["schlieren"])
-
-        return df, images
+            return un.ufloat(np.NaN, np.NaN)
 
     @classmethod
-    def _process_single_test(
+    def get_fill_cutoffs(
             cls,
-            idx,
-            row,
-            f_a_st
+            fill_tdms
     ):
-        """
-        Process a single row of test data. This has been separated into its
-        own function to facilitate the use of multiprocessing.
-
-        Parameters
-        ----------
-        row : pd.Series
-            Current row of test data
-        f_a_st : float
-            Stoichiometric fuel/air ratio for the test mixture.
-
-        Returns
-        -------
-        Tuple(Int, Dict)
-            Calculated test data and associated uncertainty values for the
-            current row
-        """
-        # background subtraction
-        image = {
-            "{:s}_shot{:02d}".format(
-                row["date"],
-                row["shot"]
-            ): schlieren.bg_subtract_all_frames(row["schlieren"])
-        }
-
-        # gather pressure data
-        df_tdms_pressure = TdmsFile(
-            os.path.join(
-                row["sensors"],
-                "pressure.tdms"
-            )
-        ).as_dataframe()
-        p_init = cls._get_initial_pressure(df_tdms_pressure)
-        p_fuel = cls._get_partial_pressure(
-            df_tdms_pressure,
-            kind="fuel"
+        cutoffs = dict(
+            vacuum=un.ufloat(np.NaN, np.NaN),
+            fuel=un.ufloat(np.NaN, np.NaN),
+            diluent=un.ufloat(np.NaN, np.NaN),
+            oxidizer=un.ufloat(np.NaN, np.NaN)
         )
-        p_oxidizer = cls._get_partial_pressure(
-            df_tdms_pressure,
-            kind="oxidizer"
-        )
-        phi = _get_equivalence_ratio(p_fuel, p_oxidizer, f_a_st)
+        for cutoff in cutoffs.keys():
+            press = fill_tdms.channel_data(cutoff, "pressure")
 
-        # gather temperature data
-        loc_temp_tdms = os.path.join(
-            row["sensors"],
-            "temperature.tdms"
-        )
-        if os.path.exists(loc_temp_tdms):
-            df_tdms_temperature = TdmsFile(
-                os.path.join(
-                    row["sensors"],
-                    "temperature.tdms"
+            if len(press) == 0:
+                if cutoff == "diluent":
+                    pass
+                else:
+                    raise ValueError("Empty cutoff pressure for %s" % cutoff)
+
+            else:
+                press = unp.uarray(
+                    press,
+                    uncertainty.u_pressure(press, daq_err=False)
                 )
-            ).as_dataframe()
-            t_init = cls._get_initial_temperature(df_tdms_temperature)
+                cutoffs[cutoff] = press.mean() + \
+                    cls.population_uncertainty(press)
+
+        return cutoffs
+
+    @staticmethod
+    def get_diluent_mol_frac(partials):
+        if np.isnan(partials["diluent"].nominal_value):
+            # undiluted mixture
+            return un.ufloat(0, 0)
         else:
-            t_init = un.ufloat(NaN, NaN)
+            return partials["diluent"] / sum(partials.values())
 
-        # wave speed measurement
-        diode_loc = os.path.join(row["sensors"], "diodes.tdms")
-        wave_speed = diodes.calculate_velocity(diode_loc)[0]
+    @classmethod
+    def read_fill_tdms(
+            cls,
+            dir_shot
+    ):
+        fill_tdms = TdmsFile(os.path.join(dir_shot, "fill.tdms"))
+        partials = cls.get_fill_cutoffs(fill_tdms)
+        cutoffs = cls.get_fill_cutoffs(fill_tdms)
+        initial = cls.get_initial_conditions(fill_tdms)
+        dil_mf = cls.get_diluent_mol_frac(partials)
+        return dict(
+            partials=partials,
+            cutoffs=cutoffs,
+            initial=initial,
+            dil_mf=dil_mf
+        )
 
-        # output results
-        out = dict()
-        out["schlieren"] = image
-        out["phi"] = phi.nominal_value
-        out["u_phi"] = phi.std_dev
-        out["p_0"] = p_init.nominal_value
-        out["u_p_0"] = p_init.std_dev
-        out["t_0"] = t_init.nominal_value
-        out["u_t_0"] = t_init.std_dev
-        out["p_fuel"] = p_fuel.nominal_value
-        out["u_p_fuel"] = p_fuel.std_dev
-        out["p_oxidizer"] = p_oxidizer.nominal_value
-        out["u_p_oxidizer"] = p_oxidizer.std_dev
-        out["wave_speed"] = wave_speed.nominal_value
-        out["u_wave_speed"] = wave_speed.std_dev
+    @classmethod
+    def get_initial_conditions(
+            cls,
+            fill_tdms
+    ):
+        pressure = fill_tdms.channel_data("oxidizer", "pressure")
+        u_pop_pressure = cls.population_uncertainty(pressure)
+        pressure = unp.uarray(
+            pressure,
+            uncertainty.u_pressure(
+                pressure,
+                daq_err=False
+            )
+        )
 
-        return idx, out
+        temperature = fill_tdms.channel_data("oxidizer", "temperature")
+        u_pop_temperature = cls.population_uncertainty(temperature)
+        temperature = unp.uarray(
+            temperature,
+            uncertainty.u_pressure(
+                temperature,
+                daq_err=False
+            )
+        )
+
+        initial = dict(
+            pressure=np.mean(pressure) + u_pop_pressure,
+            temperature=np.mean(temperature) + u_pop_temperature,
+        )
+
+        return initial
+
+    @staticmethod
+    def get_partials_from_cutoffs(cutoffs):
+        partials = dict()
+        partials["fuel"] = cutoffs["fuel"] - cutoffs["vacuum"]
+
+        # propagate nan +/- nan for undiluted mixtures
+        if np.isnan(cutoffs["diluent"].std_dev):
+            partials["diluent"] = cutoffs["diluent"]
+        else:
+            partials["diluent"] = cutoffs["diluent"] - cutoffs["fuel"]
+
+        # TODO: change if oxidizer is not air!!
+        # using nanmin in case fill order changes again in the future
+        partials["oxidizer"] = cutoffs["oxidizer"] - np.nanmin((
+            cutoffs["fuel"],
+            cutoffs["diluent"]
+        )) + cutoffs["vacuum"]
+
+        return partials
+
+    @staticmethod
+    def check_for_schlieren(dir_shot):
+        pth_frames = os.path.join(dir_shot, "frames")
+        pth_bg = os.path.join(dir_shot, "bg")
+        if os.path.exists(pth_frames) and os.path.exists(pth_bg):
+            # directories exist. make sure they have files in them.
+            num_frames = len([f for f in os.listdir(pth_frames)
+                              if f.lower()[-4:] == ".tif"])
+            num_bg = len([f for f in os.listdir(pth_frames)
+                          if f.lower()[-4:] == ".tif"])
+            if num_frames > 0 and num_bg == 101:
+                # everything is awesome
+                return dir_shot
+
+        return np.NaN
+
+    @staticmethod
+    def check_for_diodes(dir_shot):
+        # TODO: update this with the proper diode file size once known
+        diode_path = os.path.join(dir_shot, "diodes.tdms")
+        if os.path.exists(diode_path):
+            if os.path.getsize(diode_path) > 4096:
+                # diode tdms exists and is at least larger than empty
+                # (empty is 4096 bytes)
+                return diode_path
+
+        return np.NaN
+
+    @staticmethod
+    def get_nominal_conditions(dir_shot):
+        pth_nominal = os.path.join(dir_shot, "conditions.csv")
+        if os.path.exists(pth_nominal):
+            return pd.read_csv(pth_nominal).iloc[0]
+        else:
+            raise FileExistsError("%s not found" % pth_nominal)
+
+    @classmethod
+    def process_single_test(
+            cls,
+            date,
+            dir_shot,
+            mech,
+            diode_spacing,
+    ):
+        results = pd.Series(
+            index=(
+                "shot",                 # done
+                "start",                # done
+                "end",                  # done
+                "schlieren",            # done
+                "diodes",               # done
+                "t_0",                  # done
+                "u_t_0",                # done
+                "p_0_nom",              # done
+                "p_0",                  # done
+                "u_p_0",                # done
+                "phi_nom",              # done
+                "phi",                  # done
+                "u_phi",                # done
+                "fuel",                 # done
+                "p_fuel",               # done
+                "u_p_fuel",             # done
+                "oxidizer",             # done
+                "p_oxidizer",           # done
+                "u_p_oxidizer",         # done
+                "diluent",              # done
+                "p_diluent",            # done
+                "u_p_diluent",          # done
+                "dil_mf_nom",           # done
+                "dil_mf",               # done
+                "u_dil_mf",             # done
+                "wave_speed",           # done
+                "u_wave_speed",         # done
+                "cutoff_fuel",          # done
+                "cutoff_vacuum",        # done
+                "cutoff_diluent",       # done
+                "cutoff_oxidizer",      # done
+                "u_cutoff_fuel",        # done
+                "u_cutoff_vacuum",      # done
+                "u_cutoff_diluent",     # done
+                "u_cutoff_oxidizer",    # done
+                "date",                 # done
+            )
+        )
+        results["date"] = date
+        results["shot"] = cls.get_shot_no_from_dir(dir_shot)
+
+        # check for schlieren and diode files
+        # these are paths if they exist and NaN if they don't in order to
+        # conform to convention that arose during early data management.
+        # I don't like it, but that's how it is now.
+        results["schlieren"] = cls.check_for_schlieren(dir_shot)
+        results["diodes"] = cls.check_for_diodes(dir_shot)
+
+        # nominal conditions
+        # from conditions.csv
+        nominal = cls.get_nominal_conditions(dir_shot)
+        for key in ("start", "end", "p_0_nom", "phi_nom", "fuel",
+                    "oxidizer", "diluent", "dil_mf_nom"):
+            results[key] = nominal[key]
+
+        # wave speed
+        # from diodes.tdms
+        if pd.isna(results["diodes"]):
+            # this would happen anyway, but explicit is better than implicit
+            results["wave_speed"] = np.NaN
+            results["u_wave_speed"] = np.NaN
+        else:
+            wave_speed = diodes.calculate_velocity(
+                results["diodes"],
+                diode_spacing
+            )[0]
+            results["wave_speed"] = wave_speed.nominal_value
+            results["u_wave_speed"] = wave_speed.std_dev
+
+        # measured initial conditions
+        # from fill.tdms
+        fill_info = cls.read_fill_tdms(dir_shot)
+        initial = fill_info["initial"]
+        results["p_0"] = initial["pressure"].nominal_value
+        results["u_p_0"] = initial["pressure"].std_dev
+        results["t_0"] = initial["temperature"].nominal_value
+        results["u_t_0"] = initial["temperature"].std_dev
+
+        # measured cutoff pressures
+        # from fill.tdms
+        cutoffs = fill_info["cutoffs"]
+        results["cutoff_fuel"] = cutoffs["fuel"].nominal_value
+        results["u_cutoff_fuel"] = cutoffs["fuel"].std_dev
+        results["cutoff_diluent"] = cutoffs["diluent"].nominal_value
+        results["u_cutoff_diluent"] = cutoffs["diluent"].std_dev
+        results["cutoff_oxidizer"] = cutoffs["oxidizer"].nominal_value
+        results["u_cutoff_oxidizer"] = cutoffs["oxidizer"].std_dev
+
+        # measured partial pressures and dilution
+        # from fill.tdms
+        partials = fill_info["partials"]
+        results["p_fuel"] = partials["fuel"].nominal_value
+        results["u_p_fuel"] = partials["fuel"].std_dev
+        results["p_diluent"] = partials["diluent"].nominal_value
+        results["u_p_diluent"] = partials["diluent"].std_dev
+        results["p_oxidizer"] = partials["oxidizer"].nominal_value
+        results["u_p_oxidizer"] = partials["oxidizer"].std_dev
+        results["dil_mf"] = fill_info["dil_mf"].nominal_value
+        results["u_dil_mf"] = fill_info["dil_mf"].std_dev
+
+        # equivalence ratio
+        # from partials (fill.tdms) and nominal f/ox (conditions.csv)
+        phi = _get_equivalence_ratio(
+            partials["fuel"],
+            partials["oxidizer"],
+            _get_f_a_st(
+                nominal["fuel"],
+                nominal["oxidizer"],
+                mech
+            )
+        )
+        results["phi"] = phi.nominal_value
+        results["u_phi"] = phi.std_dev
+
+        return results.to_frame().T
 
 
 # def process_old_data(
