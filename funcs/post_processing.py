@@ -1246,6 +1246,20 @@ class _ProcessStructure2:
             dir_raw,
             date
     ):
+        """
+        Find all `Shot XX` directories within a single day's raw data directory
+
+        Parameters
+        ----------
+        dir_raw : str
+            directory for daily raw data
+        date : str
+            ISO-8601 formatted date string (YYYY-MM-DD)
+
+        Returns
+        -------
+        list
+        """
         dir_search = os.path.join(dir_raw, date)
         return sorted(
             os.path.join(dir_search, d)
@@ -1257,6 +1271,18 @@ class _ProcessStructure2:
     def _get_shot_no_from_dir(
             dir_shot
     ):
+        """
+        Extract shot number from shot directory
+
+        Parameters
+        ----------
+        dir_shot : str
+            directory containing shot data
+
+        Returns
+        -------
+        int
+        """
         return int("".join(
             (i for i in os.path.split(dir_shot)[1]
              if i in string.digits)
@@ -1266,6 +1292,20 @@ class _ProcessStructure2:
     def _population_uncertainty(
             data
     ):
+        """
+        Calculate a 95% confidence interval on measured data. Returns as a
+        ufloat with a nominal value of 0 for easy addition with instrumentation
+        uncertainty.
+
+        Parameters
+        ----------
+        data : np.array
+            array of data points
+
+        Returns
+        -------
+        un.ufloat
+        """
         num_samples = len(data)
         if num_samples > 0:
             sem = np.std(data) / sqrt(num_samples)
@@ -1283,6 +1323,23 @@ class _ProcessStructure2:
             cls,
             fill_tdms
     ):
+        """
+        Extracts fill cutoff pressures from fill.tdms
+
+        Parameters
+        ----------
+        fill_tdms : TdmsFile
+            TDMS file of shot fill data
+
+        Returns
+        -------
+        dict
+            dictionary with keys:
+                * vacuum
+                * fuel
+                * diluent
+                * oxidizer
+        """
         cutoffs = dict(
             vacuum=un.ufloat(np.NaN, np.NaN),
             fuel=un.ufloat(np.NaN, np.NaN),
@@ -1312,6 +1369,18 @@ class _ProcessStructure2:
     def _get_diluent_mol_frac(
             partials
     ):
+        """
+        Calculate diluent mole fraction from component partial pressures
+
+        Parameters
+        ----------
+        partials : dict
+            dictionary of partial pressures (fuel, oxidizer, diluent)
+
+        Returns
+        -------
+        un.ufloat
+        """
         if np.isnan(partials["diluent"].nominal_value):
             # undiluted mixture
             return un.ufloat(0, 0)
@@ -1323,6 +1392,24 @@ class _ProcessStructure2:
             cls,
             dir_shot
     ):
+        """
+        Read in partial pressures, fill cutoff pressures, initial conditions,
+        and diluent mass fraction from fill.tdms
+
+        Parameters
+        ----------
+        dir_shot : str
+            shot data directory
+
+        Returns
+        -------
+        dict
+            dictionary with keys:
+                * partials
+                * cutoffs
+                * initial
+                * dil_mf
+        """
         fill_tdms = TdmsFile(os.path.join(dir_shot, "fill.tdms"))
         partials = cls._get_fill_cutoffs(fill_tdms)
         cutoffs = cls._get_fill_cutoffs(fill_tdms)
@@ -1340,6 +1427,21 @@ class _ProcessStructure2:
             cls,
             fill_tdms
     ):
+        """
+        Collects initial conditions from fill.tdms
+
+        Parameters
+        ----------
+        fill_tdms : TdmsFile
+            TDMS file with fill data
+
+        Returns
+        -------
+        dict
+            dictionary with the keys:
+                * pressure
+                * temperature
+        """
         pressure = fill_tdms.channel_data("oxidizer", "pressure")
         u_pop_pressure = cls._population_uncertainty(pressure)
         pressure = unp.uarray(
@@ -1371,6 +1473,22 @@ class _ProcessStructure2:
     def _get_partials_from_cutoffs(
             cutoffs
     ):
+        """
+        Calculates component partial pressures from fill cutoff pressures
+
+        Parameters
+        ----------
+        cutoffs : dict
+            dictionary of cutoff pressures (output of _get_fill_cutoffs)
+
+        Returns
+        -------
+        dict
+            dictionary with keys:
+                * fuel
+                * oxidizer
+                * diluent
+        """
         partials = dict()
         partials["fuel"] = cutoffs["fuel"] - cutoffs["vacuum"]
 
@@ -1393,6 +1511,19 @@ class _ProcessStructure2:
     def _check_for_schlieren(
             dir_shot
     ):
+        """
+        Returns shot directory if schlieren data was collected, and np.NaN
+        if not.
+
+        Parameters
+        ----------
+        dir_shot : str
+            shot data directory
+
+        Returns
+        -------
+        str or np.NaN
+        """
         pth_frames = os.path.join(dir_shot, "frames")
         pth_bg = os.path.join(dir_shot, "bg")
         if os.path.exists(pth_frames) and os.path.exists(pth_bg):
@@ -1411,6 +1542,19 @@ class _ProcessStructure2:
     def _check_for_diodes(
             dir_shot
     ):
+        """
+        Returns path to diode file if it exists and is not empty, otherwise
+        returns np.NaN
+
+        Parameters
+        ----------
+        dir_shot : str
+            shot data directory
+
+        Returns
+        -------
+        str or np.NaN
+        """
         # TODO: update this with the proper diode file size once known
         diode_path = os.path.join(dir_shot, "diodes.tdms")
         if os.path.exists(diode_path):
@@ -1425,6 +1569,19 @@ class _ProcessStructure2:
     def _get_nominal_conditions(
             dir_shot
     ):
+        """
+        Reads in nominal conditions from conditions.csv, which should end up
+        as a dataframe with only one row.
+
+        Parameters
+        ----------
+        dir_shot : str
+            shot data directory
+
+        Returns
+        -------
+        pd.DataFrame
+        """
         pth_nominal = os.path.join(dir_shot, "conditions.csv")
         if os.path.exists(pth_nominal):
             return pd.read_csv(pth_nominal).iloc[0]
@@ -1437,6 +1594,24 @@ class _ProcessStructure2:
             shot_no,
             date
     ):
+        """
+        Background subtract all schlieren frames for a given shot
+
+        Parameters
+        ----------
+        dir_shot : str
+            shot data directory
+        shot_no : int
+            shot number
+        date : str
+            shot date
+
+        Returns
+        -------
+        dict
+            dictionary with keys of the form:
+                "/schlieren/dYYYY-MM-DD/shotXX/frame_XX
+        """
         processed = schlieren.bg_subtract_all_frames(dir_shot)
         return {
             "/schlieren/d{:s}/shot{:02d}/frame_{:02d}".format(
@@ -1455,6 +1630,27 @@ class _ProcessStructure2:
             mech,
             diode_spacing,
     ):
+        """
+        Process data from a single shot
+
+        Parameters
+        ----------
+        date : str
+            shot date
+        dir_shot : str
+            shot data directory
+        shot_no : int
+            shot number
+        mech : str
+            mechanism for cantera calculations
+        diode_spacing : float
+            distance between photodiodes, in meters
+
+        Returns
+        -------
+        tuple
+            (shot no., results dataframe, schlieren dictionary)
+        """
         results = pd.Series(
             index=(
                 "shot",
@@ -1592,6 +1788,27 @@ class _ProcessStructure2:
             diode_spacing,
             multiprocessing
     ):
+        """
+        Process all tests on a given day
+
+        Parameters
+        ----------
+        date : str
+            test date
+        dir_raw : str
+            raw data directory for given day
+        mech : str
+            mechanism for cantera calculations
+        diode_spacing : float
+            diode spacing in meters
+        multiprocessing : bool
+            whether or not to use multiprocessing to speed up calculations
+
+        Returns
+        -------
+        tuple
+            (processed dataframe, schlieren dictionary)
+        """
         shot_dirs = cls._collect_shot_directories(dir_raw, date)
         shot_nums = [cls._get_shot_no_from_dir(d) for d in shot_dirs]
 
@@ -1619,86 +1836,7 @@ class _ProcessStructure2:
                 df_out = pd.concat((df_out, df_shot), ignore_index=True)
                 schlieren_out.update(shot_schlieren)
 
-
-# def process_old_data(
-#         base_dir,
-#         test_date,
-#         f_a_st=0.04201680672268907,
-#         multiprocess=False
-# ):
-#     """
-#     Process data from an old-style data set.
-#
-#     Parameters
-#     ----------
-#     base_dir : str
-#         Base data directory, (e.g. `/d/Data/Raw/`)
-#     test_date : str
-#         ISO 8601 formatted date of test data
-#     f_a_st : float
-#         Stoichiometric fuel/air ratio for the test mixture. Default value
-#         is for propane/air.
-#     multiprocess : bool
-#         Set to True to parallelize processing of a single day's tests
-#
-#     Returns
-#     -------
-#     List[pd.DataFrame, dict]
-#         A list in which the first item is a dataframe of the processed
-#         tube data and the second is a dictionary containing
-#         background-subtracted schlieren images
-#     """
-#     proc = _ProcessOldData()
-#     return proc(
-#         base_dir,
-#         test_date,
-#         f_a_st,
-#         multiprocess
-#     )
-
-
-# def process_new_data(
-#         base_dir,
-#         test_date,
-#         sample_time=None,
-#         mech="gri30.cti",
-#         diode_spacing=1.0668,
-#         multiprocess=False
-# ):
-#     """
-#     Process data from a day of testing using the newer directory structure
-#
-#     Parameters
-#     ----------
-#     base_dir : str
-#         Base data directory, (e.g. `/d/Data/Raw/`)
-#     test_date : str
-#         ISO 8601 formatted date of test data
-#     sample_time : None or pd.Timedelta
-#         Length of hold period at the end of a fill state. If None is passed,
-#         value will be read from nominal test conditions.
-#     mech : str
-#         Mechanism for cantera calculations
-#     diode_spacing : float
-#         Diode spacing, in meters
-#     multiprocess : bool
-#         Set true to parallelize data analysis
-#
-#     Returns
-#     -------
-#     Tuple[pd.DataFrame, Dict]
-#         Tuple containing a dataframe of test results and a dictionary of
-#         background subtracted schlieren images
-#     """
-#     proc = _ProcessNewData()
-#     return proc(
-#         base_dir,
-#         test_date,
-#         sample_time,
-#         mech,
-#         diode_spacing,
-#         multiprocess
-#     )
+        return df_out, schlieren_out
 
 
 def store_processed_schlieren(
