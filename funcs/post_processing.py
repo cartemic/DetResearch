@@ -1240,6 +1240,8 @@ class _ProcessStructure1:
 
 
 class _ProcessStructure2:
+    # TODO: add schlieren processing
+    # TODO: add docstrings
     @staticmethod
     def collect_shot_directories(
             dir_raw,
@@ -1262,7 +1264,9 @@ class _ProcessStructure2:
         ))
 
     @staticmethod
-    def population_uncertainty(data):
+    def population_uncertainty(
+            data
+    ):
         num_samples = len(data)
         if num_samples > 0:
             sem = np.std(data) / sqrt(num_samples)
@@ -1306,7 +1310,9 @@ class _ProcessStructure2:
         return cutoffs
 
     @staticmethod
-    def get_diluent_mol_frac(partials):
+    def get_diluent_mol_frac(
+            partials
+    ):
         if np.isnan(partials["diluent"].nominal_value):
             # undiluted mixture
             return un.ufloat(0, 0)
@@ -1363,7 +1369,9 @@ class _ProcessStructure2:
         return initial
 
     @staticmethod
-    def get_partials_from_cutoffs(cutoffs):
+    def get_partials_from_cutoffs(
+            cutoffs
+    ):
         partials = dict()
         partials["fuel"] = cutoffs["fuel"] - cutoffs["vacuum"]
 
@@ -1383,7 +1391,9 @@ class _ProcessStructure2:
         return partials
 
     @staticmethod
-    def check_for_schlieren(dir_shot):
+    def check_for_schlieren(
+            dir_shot
+    ):
         pth_frames = os.path.join(dir_shot, "frames")
         pth_bg = os.path.join(dir_shot, "bg")
         if os.path.exists(pth_frames) and os.path.exists(pth_bg):
@@ -1399,7 +1409,9 @@ class _ProcessStructure2:
         return np.NaN
 
     @staticmethod
-    def check_for_diodes(dir_shot):
+    def check_for_diodes(
+            dir_shot
+    ):
         # TODO: update this with the proper diode file size once known
         diode_path = os.path.join(dir_shot, "diodes.tdms")
         if os.path.exists(diode_path):
@@ -1411,7 +1423,9 @@ class _ProcessStructure2:
         return np.NaN
 
     @staticmethod
-    def get_nominal_conditions(dir_shot):
+    def get_nominal_conditions(
+            dir_shot
+    ):
         pth_nominal = os.path.join(dir_shot, "conditions.csv")
         if os.path.exists(pth_nominal):
             return pd.read_csv(pth_nominal).iloc[0]
@@ -1428,42 +1442,42 @@ class _ProcessStructure2:
     ):
         results = pd.Series(
             index=(
-                "shot",                 # done
-                "start",                # done
-                "end",                  # done
-                "schlieren",            # done
-                "diodes",               # done
-                "t_0",                  # done
-                "u_t_0",                # done
-                "p_0_nom",              # done
-                "p_0",                  # done
-                "u_p_0",                # done
-                "phi_nom",              # done
-                "phi",                  # done
-                "u_phi",                # done
-                "fuel",                 # done
-                "p_fuel",               # done
-                "u_p_fuel",             # done
-                "oxidizer",             # done
-                "p_oxidizer",           # done
-                "u_p_oxidizer",         # done
-                "diluent",              # done
-                "p_diluent",            # done
-                "u_p_diluent",          # done
-                "dil_mf_nom",           # done
-                "dil_mf",               # done
-                "u_dil_mf",             # done
-                "wave_speed",           # done
-                "u_wave_speed",         # done
-                "cutoff_fuel",          # done
-                "cutoff_vacuum",        # done
-                "cutoff_diluent",       # done
-                "cutoff_oxidizer",      # done
-                "u_cutoff_fuel",        # done
-                "u_cutoff_vacuum",      # done
-                "u_cutoff_diluent",     # done
-                "u_cutoff_oxidizer",    # done
-                "date",                 # done
+                "shot",
+                "start",
+                "end",
+                "schlieren",
+                "diodes",
+                "t_0",
+                "u_t_0",
+                "p_0_nom",
+                "p_0",
+                "u_p_0",
+                "phi_nom",
+                "phi",
+                "u_phi",
+                "fuel",
+                "p_fuel",
+                "u_p_fuel",
+                "oxidizer",
+                "p_oxidizer",
+                "u_p_oxidizer",
+                "diluent",
+                "p_diluent",
+                "u_p_diluent",
+                "dil_mf_nom",
+                "dil_mf",
+                "u_dil_mf",
+                "wave_speed",
+                "u_wave_speed",
+                "cutoff_fuel",
+                "cutoff_vacuum",
+                "cutoff_diluent",
+                "cutoff_oxidizer",
+                "u_cutoff_fuel",
+                "u_cutoff_vacuum",
+                "u_cutoff_diluent",
+                "u_cutoff_oxidizer",
+                "date",
             )
         )
         results["date"] = date
