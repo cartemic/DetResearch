@@ -1240,10 +1240,9 @@ class _ProcessStructure1:
 
 
 class _ProcessStructure2:
-    # TODO: add schlieren processing
     # TODO: add docstrings
     @staticmethod
-    def collect_shot_directories(
+    def _collect_shot_directories(
             dir_raw,
             date
     ):
@@ -1255,7 +1254,7 @@ class _ProcessStructure2:
         )
 
     @staticmethod
-    def get_shot_no_from_dir(
+    def _get_shot_no_from_dir(
             dir_shot
     ):
         return int("".join(
@@ -1264,7 +1263,7 @@ class _ProcessStructure2:
         ))
 
     @staticmethod
-    def population_uncertainty(
+    def _population_uncertainty(
             data
     ):
         num_samples = len(data)
@@ -1280,7 +1279,7 @@ class _ProcessStructure2:
             return un.ufloat(np.NaN, np.NaN)
 
     @classmethod
-    def get_fill_cutoffs(
+    def _get_fill_cutoffs(
             cls,
             fill_tdms
     ):
@@ -1305,12 +1304,12 @@ class _ProcessStructure2:
                     uncertainty.u_pressure(press, daq_err=False)
                 )
                 cutoffs[cutoff] = press.mean() + \
-                    cls.population_uncertainty(press)
+                    cls._population_uncertainty(press)
 
         return cutoffs
 
     @staticmethod
-    def get_diluent_mol_frac(
+    def _get_diluent_mol_frac(
             partials
     ):
         if np.isnan(partials["diluent"].nominal_value):
@@ -1320,15 +1319,15 @@ class _ProcessStructure2:
             return partials["diluent"] / sum(partials.values())
 
     @classmethod
-    def read_fill_tdms(
+    def _read_fill_tdms(
             cls,
             dir_shot
     ):
         fill_tdms = TdmsFile(os.path.join(dir_shot, "fill.tdms"))
-        partials = cls.get_fill_cutoffs(fill_tdms)
-        cutoffs = cls.get_fill_cutoffs(fill_tdms)
-        initial = cls.get_initial_conditions(fill_tdms)
-        dil_mf = cls.get_diluent_mol_frac(partials)
+        partials = cls._get_fill_cutoffs(fill_tdms)
+        cutoffs = cls._get_fill_cutoffs(fill_tdms)
+        initial = cls._get_initial_conditions(fill_tdms)
+        dil_mf = cls._get_diluent_mol_frac(partials)
         return dict(
             partials=partials,
             cutoffs=cutoffs,
@@ -1337,12 +1336,12 @@ class _ProcessStructure2:
         )
 
     @classmethod
-    def get_initial_conditions(
+    def _get_initial_conditions(
             cls,
             fill_tdms
     ):
         pressure = fill_tdms.channel_data("oxidizer", "pressure")
-        u_pop_pressure = cls.population_uncertainty(pressure)
+        u_pop_pressure = cls._population_uncertainty(pressure)
         pressure = unp.uarray(
             pressure,
             uncertainty.u_pressure(
@@ -1352,7 +1351,7 @@ class _ProcessStructure2:
         )
 
         temperature = fill_tdms.channel_data("oxidizer", "temperature")
-        u_pop_temperature = cls.population_uncertainty(temperature)
+        u_pop_temperature = cls._population_uncertainty(temperature)
         temperature = unp.uarray(
             temperature,
             uncertainty.u_pressure(
@@ -1369,7 +1368,7 @@ class _ProcessStructure2:
         return initial
 
     @staticmethod
-    def get_partials_from_cutoffs(
+    def _get_partials_from_cutoffs(
             cutoffs
     ):
         partials = dict()
@@ -1391,7 +1390,7 @@ class _ProcessStructure2:
         return partials
 
     @staticmethod
-    def check_for_schlieren(
+    def _check_for_schlieren(
             dir_shot
     ):
         pth_frames = os.path.join(dir_shot, "frames")
@@ -1409,7 +1408,7 @@ class _ProcessStructure2:
         return np.NaN
 
     @staticmethod
-    def check_for_diodes(
+    def _check_for_diodes(
             dir_shot
     ):
         # TODO: update this with the proper diode file size once known
@@ -1423,7 +1422,7 @@ class _ProcessStructure2:
         return np.NaN
 
     @staticmethod
-    def get_nominal_conditions(
+    def _get_nominal_conditions(
             dir_shot
     ):
         pth_nominal = os.path.join(dir_shot, "conditions.csv")
@@ -1432,11 +1431,27 @@ class _ProcessStructure2:
         else:
             raise FileExistsError("%s not found" % pth_nominal)
 
+    @staticmethod
+    def _process_schlieren(
+            dir_shot,
+            shot_no,
+            date
+    ):
+        processed = schlieren.bg_subtract_all_frames(dir_shot)
+        return {
+            "/schlieren/d{:s}/shot{:02d}/frame_{:02d}".format(
+                date,
+                shot_no,
+                i
+            ): pd.DataFrame(frame) for i, frame in enumerate(processed)
+        }
+
     @classmethod
     def process_single_test(
             cls,
             date,
             dir_shot,
+            shot_no,
             mech,
             diode_spacing,
     ):
@@ -1481,18 +1496,28 @@ class _ProcessStructure2:
             )
         )
         results["date"] = date
-        results["shot"] = cls.get_shot_no_from_dir(dir_shot)
+        results["shot"] = shot_no
 
         # check for schlieren and diode files
         # these are paths if they exist and NaN if they don't in order to
         # conform to convention that arose during early data management.
         # I don't like it, but that's how it is now.
-        results["schlieren"] = cls.check_for_schlieren(dir_shot)
-        results["diodes"] = cls.check_for_diodes(dir_shot)
+        results["schlieren"] = cls._check_for_schlieren(dir_shot)
+        results["diodes"] = cls._check_for_diodes(dir_shot)
+
+        # background subtract schlieren
+        if not pd.isnull(results["schlieren"]):
+            schlieren_out = cls._process_schlieren(
+                results["schlieren"],
+                results["shot"],
+                date
+            )
+        else:
+            schlieren_out = dict()
 
         # nominal conditions
         # from conditions.csv
-        nominal = cls.get_nominal_conditions(dir_shot)
+        nominal = cls._get_nominal_conditions(dir_shot)
         for key in ("start", "end", "p_0_nom", "phi_nom", "fuel",
                     "oxidizer", "diluent", "dil_mf_nom"):
             results[key] = nominal[key]
@@ -1513,7 +1538,7 @@ class _ProcessStructure2:
 
         # measured initial conditions
         # from fill.tdms
-        fill_info = cls.read_fill_tdms(dir_shot)
+        fill_info = cls._read_fill_tdms(dir_shot)
         initial = fill_info["initial"]
         results["p_0"] = initial["pressure"].nominal_value
         results["u_p_0"] = initial["pressure"].std_dev
@@ -1556,7 +1581,43 @@ class _ProcessStructure2:
         results["phi"] = phi.nominal_value
         results["u_phi"] = phi.std_dev
 
-        return results.to_frame().T
+        return shot_no, results.to_frame().T, schlieren_out
+
+    @classmethod
+    def process_all_tests(
+            cls,
+            date,
+            dir_raw,
+            mech,
+            diode_spacing,
+            multiprocessing
+    ):
+        shot_dirs = cls._collect_shot_directories(dir_raw, date)
+        shot_nums = [cls._get_shot_no_from_dir(d) for d in shot_dirs]
+
+        df_out = pd.DataFrame()
+        schlieren_out = dict()
+        if multiprocessing:
+            pool = mp.Pool()
+            results = sorted(pool.starmap(
+                cls.process_single_test,
+                [(date, d, sn, mech, diode_spacing)
+                 for d, sn in zip(shot_dirs, shot_nums)]
+            ))
+            for (_, df_shot, shot_schlieren) in results:
+                df_out = pd.concat((df_out, df_shot), ignore_index=True)
+                schlieren_out.update(shot_schlieren)
+        else:
+            for sn, d in zip(shot_nums, shot_dirs):
+                _, df_shot, shot_schlieren = cls.process_single_test(
+                    date,
+                    d,
+                    sn,
+                    mech,
+                    diode_spacing
+                )
+                df_out = pd.concat((df_out, df_shot), ignore_index=True)
+                schlieren_out.update(shot_schlieren)
 
 
 # def process_old_data(
