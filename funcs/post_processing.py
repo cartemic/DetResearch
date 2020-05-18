@@ -16,6 +16,10 @@ from ._dev import d_drive
 from .diodes import find_diode_data, calculate_velocity
 
 _DIR = os.path.split(__file__)[0]
+_STRUCTURE_END_DATES = (
+    pd.Timestamp("2019-11-01"),
+    pd.Timestamp("2020-05-05")
+)
 
 
 def _get_f_a_st(
@@ -73,7 +77,81 @@ def _get_dil_mol_frac(
     return p_diluent / (p_fuel + p_oxidizer + p_diluent)
 
 
-class _ProcessNewData:
+def _collect_schlieren_dirs(
+        base_dir,
+        test_date
+):
+    """
+    When reading in camera data from these tests, we will ignore the spatial
+    directory since it contains no schlieren information. It will still be
+    used, but not in this step. Directories containing a `.old` file have a
+    different structure than newer directories, which must be accounted for.
+
+    Parameters
+    ----------
+    base_dir : str
+        Base data directory, (e.g. `/d/Data/Raw/`)
+    test_date : str
+        ISO 8601 formatted date of test data
+
+    Returns
+    -------
+    list
+        ordered list of directories containing diode output
+    """
+    raw_dir = os.path.join(
+        base_dir,
+        test_date
+    )
+    if not os.path.isdir(raw_dir):
+        return []
+
+    contents = os.listdir(raw_dir)
+
+    if ".old" in contents:
+        raw_dir = os.path.join(
+            base_dir,
+            test_date,
+            "Camera"
+        )
+        contents = os.listdir(raw_dir)
+
+    return sorted([
+        os.path.join(raw_dir, item)
+        for item in contents
+        if os.path.isdir(os.path.join(raw_dir, item))
+        and "shot" in item.lower()
+        and os.path.exists(os.path.join(raw_dir, item, "frames"))
+        and os.path.exists(os.path.join(raw_dir, item, "bg"))
+    ])
+
+
+def _get_equivalence_ratio(
+        p_fuel,
+        p_oxidizer,
+        f_a_st
+):
+    """
+    Simple equivalence ratio function
+
+    Parameters
+    ----------
+    p_fuel : float or un.ufloat
+        Partial pressure of fuel
+    p_oxidizer : float or un.ufloat
+        Partial pressure of oxidizer
+    f_a_st : float or un.ufloat
+        Stoichiometric fuel/air ratio
+
+    Returns
+    -------
+    float or un.ufloat
+        Mixture equivalence ratio
+    """
+    return p_fuel / p_oxidizer / f_a_st
+
+
+class _ProcessStructure1:
     @classmethod
     def __call__(
             cls,
@@ -814,81 +892,7 @@ class _ProcessNewData:
         return df_to_slice[cls._mask_df_by_row_time(df_to_slice, test_time_row)]
 
 
-def _collect_schlieren_dirs(
-        base_dir,
-        test_date
-):
-    """
-    When reading in camera data from these tests, we will ignore the spatial
-    directory since it contains no schlieren information. It will still be
-    used, but not in this step. Directories containing a `.old` file have a
-    different structure than newer directories, which must be accounted for.
-
-    Parameters
-    ----------
-    base_dir : str
-        Base data directory, (e.g. `/d/Data/Raw/`)
-    test_date : str
-        ISO 8601 formatted date of test data
-
-    Returns
-    -------
-    list
-        ordered list of directories containing diode output
-    """
-    raw_dir = os.path.join(
-        base_dir,
-        test_date
-    )
-    if not os.path.isdir(raw_dir):
-        return []
-
-    contents = os.listdir(raw_dir)
-
-    if ".old" in contents:
-        raw_dir = os.path.join(
-            base_dir,
-            test_date,
-            "Camera"
-        )
-        contents = os.listdir(raw_dir)
-
-    return sorted([
-        os.path.join(raw_dir, item)
-        for item in contents
-        if os.path.isdir(os.path.join(raw_dir, item))
-        and "shot" in item.lower()
-        and os.path.exists(os.path.join(raw_dir, item, "frames"))
-        and os.path.exists(os.path.join(raw_dir, item, "bg"))
-    ])
-
-
-def _get_equivalence_ratio(
-        p_fuel,
-        p_oxidizer,
-        f_a_st
-):
-    """
-    Simple equivalence ratio function
-
-    Parameters
-    ----------
-    p_fuel : float or un.ufloat
-        Partial pressure of fuel
-    p_oxidizer : float or un.ufloat
-        Partial pressure of oxidizer
-    f_a_st : float or un.ufloat
-        Stoichiometric fuel/air ratio
-
-    Returns
-    -------
-    float or un.ufloat
-        Mixture equivalence ratio
-    """
-    return p_fuel / p_oxidizer / f_a_st
-
-
-class _ProcessOldData:
+class _ProcessStructure0:
     @classmethod
     def _collect_test_dirs(
             cls,
@@ -1226,85 +1230,85 @@ class _ProcessOldData:
         return idx, out
 
 
-def process_old_data(
-        base_dir,
-        test_date,
-        f_a_st=0.04201680672268907,
-        multiprocess=False
-):
-    """
-    Process data from an old-style data set.
+# def process_old_data(
+#         base_dir,
+#         test_date,
+#         f_a_st=0.04201680672268907,
+#         multiprocess=False
+# ):
+#     """
+#     Process data from an old-style data set.
+#
+#     Parameters
+#     ----------
+#     base_dir : str
+#         Base data directory, (e.g. `/d/Data/Raw/`)
+#     test_date : str
+#         ISO 8601 formatted date of test data
+#     f_a_st : float
+#         Stoichiometric fuel/air ratio for the test mixture. Default value
+#         is for propane/air.
+#     multiprocess : bool
+#         Set to True to parallelize processing of a single day's tests
+#
+#     Returns
+#     -------
+#     List[pd.DataFrame, dict]
+#         A list in which the first item is a dataframe of the processed
+#         tube data and the second is a dictionary containing
+#         background-subtracted schlieren images
+#     """
+#     proc = _ProcessOldData()
+#     return proc(
+#         base_dir,
+#         test_date,
+#         f_a_st,
+#         multiprocess
+#     )
 
-    Parameters
-    ----------
-    base_dir : str
-        Base data directory, (e.g. `/d/Data/Raw/`)
-    test_date : str
-        ISO 8601 formatted date of test data
-    f_a_st : float
-        Stoichiometric fuel/air ratio for the test mixture. Default value
-        is for propane/air.
-    multiprocess : bool
-        Set to True to parallelize processing of a single day's tests
 
-    Returns
-    -------
-    List[pd.DataFrame, dict]
-        A list in which the first item is a dataframe of the processed
-        tube data and the second is a dictionary containing
-        background-subtracted schlieren images
-    """
-    proc = _ProcessOldData()
-    return proc(
-        base_dir,
-        test_date,
-        f_a_st,
-        multiprocess
-    )
-
-
-def process_new_data(
-        base_dir,
-        test_date,
-        sample_time=None,
-        mech="gri30.cti",
-        diode_spacing=1.0668,
-        multiprocess=False
-):
-    """
-    Process data from a day of testing using the newer directory structure
-
-    Parameters
-    ----------
-    base_dir : str
-        Base data directory, (e.g. `/d/Data/Raw/`)
-    test_date : str
-        ISO 8601 formatted date of test data
-    sample_time : None or pd.Timedelta
-        Length of hold period at the end of a fill state. If None is passed,
-        value will be read from nominal test conditions.
-    mech : str
-        Mechanism for cantera calculations
-    diode_spacing : float
-        Diode spacing, in meters
-    multiprocess : bool
-        Set true to parallelize data analysis
-
-    Returns
-    -------
-    Tuple[pd.DataFrame, Dict]
-        Tuple containing a dataframe of test results and a dictionary of
-        background subtracted schlieren images
-    """
-    proc = _ProcessNewData()
-    return proc(
-        base_dir,
-        test_date,
-        sample_time,
-        mech,
-        diode_spacing,
-        multiprocess
-    )
+# def process_new_data(
+#         base_dir,
+#         test_date,
+#         sample_time=None,
+#         mech="gri30.cti",
+#         diode_spacing=1.0668,
+#         multiprocess=False
+# ):
+#     """
+#     Process data from a day of testing using the newer directory structure
+#
+#     Parameters
+#     ----------
+#     base_dir : str
+#         Base data directory, (e.g. `/d/Data/Raw/`)
+#     test_date : str
+#         ISO 8601 formatted date of test data
+#     sample_time : None or pd.Timedelta
+#         Length of hold period at the end of a fill state. If None is passed,
+#         value will be read from nominal test conditions.
+#     mech : str
+#         Mechanism for cantera calculations
+#     diode_spacing : float
+#         Diode spacing, in meters
+#     multiprocess : bool
+#         Set true to parallelize data analysis
+#
+#     Returns
+#     -------
+#     Tuple[pd.DataFrame, Dict]
+#         Tuple containing a dataframe of test results and a dictionary of
+#         background subtracted schlieren images
+#     """
+#     proc = _ProcessNewData()
+#     return proc(
+#         base_dir,
+#         test_date,
+#         sample_time,
+#         mech,
+#         diode_spacing,
+#         multiprocess
+#     )
 
 
 def store_processed_schlieren(
@@ -1404,7 +1408,6 @@ def get_existing_tests(
 
 def process_multiple_days(
         dates_to_process,
-        directory_structure="new",
         loc_processed_h5=os.path.join(
             d_drive,
             "Data",
@@ -1426,9 +1429,6 @@ def process_multiple_days(
     ----------
     dates_to_process : List[Str] or str
         List of dates to post process as YYYY-MM-DD
-    directory_structure : str
-        How raw data is stored on disk. Can be "old" or "new", but probably
-         should be "new"
     loc_processed_h5 : str
         Location of processed data HDF5
     raw_base_dir : str
@@ -1455,37 +1455,11 @@ def process_multiple_days(
         df_out = store["data"]
 
     for day in dates_to_process:
-        if directory_structure == "old":
-            df_day, day_schlieren = process_old_data(
-                raw_base_dir,
-                day,
-                multiprocess=multiprocess
-            )
-            df_day.drop(
-                "sensors",
-                axis=1,
-                inplace=True
-            )
-
-            # these were not included and I'm not using the old structure
-            # anymore so it's not important enough to fix
-            df_day["dil_mf"] = 0.
-            df_day["dil_mf_nom"] = 0.
-            df_day["diluent"] = "None"
-            df_day["fuel"] = "C3H8"
-            df_day["oxidizer"] = "air"
-            df_day["p_0_nom"] = 101325.
-            df_day["p_diluent"] = df_day["p_fuel"]
-            df_day["phi_nom"] = 1.
-            df_day["u_dil_mf"] = 0.
-            df_day["u_p_diluent"] = df_day["u_p_fuel"]
-
-        else:
-            df_day, day_schlieren = process_new_data(
-                raw_base_dir,
-                day,
-                multiprocess=multiprocess
-            )
+        df_day, day_schlieren = process_by_date(
+            day,
+            raw_base_dir,
+            multiprocess
+        )
 
         # force df_day to match desired structure
         df_day = pd.concat((df_out, df_day), sort=False, ignore_index=True)
@@ -1512,3 +1486,79 @@ def process_multiple_days(
                         overwrite,
                         store
                     )
+
+
+def process_by_date(
+        date_to_process,
+        raw_base_dir=os.path.join(
+            d_drive,
+            "Data",
+            "Raw"
+        ),
+        multiprocess=True,
+        sample_time=None,
+        mech="gri30.cti",
+        diode_spacing=1.0668,
+):
+    """
+
+    Parameters
+    ----------
+    date_to_process
+    raw_base_dir
+    multiprocess
+    sample_time
+        old directory structures only
+    mech
+    diode_spacing
+
+    Returns
+    -------
+
+    """
+    date_to_process = pd.to_datetime(date_to_process)
+    if date_to_process < _STRUCTURE_END_DATES[0]:
+        # original directory structure
+        proc = _ProcessStructure0()
+        df_day, day_schlieren = proc(
+            raw_base_dir,
+            str(date_to_process),
+            0.04201680672268907,  # all propane/air
+            multiprocess
+        )
+        df_day.drop(
+            "sensors",
+            axis=1,
+            inplace=True
+        )
+
+        # these were not included and I'm not using the old structure
+        # anymore so it's not important enough to fix
+        df_day["dil_mf"] = 0.
+        df_day["dil_mf_nom"] = 0.
+        df_day["diluent"] = "None"
+        df_day["fuel"] = "C3H8"
+        df_day["oxidizer"] = "air"
+        df_day["p_0_nom"] = 101325.
+        df_day["p_diluent"] = df_day["p_fuel"]
+        df_day["phi_nom"] = 1.
+        df_day["u_dil_mf"] = 0.
+        df_day["u_p_diluent"] = df_day["u_p_fuel"]
+
+    elif date_to_process < _STRUCTURE_END_DATES[1]:
+        # second directory structure
+        proc = _ProcessStructure1()
+        df_day, day_schlieren = proc(
+            raw_base_dir,
+            str(date_to_process),
+            sample_time,
+            mech,
+            diode_spacing,
+            multiprocess
+            )
+
+    else:
+        # current directory structure
+        pass
+
+    return df_day, day_schlieren
