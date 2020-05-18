@@ -1,8 +1,10 @@
 import multiprocessing as mp
 import os
+import string
 import warnings
 
 import cantera as ct
+import numpy as np
 import pandas as pd
 import uncertainties as un
 from nptdms import TdmsFile
@@ -10,8 +12,6 @@ from numpy import NaN, sqrt
 from scipy.stats import t
 from tables import NoSuchNodeError
 from uncertainties import unumpy as unp
-import numpy as np
-import string
 
 from . import diodes, schlieren, uncertainty
 from ._dev import d_drive
