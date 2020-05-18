@@ -2087,6 +2087,12 @@ def process_by_date(
 
     else:
         # current directory structure
-        pass
+        df_day, day_schlieren = _ProcessStructure2.process_all_tests(
+            str(date_to_process),
+            raw_base_dir,
+            mech,
+            diode_spacing,
+            multiprocess
+        )
 
     return df_day, day_schlieren
