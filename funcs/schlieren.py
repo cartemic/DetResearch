@@ -601,3 +601,124 @@ def get_cell_size_from_delta(
         ])
     )
     return 2 * delta * l_mm_i / l_px_i
+
+
+def _filter_df_day_shot(
+        df,
+        day_shot_list,
+        return_mask=False
+):
+    """
+    Filters a dataframe by date and shot number for an arbitrary number of
+    date/shot combinations. Returns the indices (for masking) and the filtere
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        dataframe to filter. Must have columns for "date" and "shot".
+    day_shot_list : List[Tuple[Str, Int, Int]]
+        List of tuples containing date, start shot, and end shot. Date should
+        be a string in ISO-8601 format, and start/end shots numbers should be
+        integers:
+        [("YYYY-MM-DD", start_shot, end_shot)]
+    return_mask : bool
+        if true, mask will be returned as the second item, which can be used to
+        update data (e.g. inserting a spatial calibration)
+
+    Returns
+    -------
+    Union[Tuple[pd.DataFrame, np.array], Tuple[pd.DataFrame]]
+        (filtered dataframe,) or (filtered dataframe, mask)
+    """
+    mask_list = [((df["date"] == date) &
+                  (df["shot"] <= end_shot) &
+                  (df["shot"] >= start_shot))
+                 for (date, start_shot, end_shot) in day_shot_list]
+    mask = [False for _ in range(len(df))]
+    for m in mask_list:
+        mask = m | mask
+    if return_mask:
+        return df[mask], mask
+    else:
+        return (df[mask],)
+
+
+def _check_stored_calibrations(
+        df
+):
+    """
+    Check for stored calibrations within a filtered dataframe. All rows are
+    checked for:
+        * whether there are any stored spatial calibrations
+        * whether there are stored calibrations for every date and shot
+        * whether all of the stored calibrations are equal
+
+    This function is meant to be applied to a schlieren dataframe, which must
+    contain the columns:
+        * spatial_near
+        * spatial_far
+        * spatial_centerline
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        filtered dataframe containing only the date/shot combinations of
+        interest
+
+    Returns
+    -------
+    Dict[String: Dict[String: Bool]]
+        Outer keys:
+            * near
+            * far
+            * centerline
+        Inner keys:
+            * any
+            * all
+            * equal
+    """
+    out = dict(
+        near=dict(
+            any=False,
+            all=False,
+            equal=False,
+        ),
+        far=dict(
+            any=False,
+            all=False,
+            equal=False,
+        ),
+        centerline=dict(
+            any=False,
+            all=False,
+            equal=False,
+        ),
+    )
+
+    for location in out.keys():
+        values = df["spatial_" + location].values.astype(float)
+        not_nan = ~np.isnan(values)
+        out[location]["any"] = np.any(not_nan)
+        out[location]["all"] = np.all(not_nan)
+
+        if len(values[not_nan]) == 0:
+            # everything is NaN
+            out[location]["equal"] = True
+        else:
+            # allclose will cause nanmedian check to fail for NaN as well as
+            # for differing numerical values
+            out[location]["equal"] = np.allclose(
+                values,
+                np.nanmedian(values)
+            )
+
+    return out
+
+
+def get_centerline_calibration(
+        df
+):
+    near = unp.uarray(df["spatial_near"].values, df["u_spatial_near"].std_dev)
+    far = unp.uarray(df["spatial_far"].values, df["u_spatial_far"].std_dev)
+    centerline = (near + far) / 2
+    return centerline

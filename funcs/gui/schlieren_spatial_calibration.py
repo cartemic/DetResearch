@@ -57,9 +57,15 @@ class CalWindow(QDialog, calWindow.Ui_MainWindow):
         self.btnExit.clicked.connect(sys.exit)
         self.btnLoadHDF5.clicked.connect(self.load_hdf5)
         self.cboxSelectDate.activated.connect(self.select_date)
+        self.cboxSelectDate2.activated.connect(self.select_date)
         self.chkUseDate2.clicked.connect(self.use_second_date)
         self.btnLoadAndCalibrate.clicked.connect(self.load_and_calibrate)
-        for item in (self.inpStartShot, self.inpEndShot):
+        for item in (
+                self.inpStartShot,
+                self.inpEndShot,
+                self.inpStartShot2,
+                self.inpEndShot2,
+        ):
             item.editingFinished.connect(self.check_stored_calibrations)
 
     def __del__(self):
@@ -118,8 +124,16 @@ class CalWindow(QDialog, calWindow.Ui_MainWindow):
                 warning_box.exec_()
 
     def select_date(self):
+        date = self.cboxSelectDate.currentText()
         self.check_stored_calibrations()
-        self.date = self.cboxSelectDate.currentText()
+
+        self.cboxSelectDate2.clear()
+        self.cboxSelectDate2.addItems(self.df["date"].unique())
+        for i in range(self.cboxSelectDate2.count()):
+            if self.cboxSelectDate2.itemText(i) == date:
+                self.cboxSelectDate2.removeItem(i)
+                break
+        self.date = date
         self.check_stored_calibrations()
         # set start and end shot
 
@@ -134,26 +148,58 @@ class CalWindow(QDialog, calWindow.Ui_MainWindow):
             self.lblEndShot2,
         ):
             item.setEnabled(enable)
+            self.check_stored_calibrations()
 
     def check_stored_calibrations(self):
-        df_date = self.df[self.df["date"] == self.date]
+        # df_date = self.df[self.df["date"] == self.date]
+        date_0 = self.cboxSelectDate.currentText()
+        date_1 = self.cboxSelectDate2.currentText()
+
         # TODO: this should be its own function
         try:
-            start_shot = int(self.inpStartShot.text())
+            start_shot_0 = int(self.inpStartShot.text())
         except ValueError:
-            start_shot = df_date["shot"].min()
+            start_shot_0 = self.df[self.df["date"] == date_0]["shot"].min()
 
         try:
-            end_shot = int(self.inpEndShot.text())
+            end_shot_0 = int(self.inpEndShot.text())
         except ValueError:
-            end_shot = df_date["shot"].max()
+            end_shot_0 = self.df[self.df["date"] == date_0]["shot"].max()
+
+        if not self.cboxSelectDate2.isEnabled():
+            date_1 = date_0
+            start_shot_1 = start_shot_0
+            end_shot_1 = end_shot_0
+        else:
+            try:
+                start_shot_1 = int(self.inpStartShot2.text())
+            except ValueError:
+                start_shot_1 = self.df[self.df["date"] == date_1]["shot"].min()
+
+            try:
+                end_shot_1 = int(self.inpEndShot2.text())
+            except ValueError:
+                end_shot_1 = self.df[self.df["date"] == date_1]["shot"].max()
 
         pal = self.chkStoredCenterline.palette()
-        if not np.any(np.isnan((start_shot, end_shot))):
-            df_filtered = df_date[
-                (df_date["shot"] >= start_shot) &
-                (df_date["shot"] <= end_shot)
-            ]
+        if not np.any(np.isnan((
+                start_shot_0,
+                end_shot_0,
+                start_shot_1,
+                end_shot_1,
+        ))):
+            df_filtered = self.filter_data(
+                self.df,
+                date_0,
+                start_shot_0,
+                end_shot_0,
+                date_1,
+                start_shot_1,
+                end_shot_1
+            )
+            print(date_0, start_shot_0, end_shot_0)
+            print(date_1, start_shot_1, end_shot_1)
+            # print(df_filtered)
             self.chkStoredCenterline.setChecked(
                 np.any(df_filtered["spatial_factor"].notna())
             )
@@ -167,7 +213,7 @@ class CalWindow(QDialog, calWindow.Ui_MainWindow):
             else:
                 set_color = None
 
-            print(df_filtered["spatial_factor"])
+            # print(df_filtered["spatial_factor"])
             self.chkStoredCenterline.setStyleSheet(set_color)
 
         # else:
@@ -232,9 +278,11 @@ class PlotWindow(QDialog):
             'button_press_event',
             self.button_press_callback
         )
+        # noinspection PyUnresolvedReferences
         self.resized.connect(self.resize_canvas)
 
     def resizeEvent(self, event):
+        # noinspection PyUnresolvedReferences
         self.resized.emit()
         return super(PlotWindow, self).resizeEvent(event)
 
