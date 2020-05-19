@@ -11,12 +11,13 @@ CREATED BY:
 """
 
 import os
-import numpy as np
-from nptdms import TdmsFile
-from tkinter import filedialog as fd
 from tkinter import Tk
+from tkinter import filedialog as fd
+
+import numpy as np
 import scipy.signal as signal
 import uncertainties as un
+from nptdms import TdmsFile
 from uncertainties import unumpy as unp
 
 
@@ -35,6 +36,8 @@ def find_diode_data(
         browse to the desired directory.
     base_file_name : str
         Common file name for diode data (default is diodes.tdms)
+    ignore_hidden : bool
+        If true, ignore files/directories preceded by .
 
     Returns
     -------
@@ -92,24 +95,31 @@ def _velocity_calculator(
         Array of inter-diode velocities in m/s, calculated using the
         maximum gradient.
     """
+    bad_value = unp.uarray([np.NaN], np.NaN)
     diode_dataframe = load_diode_data(
         diode_data_file,
         apply_lowpass
     )
 
-    arrival_times = unp.uarray(
-        diode_dataframe.diff(axis=0).idxmax(axis=0, skipna=True).values,
-        [0.5, 0.5]
-    )
-    arrival_diff = np.diff(arrival_times)
+    try:
+        arrival_times = unp.uarray(
+            diode_dataframe.diff(axis=0).idxmax(axis=0, skipna=True).values,
+            [0.5, 0.5]
+        )
+        arrival_diff = np.diff(arrival_times)
+
+    except ValueError:
+        # empty array, return zero velocity
+        arrival_diff = bad_value
+
     if arrival_diff > 0:
         calculated_velocity = sample_specific_velocity / arrival_diff
     else:
-        calculated_velocity = unp.uarray([0.], [0.])
+        calculated_velocity = bad_value
 
     if calculated_velocity > 3000:
         # obvious garbage
-        calculated_velocity *= 0
+        calculated_velocity = bad_value
 
     if multiprocess:
         return instance, calculated_velocity
@@ -222,6 +232,12 @@ def calculate_velocity(
             lowpass,
             multiprocess
         )
+
+    elif np.isnan(diode_data_location):
+        # this means that there was a diode crash during the test, and no data
+        # was written to the shot directory. Return a unp.uarray of NaN so that
+        # NaNs propagate correctly during post-processing
+        return unp.uarray([np.NaN], np.NaN)
 
     else:
         if multiprocess:

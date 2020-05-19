@@ -1,11 +1,10 @@
-# third party imports
 import numpy as np
 import uncertainties as un
 from skimage import io
 from uncertainties import unumpy as unp
 
-# local imports
 from .uncertainty import add_uncertainty_terms, u_cell
+
 u_cell = u_cell["soot_foil"]
 
 

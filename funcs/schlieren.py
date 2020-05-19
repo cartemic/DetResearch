@@ -8,6 +8,7 @@ import uncertainties.unumpy as unp
 from matplotlib import pyplot as plt
 from matplotlib import widgets
 from skimage import io
+from skimage.filters import sobel_v
 
 from ._dev import d_drive
 from .uncertainty import add_uncertainty_terms, u_cell
@@ -522,8 +523,9 @@ class LineBuilder(object):  # pragma: no cover
 
 class MeasurementCollector(object):  # pragma: no cover
     # also skipping tests for the same reason as LineBuilder
-    def __init__(self, image, cmap="gist_gray_r", lc="r"):
+    def __init__(self, image, cmap="gray", lc="r"):
         fig, ax = plt.subplots(1, 1)
+        image = self._sharpen(image)
         ax.imshow(image, cmap=cmap)
         remove_annotations(ax)
         canvas = ax.figure.canvas
@@ -533,6 +535,13 @@ class MeasurementCollector(object):  # pragma: no cover
         self.lc = lc
         canvas.mpl_connect("key_press_event", self._button)
         canvas.mpl_connect('button_press_event', self.button_press_callback)
+
+    @staticmethod
+    def _sharpen(image):
+        image /= image.max()
+        filtered = 1 - sobel_v(image)
+        filtered /= filtered.max()
+        return filtered * image
 
     def _button(self, event):
         if event.key == "enter":
