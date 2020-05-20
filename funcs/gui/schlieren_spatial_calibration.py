@@ -93,7 +93,7 @@ class CalWindow(QDialog, calWindow.Ui_MainWindow):
         if len(f) > 0:
             self.store = pd.HDFStore(f)
             self.df = self.store["data"]
-            if "spatial_factor" in self.df.keys():
+            if "spatial_near" in self.df.keys():
                 dates = self.df["date"].unique()
                 self.cboxSelectDate.clear()
                 for item in (
@@ -117,7 +117,7 @@ class CalWindow(QDialog, calWindow.Ui_MainWindow):
             else:
                 warning_box = QMessageBox()
                 warning_box.setIcon(QMessageBox.Warning)
-                warning_box.setText("spatial_factor not a valid key")
+                warning_box.setText("spatial_near not a valid key")
                 warning_box.setWindowTitle("Invalid HDF5 Store!")
                 warning_box.setStandardButtons(QMessageBox.Ok)
                 # warning_box.setWindowIcon()
