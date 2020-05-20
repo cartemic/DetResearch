@@ -351,7 +351,7 @@ class _ProcessStructure0:
             background-subtracted schlieren images
         """
         df = pd.DataFrame(
-            columns=["date", "shot", "sensors", "schlieren"],
+            columns=["date", "shot", "sensors", "diodes", "schlieren"],
         )
         df["sensors"] = cls._collect_test_dirs(base_dir, test_date)
         df["schlieren"] = _collect_schlieren_dirs(base_dir, test_date)
@@ -382,6 +382,7 @@ class _ProcessStructure0:
                 df.at[idx, "u_p_oxidizer"] = row_results["u_p_oxidizer"]
                 df.at[idx, "wave_speed"] = row_results["wave_speed"]
                 df.at[idx, "u_wave_speed"] = row_results["u_wave_speed"]
+                df.at[idx, "diodes"] = row_results["diodes"]
                 images.update(row_results["schlieren"])
 
         else:
@@ -401,6 +402,7 @@ class _ProcessStructure0:
                 df.at[idx, "u_p_oxidizer"] = row_results["u_p_oxidizer"]
                 df.at[idx, "wave_speed"] = row_results["wave_speed"]
                 df.at[idx, "u_wave_speed"] = row_results["u_wave_speed"]
+                df.at[idx, "diodes"] = row_results["diodes"]
                 images.update(row_results["schlieren"])
 
         return df, images
@@ -477,6 +479,7 @@ class _ProcessStructure0:
 
         # output results
         out = dict()
+        out["diodes"] = diode_loc
         out["schlieren"] = image
         out["phi"] = phi.nominal_value
         out["u_phi"] = phi.std_dev
@@ -1308,7 +1311,7 @@ class _ProcessStructure2:
         """
         num_samples = len(data)
         if num_samples > 0:
-            sem = np.std(data) / sqrt(num_samples)
+            sem = np.std(unp.nominal_values(data)) / sqrt(num_samples)
             return un.ufloat(
                 0,
                 sem * t.ppf(0.975, num_samples - 1),
@@ -1411,9 +1414,9 @@ class _ProcessStructure2:
                 * dil_mf
         """
         fill_tdms = TdmsFile(os.path.join(dir_shot, "fill.tdms"))
-        partials = cls._get_fill_cutoffs(fill_tdms)
-        cutoffs = cls._get_fill_cutoffs(fill_tdms)
         initial = cls._get_initial_conditions(fill_tdms)
+        cutoffs = cls._get_fill_cutoffs(fill_tdms)
+        partials = cls._get_partials_from_cutoffs(cutoffs)
         dil_mf = cls._get_diluent_mol_frac(partials)
         return dict(
             partials=partials,
@@ -1714,6 +1717,14 @@ class _ProcessStructure2:
         # nominal conditions
         # from conditions.csv
         nominal = cls._get_nominal_conditions(dir_shot)
+        for key in ("start", "end"):
+            nominal[key] = pd.to_datetime(nominal[key])
+        for key in ("p_0_nom", "phi_nom", "dil_mf_nom"):
+            # using float() instead of astype(float) because this should be a
+            # series, therefore nominal[key] returns a value rather than an
+            # array of values
+            nominal[key] = float(nominal[key])
+        nominal["end"] = pd.to_datetime(nominal["end"])
         for key in ("start", "end", "p_0_nom", "phi_nom", "fuel",
                     "oxidizer", "diluent", "dil_mf_nom"):
             results[key] = nominal[key]
@@ -1836,6 +1847,7 @@ class _ProcessStructure2:
                 df_out = pd.concat((df_out, df_shot), ignore_index=True)
                 schlieren_out.update(shot_schlieren)
 
+        df_out = to_df_dtyped(df_out)
         return df_out, schlieren_out
 
 
@@ -1870,24 +1882,68 @@ def row_dateshot_string(df_row):
 
 
 def to_df_dtyped(df_or_series):
+    """
+    TODO: this should probably replace to_df_dtyped
+    Enforces column dtypes so the HDFStore is happy. Everything happens
+    in place, but the dataframe is returned anyway.
+
+    Parameters
+    ----------
+    df_or_series : pd.DataFrame or pd.Series
+        dataframe or series of processed tube data
+
+    Returns
+    -------
+    pd.DataFrame
+    """
     out = df_or_series.copy()
     if isinstance(out, pd.Series):
         out = out.to_frame().T
     elif not isinstance(out, pd.DataFrame):
         raise TypeError("argument must be a dataframe or series")
 
-    cols_numeric = ["shot", "t_0", "u_t_0", "p_0_nom", "p_0", "u_p_0",
-                    "phi_nom", "phi", "u_phi", "p_fuel", "u_p_fuel",
-                    "p_oxidizer", "u_p_oxidizer", "p_diluent", "u_p_diluent",
-                    "dil_mf_nom", "dil_mf", "u_dil_mf", "wave_speed",
-                    "u_wave_speed", "cutoff_fuel", "cutoff_vacuum",
-                    "cutoff_diluent", "cutoff_oxidizer", "u_cutoff_fuel",
-                    "u_cutoff_vacuum", "u_cutoff_diluent", "u_cutoff_oxidizer"]
-    cols_dt = ["start", "end"]
-    for c in cols_numeric:
-        out[c] = pd.to_numeric(out[c])
-    for c in cols_dt:
-        out[c] = pd.to_datetime(out[c])
+    int_keys = (
+        "shot",
+    )
+    time_keys = (
+        "start",
+        "end",
+    )
+    float_keys = (
+        "t_0",
+        "u_t_0",
+        "p_0_nom",
+        "p_0",
+        "u_p_0",
+        "phi_nom",
+        "phi",
+        "u_phi",
+        "p_fuel",
+        "u_p_fuel",
+        "p_oxidizer",
+        "u_p_oxidizer",
+        "p_diluent",
+        "u_p_diluent",
+        "dil_mf_nom",
+        "dil_mf",
+        "u_dil_mf",
+        "wave_speed",
+        "u_wave_speed",
+        "cutoff_fuel",
+        "cutoff_vacuum",
+        "cutoff_diluent",
+        "cutoff_oxidizer",
+        "u_cutoff_fuel",
+        "u_cutoff_vacuum",
+        "u_cutoff_diluent",
+        "u_cutoff_oxidizer",
+    )
+    for k in int_keys:
+        out[k] = out[k].astype(int)
+    for k in time_keys:
+        out[k] = pd.to_datetime(out[k])
+    for k in float_keys:
+        out[k] = out[k].astype(float)
     return out
 
 
@@ -2045,12 +2101,12 @@ def process_by_date(
 
     """
     date_to_process = pd.to_datetime(date_to_process)
-    if date_to_process < _STRUCTURE_END_DATES[0]:
+    if date_to_process <= _STRUCTURE_END_DATES[0]:
         # original directory structure
         proc = _ProcessStructure0()
         df_day, day_schlieren = proc(
             raw_base_dir,
-            str(date_to_process),
+            str(date_to_process.date()),
             0.04201680672268907,  # all propane/air
             multiprocess
         )
@@ -2072,13 +2128,23 @@ def process_by_date(
         df_day["phi_nom"] = 1.
         df_day["u_dil_mf"] = 0.
         df_day["u_p_diluent"] = df_day["u_p_fuel"]
+        df_day["cutoff_diluent"] = np.NaN
+        df_day["cutoff_fuel"] = np.NaN
+        df_day["cutoff_oxidizer"] = np.NaN
+        df_day["cutoff_vacuum"] = np.NaN
+        df_day["end"] = np.NaN
+        df_day["start"] = np.NaN
+        df_day["u_cutoff_diluent"] = np.NaN
+        df_day["u_cutoff_fuel"] = np.NaN
+        df_day["u_cutoff_oxidizer"] = np.NaN
+        df_day["u_cutoff_vacuum"] = np.NaN
 
-    elif date_to_process < _STRUCTURE_END_DATES[1]:
+    elif date_to_process <= _STRUCTURE_END_DATES[1]:
         # second directory structure
         proc = _ProcessStructure1()
         df_day, day_schlieren = proc(
             raw_base_dir,
-            str(date_to_process),
+            str(date_to_process.date()),
             sample_time,
             mech,
             diode_spacing,
@@ -2088,11 +2154,11 @@ def process_by_date(
     else:
         # current directory structure
         df_day, day_schlieren = _ProcessStructure2.process_all_tests(
-            str(date_to_process),
+            str(date_to_process.date()),
             raw_base_dir,
             mech,
             diode_spacing,
             multiprocess
         )
 
-    return df_day, day_schlieren
+    return to_df_dtyped(df_day), day_schlieren
