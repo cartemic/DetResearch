@@ -1533,7 +1533,7 @@ class _ProcessStructure2:
             # directories exist. make sure they have files in them.
             num_frames = len([f for f in os.listdir(pth_frames)
                               if f.lower()[-4:] == ".tif"])
-            num_bg = len([f for f in os.listdir(pth_frames)
+            num_bg = len([f for f in os.listdir(pth_bg)
                           if f.lower()[-4:] == ".tif"])
             if num_frames > 0 and num_bg == 101:
                 # everything is awesome
