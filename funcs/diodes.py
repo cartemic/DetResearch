@@ -253,6 +253,7 @@ def calculate_velocity(
                   ] for instance, location in enumerate(diode_data_location)
                  ]
             )
+            pool.close()
 
             # sort result by instance (to match inputs) and build array of
             # the results for output
