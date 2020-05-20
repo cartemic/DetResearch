@@ -369,6 +369,7 @@ class _ProcessStructure0:
                 cls._process_single_test,
                 [[idx, row, f_a_st] for idx, row in df.iterrows()]
             )
+            pool.close()
             for idx, row_results in results:
                 df.at[idx, "phi"] = row_results["phi"]
                 df.at[idx, "u_phi"] = row_results["u_phi"]
@@ -593,6 +594,7 @@ class _ProcessStructure1:
                     diode_spacing
                 ] for idx, test_time_row in df_tests.iterrows()]
             )
+            pool.close()
             for idx, row_results in results:
                 if row_results["schlieren"] is not None:
                     images.update(row_results["schlieren"])
@@ -1618,7 +1620,7 @@ class _ProcessStructure2:
         processed = schlieren.bg_subtract_all_frames(dir_shot)
         return {
             "/schlieren/d{:s}/shot{:02d}/frame_{:02d}".format(
-                date,
+                date.replace("-", "_"),
                 shot_no,
                 i
             ): pd.DataFrame(frame) for i, frame in enumerate(processed)
@@ -1832,6 +1834,7 @@ class _ProcessStructure2:
                 [(date, d, sn, mech, diode_spacing)
                  for d, sn in zip(shot_dirs, shot_nums)]
             ))
+            pool.close()
             for (_, df_shot, shot_schlieren) in results:
                 df_out = pd.concat((df_out, df_shot), ignore_index=True)
                 schlieren_out.update(shot_schlieren)
