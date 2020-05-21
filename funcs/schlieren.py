@@ -1,5 +1,6 @@
 import json
 import os
+import warnings
 from datetime import datetime
 
 import numpy as np
@@ -16,39 +17,76 @@ from .uncertainty import add_uncertainty_terms, u_cell
 u_cell = u_cell["schlieren"]
 
 
-def get_spatial_loc(
+def get_spatial_dir(
         date,
-        which="near"
+        base_dir=os.path.join(
+            d_drive,
+            "Data",
+            "Raw"
+        )
 ):
     _dir_date = os.path.join(
-        d_drive,
-        "Data",
-        "Raw",
-        date
+        base_dir,
+        date,
+        "spatial"
     )
     if not os.path.exists(_dir_date):
-        raise NotADirectoryError("directory not found")
-
-    _near = "near.tif"
-    _far = "far.tif"
-    if ".old" in os.listdir(_dir_date):
-        _base = os.path.join(
-            _dir_date,
+        _dir_date = os.path.join(
+            base_dir,
+            date,
             "Camera",
             "spatial"
         )
-    else:
-        _base = os.path.join(
-            _dir_date,
-            "spatial"
+        if not os.path.exists(_dir_date):
+            warnings.warn("directory not found: %s" % _dir_date)
+            _dir_date = np.NaN
+
+    return _dir_date
+
+
+def get_varied_spatial_dir(
+        spatial_date_dir,
+        spatial_dir_name,
+        base_dir=os.path.join(
+            d_drive,
+            "Data",
+            "Raw"
         )
+):
+    _dir_date = os.path.join(
+        base_dir,
+        spatial_date_dir,
+        spatial_dir_name,
+    )
+    if not os.path.exists(_dir_date):
+        warnings.warn("directory not found: %s" % _dir_date)
+        _dir_date = np.NaN
+
+    return _dir_date
+
+
+def get_spatial_loc(
+        date,
+        which="near",
+        base_dir=os.path.join(
+            d_drive,
+            "Data",
+            "Raw"
+        )
+):
+    _dir_date = get_spatial_dir(
+        date,
+        base_dir
+    )
+    _near = "near.tif"
+    _far = "far.tif"
 
     if which == "near":
-        return os.path.join(_base, _near)
+        return os.path.join(_dir_date, _near)
     elif which == "far":
-        return os.path.join(_base, _far)
+        return os.path.join(_dir_date, _far)
     elif which == "both":
-        return [os.path.join(_base, _near), os.path.join(_base, _far)]
+        return [os.path.join(_dir_date, _near), os.path.join(_dir_date, _far)]
     else:
         raise ValueError("bad value of `which`")
 

@@ -22,6 +22,13 @@ _STRUCTURE_END_DATES = (
     pd.Timestamp("2019-11-01"),
     pd.Timestamp("2020-05-05")
 )
+_SPATIAL_VARIATIONS = pd.read_csv(
+    os.path.join(
+        _DIR,
+        "data",
+        "spatial_variations.csv"
+    )
+)
 
 
 def _get_f_a_st(
@@ -2102,13 +2109,14 @@ def process_by_date(
     -------
 
     """
+    date_str = date_to_process
     date_to_process = pd.to_datetime(date_to_process)
     if date_to_process <= _STRUCTURE_END_DATES[0]:
         # original directory structure
         proc = _ProcessStructure0()
         df_day, day_schlieren = proc(
             raw_base_dir,
-            str(date_to_process.date()),
+            date_str,
             0.04201680672268907,  # all propane/air
             multiprocess
         )
@@ -2146,7 +2154,7 @@ def process_by_date(
         proc = _ProcessStructure1()
         df_day, day_schlieren = proc(
             raw_base_dir,
-            str(date_to_process.date()),
+            date_str,
             sample_time,
             mech,
             diode_spacing,
@@ -2156,11 +2164,70 @@ def process_by_date(
     else:
         # current directory structure
         df_day, day_schlieren = _ProcessStructure2.process_all_tests(
-            str(date_to_process.date()),
+            date_str,
             raw_base_dir,
             mech,
             diode_spacing,
             multiprocess
         )
 
+    add_spatial_dir_to_df(df_day, date_str)
+
     return to_df_dtyped(df_day), day_schlieren
+
+
+def add_spatial_dir_to_df(
+        df_data,
+        date
+):
+    """
+    Adds spatial directory information to a post-processed test dataframe
+    (in place). Uses regular spatial directory for each day unless it is
+    in spatial_variations.csv, which is located in the package directory
+    funcs/data.
+
+    Parameters
+    ----------
+    df_data : pd.DataFrame
+        dataframe to add spatial directory to
+    date : str
+        date to find spatial directory for
+
+    Returns
+    -------
+
+    """
+    if date in _SPATIAL_VARIATIONS["date"].unique():
+        mask_var = _SPATIAL_VARIATIONS["date"] == date
+        for _, row in _SPATIAL_VARIATIONS[mask_var].iterrows():
+            start_shot = row["start_shot"]
+            if np.isnan(start_shot):
+                start_shot = df_data[df_data["date"] == date]["shot"].min()
+            end_shot = row["end_shot"]
+            if np.isnan(end_shot):
+                end_shot = df_data[df_data["date"] == date]["shot"].max()
+
+            start_shot = int(start_shot)
+            end_shot = int(end_shot)
+
+            _, mask_df = schlieren._filter_df_day_shot(
+                df_data,
+                [(date, start_shot, end_shot)],
+                return_mask=True
+            )
+
+            df_data["spatial"] = np.where(
+                mask_df,
+                schlieren.get_varied_spatial_dir(
+                    row["spatial_date"],
+                    row["spatial_dir"]
+                ),
+                df_data["spatial"]
+            )
+
+    else:
+        df_data["spatial"] = np.where(
+            df_data["date"] == date,
+            schlieren.get_spatial_dir(date),
+            df_data["spatial"]
+        )
