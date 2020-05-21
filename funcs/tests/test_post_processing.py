@@ -17,12 +17,12 @@ class TestCollectOldData:
     # noinspection PyTypeChecker
     def test_good_dir(self):
         # this date should have 25 completed tests per the schlieren output
-        assert len(pp._ProcessOldData._collect_test_dirs(DIR_RAW, "2019-10-22")) == 25
+        assert len(pp._ProcessStructure0._collect_test_dirs(DIR_RAW, "2019-10-22")) == 25
 
     # noinspection PyTypeChecker
     def test_bad_dir(self):
         # make sure things don't break on a day with no tests
-        assert len(pp._ProcessOldData._collect_test_dirs(DIR_RAW, "2049-37-55")) == 0
+        assert len(pp._ProcessStructure0._collect_test_dirs(DIR_RAW, "2049-37-55")) == 0
 
 
 class TestCollectSchlierenDirs:
