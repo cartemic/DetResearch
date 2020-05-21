@@ -1886,7 +1886,6 @@ def row_dateshot_string(df_row):
 
 def to_df_dtyped(df_or_series):
     """
-    TODO: this should probably replace to_df_dtyped
     Enforces column dtypes so the HDFStore is happy. Everything happens
     in place, but the dataframe is returned anyway.
 
