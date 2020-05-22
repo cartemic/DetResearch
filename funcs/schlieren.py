@@ -307,10 +307,9 @@ def collect_spatial_calibration(
 
 def measure_single_frame(
         image_array,
-        cmap="gist_gray_r",
         lc="r"
 ):
-    m = MeasurementCollector(image_array, cmap=cmap, lc=lc)
+    m = MeasurementCollector(image_array, lc=lc)
     _maximize_window()
     return m.get_data()
 
@@ -561,18 +560,53 @@ class LineBuilder(object):  # pragma: no cover
 
 class MeasurementCollector(object):  # pragma: no cover
     # also skipping tests for the same reason as LineBuilder
-    def __init__(self, image, cmap="gray", lc="r"):
-        fig, ax = plt.subplots(1, 1)
-        image = self._sharpen(image)
-        ax.imshow(image, cmap=cmap)
-        remove_annotations(ax)
-        canvas = ax.figure.canvas
+    class RemoveLine:
+        button = 3
+
+    def __init__(self, image, lc="r"):
+        self.cmap = "gray"
+        fig, [ax, ax2] = plt.subplots(2, 1)
         self.lines = []
         self.fig = fig
         self.ax = ax
         self.lc = lc
+        # remove_annotations(ax)
+        ax.set_axis_off()
+        ax.set_position([0, 0.07, 1, 0.9])
+        ax2.set_position([0.375, 0.01, 0.25, 0.05])
+        # plt.axis("off")
+        # plt.axis("tight")
+        self._help = False
+        self._title_default = "press 'h' for help"
+        self._title_help = \
+            "HELP MENU\n\n"\
+            "press 'r' to invert colors\n"\
+            "press left mouse to identify a triple point\n"\
+            "press right mouse to delete last measurement\n"\
+            "press 'enter' or center mouse to end measurements\n"\
+            "click and drag horizontally to adjust contrast to red area\n"\
+            "click 'Reset Contrast' button to reset contrast\n"\
+            "press 'h' to hide this dialog"
+        self._set_title(self._title_default)
+        canvas = ax.figure.canvas
         canvas.mpl_connect("key_press_event", self._button)
-        canvas.mpl_connect('button_press_event', self.button_press_callback)
+        canvas.mpl_connect('button_release_event', self.button_press_callback)
+        self.image = self._sharpen(image)
+        self.rect_select = widgets.SpanSelector(
+            self.ax,
+            self.slider_select,
+            "horizontal"
+        )
+        # noinspection PyTypeChecker
+        # ax2 = plt.axes((0.375, 0.025, 0.25, 0.04))
+        # fig.add_axes(ax2)
+        self.btn_reset = widgets.Button(
+            ax2,
+            "Reset Contrast"
+        )
+        self.btn_reset.on_clicked(self.reset_vlim)
+        self.ax.imshow(self.image, cmap=self.cmap)
+        self.fig.canvas.draw()
 
     @staticmethod
     def _sharpen(image):
@@ -584,11 +618,68 @@ class MeasurementCollector(object):  # pragma: no cover
     def _button(self, event):
         if event.key == "enter":
             plt.close(self.fig)
+        elif event.key == "r":
+            if self.cmap == "gray":
+                self.cmap = "gist_gray_r"
+            else:
+                self.cmap = "gray"
+            self.ax.images[0].set_cmap(self.cmap)
+            self.fig.canvas.draw()
+        elif event.key == "h":
+            if self._help:
+                self._set_title(self._title_help, True)
+            else:
+                self._set_title(self._title_default)
+            self._help = not self._help
+            self.fig.canvas.draw()
+
+    def _set_title(self, string, have_background=False):
+        if have_background:
+            bg_color = (1, 1, 1, 0.75)
+            h_align = "left"
+        else:
+            bg_color = (0, 0, 0, 0)
+            h_align = "right"
+        t = self.fig.suptitle(
+            string,
+            size=10,
+            y=0.99,
+            ma=h_align,
+        )
+        t.set_backgroundcolor(bg_color)
+        self.fig.canvas.draw()
+
+    def slider_select(self, x_min, x_max):
+        px_distance = abs(x_max - x_min)
+
+        if px_distance <= 1:
+            # this should have been a click
+            pass
+        else:
+            # this was meant to be a drag
+            x_min, x_max = int(x_min), int(x_max)
+            img_in_range = self.image[:, x_min:x_max]
+            self.ax.images[0].norm.vmin = np.min(img_in_range)
+            self.ax.images[0].norm.vmax = np.max(img_in_range)
+            self.fig.canvas.draw()
+            self.button_press_callback(self.RemoveLine)
+
+    def reset_vlim(self, _):
+        self.ax.images[0].norm.vmin = np.min(self.image)
+        self.ax.images[0].norm.vmax = np.max(self.image)
+        self.button_press_callback(self.RemoveLine)
+        self.fig.canvas.draw()
 
     def button_press_callback(self, event):
         if event.button == 1:
             # left click
-            self.lines.append(self.ax.axhline(event.ydata, color=self.lc))
+            if any([d is None for d in [event.xdata, event.ydata]]):
+                # ignore clicks outside of image
+                pass
+            else:
+                self.lines.append(self.ax.axhline(event.ydata, color=self.lc))
+                self.fig.canvas.draw()
+
         elif event.button == 2:
             # middle click
             plt.close(self.fig)
@@ -601,7 +692,7 @@ class MeasurementCollector(object):  # pragma: no cover
                 self.fig.canvas.draw()
 
     def get_data(self):
-        points = self.fig.ginput(-1, timeout=-1)
+        points = self.fig.ginput(-1, timeout=-1, show_clicks=False)
         points = unp.uarray(
             sorted(np.array([p[1] for p in points])),
             add_uncertainty_terms([
