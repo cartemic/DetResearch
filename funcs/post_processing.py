@@ -2171,6 +2171,8 @@ def process_by_date(
             multiprocess
         )
 
+    df_day["spatial"] = np.NaN
+
     add_spatial_dir_to_df(df_day, date_str)
 
     return to_df_dtyped(df_day), day_schlieren
