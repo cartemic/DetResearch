@@ -4,6 +4,7 @@ import warnings
 from datetime import datetime
 
 import numpy as np
+import pandas as pd
 import uncertainties as un
 import uncertainties.unumpy as unp
 from matplotlib import pyplot as plt
@@ -11,7 +12,7 @@ from matplotlib import widgets
 from skimage import io
 from skimage.filters import sobel_v
 
-from ._dev import d_drive
+from ._dev import d_drive, convert_dir_to_local
 from .uncertainty import add_uncertainty_terms, u_cell
 
 u_cell = u_cell["schlieren"]
@@ -748,7 +749,8 @@ def _filter_df_day_shot(
 ):
     """
     Filters a dataframe by date and shot number for an arbitrary number of
-    date/shot combinations. Returns the indices (for masking) and the filtere
+    date/shot combinations. Returns the indices (for masking) and the filtered
+    dataframe.
 
     Parameters
     ----------
@@ -853,10 +855,93 @@ def _check_stored_calibrations(
     return out
 
 
-def get_centerline_calibration(
-        df
-):
-    near = unp.uarray(df["spatial_near"].values, df["u_spatial_near"].std_dev)
-    far = unp.uarray(df["spatial_far"].values, df["u_spatial_far"].std_dev)
-    centerline = (near + far) / 2
-    return centerline
+class SpatialCalibration:
+    @staticmethod
+    def collect(
+            date,
+            loc_processed_data,
+            loc_schlieren_measurements,
+            raise_if_no_measurements=True
+    ):
+        with pd.HDFStore(loc_processed_data, "r") as store_pp:
+            # make sure date is in post-processed data
+            if date not in store_pp.data["date"].unique():
+                e_str = "date {:s} not in {:s}".format(
+                    date,
+                    loc_processed_data
+                )
+                raise ValueError(e_str)
+            else:
+                df_dirs = store_pp.data[
+                    store_pp.data["date"] == date
+                ][["shot", "spatial"]]
+                df_dirs.columns = ["shot", "dir"]
+                df_dirs["dir"] = df_dirs["dir"].apply(
+                    convert_dir_to_local
+                )
+
+        with pd.HDFStore(loc_schlieren_measurements, "r+") as store_sc:
+            df_sc = store_sc.data[
+                store_sc.data["date"] == date
+            ]
+            if len(df_sc) == 0 and raise_if_no_measurements:
+                e_str = "no measurements found for %s" % date
+                raise ValueError(e_str)
+
+            # collect calibrations
+            df_daily_cal = pd.DataFrame([dict(
+                dir=k,
+                near=un.ufloat(np.NaN, np.NaN),
+                far=un.ufloat(np.NaN, np.NaN),
+            ) for k in df_dirs["dir"].unique()]).set_index("dir")
+            desired_cals = ["near", "far"]
+            successful_cals = []
+            for d, row in df_daily_cal.iterrows():
+                for which in desired_cals:
+                    pth_tif = os.path.join(str(d), which + ".tif")
+                    if os.path.exists(pth_tif):
+                        df_daily_cal.at[
+                            d,
+                            which
+                        ] = collect_spatial_calibration(pth_tif)
+                        successful_cals.append(which)
+
+            # apply calibrations
+            for _, row in df_dirs.iterrows():
+                row_mask = df_sc["shot"] == row["shot"]
+                # set near and far spatial calibrations
+                for which in successful_cals:
+                    key = "spatial_" + which
+                    df_sc[key] = np.where(
+                        row_mask,
+                        df_daily_cal.loc[row["dir"], which].nominal_value,
+                        df_sc[key]
+                    )
+                    key = "u_" + key
+                    df_sc[key] = np.where(
+                        row_mask,
+                        df_daily_cal.loc[row["dir"], which].std_dev,
+                        df_sc[key]
+                    )
+                    df_sc["spatial_" + which + "_estimated"] = False
+
+                # calculate and set centerline calibration
+                centerline = np.mean(
+                    [unp.uarray(df_sc["spatial_near"], df_sc["u_spatial_near"]),
+                     unp.uarray(df_sc["spatial_far"], df_sc["u_spatial_far"])],
+                    axis=0
+                )
+                df_sc["spatial_centerline"] = np.where(
+                    row_mask,
+                    unp.nominal_values(centerline),
+                    df_sc["spatial_centerline"]
+                )
+                df_sc["u_spatial_centerline"] = np.where(
+                    row_mask,
+                    unp.std_devs(centerline),
+                    df_sc["u_spatial_centerline"]
+                )
+
+            df_out = store_sc.data
+            df_out.loc[df_out["date"] == date] = df_sc
+            store_sc.put("data", df_out)
