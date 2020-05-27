@@ -4,9 +4,10 @@ import numpy as np
 import pandas as pd
 
 import funcs.schlieren as sc
+from funcs._dev import d_drive
 
 BG_DIR = os.path.join(
-    "D:\\",
+    d_drive,
     "Data",
     "Raw",
     "2019-10-22",
