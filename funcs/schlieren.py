@@ -558,6 +558,7 @@ class MeasurementCollector(object):  # pragma: no cover
         fig, [ax, ax2] = plt.subplots(2, 1)
         self.lines = []
         self.fig = fig
+        plt.get_current_fig_manager().window.setGeometry(0, 0, 0, 0)
         self.ax = ax
         self.lc = lc
         # remove_annotations(ax)
