@@ -193,25 +193,6 @@ def bg_subtract_all_frames(dir_raw_shot):
     return [(io.imread(frame) - bg + 2**15) for frame in pth_list_frames]
 
 
-def remove_annotations(ax):  # pragma: no cover
-    """
-    Hide plot annotations
-
-    Parameters
-    ----------
-    ax : matplotlib.axes._subplots.AxesSubplot
-
-    Returns
-    -------
-    None
-    """
-    ax.xaxis._visible = False
-    ax.yaxis._visible = False
-    for s in ax.spines:
-        # noinspection PyProtectedMember
-        ax.spines[s]._visible = False
-
-
 def _maximize_window():
     # https://stackoverflow.com/questions/12439588/how-to-maximize-a-plt-show-window-using-python
     plt_backend = plt.get_backend()
@@ -243,9 +224,15 @@ def collect_spatial_calibration(
     image = io.imread(spatial_file)
 
     if plot_window is not None:
+        # called from Qt gui
         ax = plot_window.ax
+        fig = plot_window.fig
     else:
+        # not called form Qt gui
         fig, ax = plt.subplots(1, 1)
+
+    fig.canvas.manager.window.move(0, 0)
+    ax.axis("off")
 
     ax.imshow(image)
     cal_line = widgets.Line2D(
@@ -259,14 +246,15 @@ def collect_spatial_calibration(
     linebuilder = LineBuilder(cal_line)
 
     if plot_window is not None:
+        # called from Qt gui
         plot_window.imshow(image)
         plot_window.exec_()
         if msg_box is None:
             raise ValueError("Lazy dev didn't error handle this! Aaahh!")
         num_boxes = msg_box().num_boxes
     else:
+        # not called from Qt gui
         _maximize_window()
-        remove_annotations(ax)
         plt.tight_layout()
         plt.show(block=True)
         num_boxes = float(input("number of markers: "))
@@ -565,6 +553,7 @@ class MeasurementCollector(object):  # pragma: no cover
         button = 3
 
     def __init__(self, image, lc="r"):
+        self.locs = []
         self.cmap = "gray"
         fig, [ax, ax2] = plt.subplots(2, 1)
         self.lines = []
@@ -679,6 +668,7 @@ class MeasurementCollector(object):  # pragma: no cover
                 pass
             else:
                 self.lines.append(self.ax.axhline(event.ydata, color=self.lc))
+                self.locs.append(event.ydata)
                 self.fig.canvas.draw()
 
         elif event.button == 2:
@@ -689,13 +679,13 @@ class MeasurementCollector(object):  # pragma: no cover
             if self.lines:
                 # noinspection PyProtectedMember
                 self.lines[-1]._visible = False
-                del self.lines[-1]
+                del self.lines[-1], self.locs[-1]
                 self.fig.canvas.draw()
 
     def get_data(self):
-        points = self.fig.ginput(-1, timeout=-1, show_clicks=False)
+        plt.show()
         points = unp.uarray(
-            sorted(np.array([p[1] for p in points])),
+            sorted(np.array(self.locs)),
             add_uncertainty_terms([
                 u_cell["delta_px"]["b"],
                 u_cell["delta_px"]["p"]
