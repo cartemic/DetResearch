@@ -300,7 +300,9 @@ def measure_single_frame(
 ):
     m = MeasurementCollector(image_array, lc=lc)
     _maximize_window()
-    return m.get_data()
+    data = m.get_data()
+    del m
+    return data
 
 
 def _get_cal_delta_px(
@@ -552,13 +554,16 @@ class MeasurementCollector(object):  # pragma: no cover
     class RemoveLine:
         button = 3
 
+    class CloseIt:
+        button = 2
+
     def __init__(self, image, lc="r"):
         self.locs = []
         self.cmap = "gray"
         fig, [ax, ax2] = plt.subplots(2, 1)
         self.lines = []
         self.fig = fig
-        plt.get_current_fig_manager().window.setGeometry(0, 0, 0, 0)
+        plt.get_current_fig_manager().window.setGeometry(0, 0, 640, 480)
         self.ax = ax
         self.lc = lc
         # remove_annotations(ax)
@@ -608,7 +613,7 @@ class MeasurementCollector(object):  # pragma: no cover
 
     def _button(self, event):
         if event.key == "enter":
-            plt.close(self.fig)
+            self.button_press_callback(self.CloseIt)
         elif event.key == "r":
             if self.cmap == "gray":
                 self.cmap = "gist_gray_r"
@@ -674,7 +679,7 @@ class MeasurementCollector(object):  # pragma: no cover
 
         elif event.button == 2:
             # middle click
-            plt.close(self.fig)
+            plt.close()
         elif event.button == 3:
             # right click
             if self.lines:
@@ -684,7 +689,7 @@ class MeasurementCollector(object):  # pragma: no cover
                 self.fig.canvas.draw()
 
     def get_data(self):
-        plt.show()
+        plt.show(block=True)
         points = unp.uarray(
             sorted(np.array(self.locs)),
             add_uncertainty_terms([
