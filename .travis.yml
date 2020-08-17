@@ -20,10 +20,9 @@ install:
     - pip install -r env-pip.txt
     - wget https://shepherd.caltech.edu/EDL/PublicResources/sdt/SDToolbox.zip;
     - unzip SDToolbox.zip
-    - ls
-    #    - conda info --envs
-    - pip show tables
-    - mv SDToolbox/Python3/sdtoolbox ~/miniconda/envs/env-conda/lib/site-packages
+    - mv SDToolbox/Python3/sdtoolbox ~/miniconda/envs/env-conda/lib/python3.7/site-packages
+    - rm SDToolbox
+    - rm SDToolbox.zip
 
 script:
     - pytest -vv --cov=./;
