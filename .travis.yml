@@ -23,7 +23,7 @@ install:
     - ls
     #    - conda info --envs
     - pip show tables
-    - mv SDToolbox/Python3/sdtoolbox ~/miniconda/envs/env-conda/Lib/site-packages
+    - mv SDToolbox/Python3/sdtoolbox ~/miniconda/envs/env-conda/lib/site-packages
 
 script:
     - pytest -vv --cov=./;
