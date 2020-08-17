@@ -22,7 +22,7 @@ install:
     - unzip SDToolbox.zip
     - ls
     - conda info --envs
-    - asdf
+    - mv SDToolbox/Python3/sdtoolbox ~/travis/miniconda/envs/env-conda/Lib/site-packages
 
 script:
     - pytest -vv --cov=./;
