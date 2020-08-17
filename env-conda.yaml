@@ -1,0 +1,18 @@
+name: env-conda
+channels:
+  - defaults
+  - conda-forge
+  - cantera
+  - cartemic
+dependencies:
+  - pandas
+  - nptdms
+  - uncertainties
+  - numpy
+  - scipy
+  - pint
+  - matplotlib
+  - seaborn
+  - scikit-image
+  - tables
+  - PyQt5
