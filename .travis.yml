@@ -17,6 +17,7 @@ install:
     - conda config --append channels conda-forge
     - conda env create -qf env-conda.yaml;
     - source activate env-conda;
+    - pip install env-pip
 
 script:
     - pytest -vv --cov=./;

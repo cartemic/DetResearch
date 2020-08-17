@@ -14,5 +14,3 @@ dependencies:
   - matplotlib
   - seaborn
   - scikit-image
-  - tables
-  - PyQt5
