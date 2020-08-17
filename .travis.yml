@@ -22,7 +22,7 @@ install:
     - unzip SDToolbox.zip
     - ls
     #    - conda info --envs
-    - cd SDToolbox/
+    - cd SDToolbox/Python3/sdtoolbox
     - ls
     - mv SDToolbox/Python3/sdtoolbox ~/miniconda/envs/env-conda/Lib/site-packages
 
