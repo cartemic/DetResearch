@@ -5,6 +5,7 @@ channels:
   - cantera
   - cartemic
 dependencies:
+  - cantera
   - pandas
   - nptdms
   - uncertainties
