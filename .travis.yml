@@ -24,7 +24,7 @@ install:
     #    - conda info --envs
     - cd ~/miniconda/envs/env-conda/
     - ls
-    - cd Lib
+    - cd lib
     - ls
     - mv SDToolbox/Python3/sdtoolbox ~/miniconda/envs/env-conda/Lib/site-packages
 
