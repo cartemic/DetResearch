@@ -776,7 +776,7 @@ def _filter_df_day_shot(
     if return_mask:
         return df[mask], mask
     else:
-        return (df[mask],)
+        return df[mask],
 
 
 def _check_stored_calibrations(
