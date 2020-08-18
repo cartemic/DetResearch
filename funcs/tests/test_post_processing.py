@@ -12,7 +12,6 @@ DIR_RAW = os.path.join(
 class TestCollectOldData:
     # noinspection PyTypeChecker
     def test_good_dir(self):
-        # this date should have 25 completed tests per the schlieren output
         assert len(pp._ProcessStructure0._collect_test_dirs(
             DIR_RAW,
             "2019-10-22"
