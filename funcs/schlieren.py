@@ -1,7 +1,5 @@
-import json
 import os
 import warnings
-from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -215,7 +213,6 @@ def collect_spatial_calibration(
         spatial_file,
         line_color="r",
         marker_length_mm=0.2*25.4,
-        save_output=False,
         px_only=False,
         apply_uncertainty=True,
         plot_window=None,
@@ -250,6 +247,7 @@ def collect_spatial_calibration(
         plot_window.imshow(image)
         plot_window.exec_()
         if msg_box is None:
+            # noinspection SpellCheckingInspection
             raise ValueError("Lazy dev didn't error handle this! Aaahh!")
         num_boxes = msg_box().num_boxes
     else:
@@ -283,12 +281,6 @@ def collect_spatial_calibration(
             linebuilder.ys,
             line_length_mm,
             apply_uncertainty=apply_uncertainty
-        )
-
-    if save_output:
-        _save_spatial_calibration(
-            mm_per_px=mm_per_px,
-            spatial_file_path=spatial_file
         )
 
     return mm_per_px
@@ -353,60 +345,6 @@ def _calibrate(
         )
 
     return line_length_mm / line_length_px
-
-
-def _save_spatial_calibration(
-        mm_per_px,
-        spatial_file_path
-):
-    fname_saved_calibration = "spatial calibration.json"
-    dir_spatial, fname_spatial_image = os.path.split(spatial_file_path)
-    path_out = os.path.join(
-        dir_spatial,
-        fname_saved_calibration
-    )
-    save_statement = "Saved to {:s}!".format(path_out)
-
-    current_info = {
-            "in/px": mm_per_px,
-            "cal date": str(datetime.now())
-    }
-
-    if not os.path.exists(path_out):
-        with open(path_out, "w"):
-            pass
-
-    with open(path_out, "r+") as f:
-        try:
-            data = json.load(f)
-            if fname_spatial_image in data.keys():
-                user_overwrite = 'asdf'
-                while user_overwrite.lower() not in {'y', 'n'}:
-                    user_overwrite = input(
-                        "Data already exists for {:s}. "
-                        "Overwrite (y/n)? ".format(fname_spatial_image))
-                if user_overwrite == "y":
-                    data[fname_spatial_image] = current_info
-                    f.seek(0)
-                    json.dump(data, f)
-                    f.truncate()
-                    print(save_statement)
-                else:
-                    print("Calibration data not overwritten.")
-
-            else:
-                data[fname_spatial_image] = current_info
-                f.seek(0)
-                json.dump(data, f)
-                f.truncate()
-                print(save_statement)
-
-        except json.decoder.JSONDecodeError:
-            data = {
-                fname_spatial_image: current_info
-            }
-            json.dump(data, f)
-            print(save_statement)
 
 
 class LineBuilder(object):  # pragma: no cover
