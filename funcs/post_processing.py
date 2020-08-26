@@ -1701,7 +1701,8 @@ class _ProcessStructure2:
                 "u_cutoff_diluent",
                 "u_cutoff_oxidizer",
                 "date",
-            )
+            ),
+            dtype="object"
         )
         results["date"] = date
         results["shot"] = shot_no
