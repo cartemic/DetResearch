@@ -150,7 +150,8 @@ def load_diode_data(
     """
     # import data
     tf = TdmsFile(diode_data_file)
-    if len(tf.group_channels("diodes")[0].data) > 0:
+    if len(tf.group_channels("diodes")) == 0 or \
+            len(tf.group_channels("diodes")[0].data) > 0:
         # diodes.tdms has data
         data = TdmsFile(diode_data_file).as_dataframe()
         for key in data.keys():
