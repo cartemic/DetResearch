@@ -471,7 +471,10 @@ class LineBuilder(object):  # pragma: no cover
         self.canvas.blit(self.axes.bbox)
 
     def get_line_angle(self):
-        return np.arctan(np.diff(self.ys) / np.diff(self.xs))[0]
+        if np.diff(self.xs) == 0:
+            return np.pi
+        else:
+            return np.arctan(np.diff(self.ys) / np.diff(self.xs))[0]
 
     def calculate_end_line_xy(self):
         angle = (self.get_line_angle() + np.pi / 2) % (2 * np.pi)
