@@ -52,6 +52,20 @@ def get_varied_spatial_dir(
             "Raw"
         )
 ):
+    """
+    Some days got weird due to overnight testing, which means that tests on
+    those days may have a weird spatial calibration image location.
+
+    Parameters
+    ----------
+    spatial_date_dir
+    spatial_dir_name
+    base_dir
+
+    Returns
+    -------
+
+    """
     _dir_date = os.path.join(
         base_dir,
         spatial_date_dir,
