@@ -15,6 +15,7 @@ from tkinter import Tk
 from tkinter import filedialog as fd
 
 import numpy as np
+import pandas as pd
 import scipy.signal as signal
 import uncertainties as un
 from nptdms import TdmsFile
@@ -148,14 +149,27 @@ def load_diode_data(
         Dataframe of diode data, with time stamps removed if they are present
     """
     # import data
-    data = TdmsFile(diode_data_file).as_dataframe()
-    for key in data.keys():
-        # remove time column
-        if 'diode' not in key.replace('diodes', '').lower():
-            data = data.drop(key, axis=1)
+    tf = TdmsFile(diode_data_file)
+    if len(tf.group_channels("diodes")) == 0 or \
+            len(tf.group_channels("diodes")[0].data) > 0:
+        # diodes.tdms has data
+        data = TdmsFile(diode_data_file).as_dataframe()
+        for key in data.keys():
+            # remove time column
+            if "diode" not in key.replace("diodes", "").lower():
+                data = data.drop(key, axis=1)
 
-    if apply_lowpass:
-        data = data.apply(_diode_filter)
+        if apply_lowpass:
+            # noinspection PyTypeChecker
+            data = data.apply(_diode_filter)
+
+    else:
+        # empty tdms file
+        data = pd.DataFrame(
+            columns=[c.path for c in tf.group_channels("diodes")],
+            data=np.array(
+                [[np.NaN] * 50 for _ in tf.group_channels("diodes")]).T
+        )
 
     return data
 

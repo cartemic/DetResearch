@@ -180,7 +180,9 @@ def u_temperature(
     if tc_type not in {"T", "K"}:
         return ValueError("u_temperature currently only supports T or K type")
 
-    if isinstance(measured, type(pd.Series())):
+    # noinspection PyUnresolvedReferences
+    if isinstance(measured, pd.core.series.Series):
+        # noinspection PyUnresolvedReferences
         measured = measured.values
 
     measured = quant(measured, units).to("degC").magnitude
@@ -310,7 +312,9 @@ def u_pressure(
     if u_cal_accuracy is None:
         u_cal_accuracy = PRESSURE_SOURCES["calibration"]["accuracy"]
 
-    if isinstance(measured, type(pd.Series())):
+    # noinspection PyUnresolvedReferences
+    if isinstance(measured, pd.core.series.Series):
+        # noinspection PyUnresolvedReferences
         measured = measured.values
 
     measured = quant(measured, units).to("Pa").magnitude

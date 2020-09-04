@@ -1701,7 +1701,8 @@ class _ProcessStructure2:
                 "u_cutoff_diluent",
                 "u_cutoff_oxidizer",
                 "date",
-            )
+            ),
+            dtype="object"
         )
         results["date"] = date
         results["shot"] = shot_no
@@ -1735,8 +1736,13 @@ class _ProcessStructure2:
             nominal[key] = float(nominal[key])
         nominal["end"] = pd.to_datetime(nominal["end"])
         for key in ("start", "end", "p_0_nom", "phi_nom", "fuel",
-                    "oxidizer", "diluent", "dil_mf_nom"):
+                    "oxidizer", "dil_mf_nom"):
             results[key] = nominal[key]
+
+        if pd.isna(nominal["diluent"]):
+            results["diluent"] = "None"
+        else:
+            results["diluent"] = nominal["diluent"]
 
         # wave speed
         # from diodes.tdms
