@@ -86,3 +86,6 @@ dependencies:
   - scikit-image=0.17.2
   - pint=0.15
   - pyqt=5.9.2
+  - sphinx_rtd_theme=0.4.2
+  - recommonmark=0.6.0
+  - nbsphinx=0.7.1
