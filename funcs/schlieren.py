@@ -255,7 +255,12 @@ def collect_spatial_calibration(
         _maximize_window()
         plt.tight_layout()
         plt.show(block=True)
-        num_boxes = float(input("number of markers: "))
+        while True:
+            try:
+                num_boxes = float(input("number of markers: "))
+                break
+            except ValueError:
+                pass
 
     # I built the input to this in a bad way. The nominal value is the size of
     # an engineering paper box, and the std_dev is the resolution error of a
