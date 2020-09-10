@@ -425,3 +425,53 @@ def _u_pressure_fit(
     intercept = un.ufloat(intercept, u_intercept)
     cal_transducer = un.ufloat(0, u_cal_accuracy)
     return measured * slope + intercept + cal_transducer
+
+
+def df_merge_uncert(df, col_name, inplace=False):
+    if isinstance(col_name, str):
+        u_col_name = "u_" + col_name
+        if u_col_name not in df.keys():
+            raise ValueError("Uncertainty column not found for %s" % col_name)
+
+        if inplace:
+            df[col_name] = unp.uarray(df[col_name], df[u_col_name])
+            del df[u_col_name]
+            return df
+        else:
+            df2 = df.copy()
+            df2[col_name] = unp.uarray(df[col_name], df[u_col_name])
+            del df2[u_col_name]
+            return df2
+    else:
+        if not inplace:
+            df_ret = df.copy()
+        else:
+            df_ret = df
+        for c in col_name:
+            df_ret = df_merge_uncert(df_ret, c, inplace=True)
+    if not inplace:
+        return df_ret
+
+
+def df_split_uncert(
+        df,
+        columns,
+        inplace=True
+):
+    if isinstance(columns, str):
+        columns = [columns]
+
+    if inplace:
+        df_ret = df
+    else:
+        df_ret = df.copy()
+
+    good_cols = list(df_ret.keys())
+    for col in columns:
+        if col not in good_cols:
+            raise ValueError(f"{col} not a valid column. Valid: {good_cols}")
+
+        df_ret["u_" + col] = unp.std_devs(df[col].values)
+        df_ret[col] = unp.nominal_values(df[col].values)
+
+    return df_ret
