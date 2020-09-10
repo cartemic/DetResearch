@@ -102,21 +102,39 @@ def process_all_schlieren(
         dates
 ):
     with pd.HDFStore(loc_processed, "r") as store:
+        if dates is None:
+            dates = sorted(list(set(store["data"]["date"].values)))
         df_initial_meas = collect_single_replicate(store, dates)
 
-    with pd.HDFStore(loc_schlieren, "a") as f:
-        if hasattr(f, "data"):
-            n_meas_original = len(f.data)
-        else:
-            n_meas_original = 0
-        print("start:  %d records" % n_meas_original)
-        f.put("data", df_initial_meas, format="table", append="true")
-        n_meas_final = len(f.data)
-        n_meas_added = n_meas_final - n_meas_original
-        print("finish: {:d} records ({:d} added)".format(
-            n_meas_final,
-            n_meas_added
-        ))
+    # with pd.HDFStore(loc_schlieren, "a") as f:
+    #     if hasattr(f, "data"):
+    #         n_meas_original = len(f.data)
+    #     else:
+    #         n_meas_original = 0
+    #     print("start:  %d records" % n_meas_original)
+    #     f.put("data", df_initial_meas, format="table", append=True)
+    #     # if n_meas_original == 0:
+    #     #     # have to append or it'll decide not to be a table I guess
+    #     # if n_meas_original == 0:
+    #     #     f.put("data", df_initial_meas, format="table")
+    #     # else:
+    #     #     f.append("data", df_initial_meas)
+    #
+    #     n_meas_final = len(f.data)
+    #     n_meas_added = n_meas_final - n_meas_original
+    #     print("finish: {:d} records ({:d} added)".format(
+    #         n_meas_final,
+    #         n_meas_added
+    #     ))
+
+    df_initial_meas.to_hdf(
+        loc_schlieren,
+        "data",
+        "a",
+        format="table",
+        append=True
+    )
+    n_meas_added = len(df_initial_meas)
 
     if n_meas_added > 0:
         with pd.HDFStore(loc_schlieren, "r") as store:
@@ -176,7 +194,10 @@ if __name__ == "__main__":
     else:
         processed_tube_data_h5 = sys.argv[1]
         schlieren_data_h5 = sys.argv[2]
-        dates_to_process = sys.argv[3:]
+        if len(sys.argv) >= 4:
+            dates_to_process = sys.argv[3:]
+        else:
+            dates_to_process = None
     process_all_schlieren(
         processed_tube_data_h5,
         schlieren_data_h5,
