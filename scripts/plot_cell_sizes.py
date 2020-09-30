@@ -4,6 +4,7 @@
 ###
 
 import os
+import datetime
 
 import numpy as np
 import pandas as pd
@@ -30,6 +31,8 @@ dir_data = os.path.join(
 )
 loc_processed = os.path.join(dir_data, "data_fffff.h5")
 loc_schlieren = os.path.join(dir_data, "schlieren_fffff.h5")
+loc_processed_1 = os.path.join(dir_data, "data_ggggg.h5")
+loc_schlieren_1 = os.path.join(dir_data, "schlieren_ggggg.h5")
 
 # Simulated data
 simulated_data_loc = "/d/DetResearch/scripts/cell_size_simulated.h5"
@@ -47,6 +50,10 @@ with pd.HDFStore(loc_processed, "r") as store:
     df_day = store["data"]
 with pd.HDFStore(loc_schlieren, "r") as store:
     df_schlieren = store.data
+with pd.HDFStore(loc_processed_1, "r") as store:
+    df_day = pd.concat((df_day, store["data"]), ignore_index=True)
+with pd.HDFStore(loc_schlieren_1, "r") as store:
+    df_schlieren = pd.concat((df_schlieren, store.data), ignore_index=True)
 
 # set dates to process. currently set to all dates
 dates_to_process = sorted(list(set(df_day["date"].values)))
@@ -247,48 +254,85 @@ def split_diluent_dataframes(df):
 
 
 df_plot_diluted_exp = pd.concat(split_diluent_dataframes(df_plot_base))
-f = sns.FacetGrid(
-    data=df_plot_diluted_exp,
+fig = sns.relplot(
     col="diluent",
-)
-f.map_dataframe(
-    sns.scatterplot,
     x="dil_mf_CO2e",
     y="cell_size",
     hue="phi_nom",
+    style="phi_nom",
+    data=df_plot_diluted_exp,
     legend="full",
-    palette=sns.color_palette("colorblind", n_colors=2),
+    kind="line",
+    markers=True,
+    facet_kws=dict(sharex=True, sharey=True, legend_out=True),
+    palette=sns.color_palette("colorblind", 2),  # not sure why this one needs it...
 )
-ax = plt.gca()
-plt.xticks([0, 0.01, 0.02])
+fig.map_dataframe(
+    plt.errorbar,
+    x="dil_mf_CO2e",
+    y="cell_size",
+    xerr="u_dil_mf_CO2e",
+    yerr="u_cell_size",
+    marker=None,
+    elinewidth=0.5,
+    capsize=5,
+    lw=0,
+    color="k",
+    alpha=0.5,
+    label=None
+)
+
+fig._legend.set_visible(False)
+ax = fig.axes[0, 0]  # should work for all b/c sharex
+ax.set_xticks([0, 0.01, 0.02])
 ax.xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
 ax.yaxis.set_major_formatter(EngFormatter("mm"))
-f.set_axis_labels("Mole Fraction (CO2e)", "Cell Size")
+ax.legend(frameon=False)
+# fig.add_legend()
+ax.get_legend().get_texts()[0].set_text(r"$\phi$")
+fig.set_axis_labels(
+    "Mole Fraction (CO2e)", "Cell Size")
+plt.suptitle(
+    f"Schlieren Measurements, C3H8-air ({datetime.datetime.today().date()})",
+    weight="bold"
+)
 plt.tight_layout()
+plt.subplots_adjust(top=0.85)
 sns.despine()
 
 print(df_sim)
+df_sim[["westbrook", "gavrikov", "ng"]] /= 1000
 
-df_plot_diluted_exp = pd.concat(split_diluent_dataframes(df_sim))
-f = sns.FacetGrid(
-    data=df_plot_diluted_exp,
+df_plot_diluted_sim = pd.concat(split_diluent_dataframes(df_sim))
+df_plot_diluted_sim = df_plot_diluted_sim.melt(
+    ["mechanism", "diluent", "dil_mf", "cj_time", "cj_speed", "cell_time",
+     "phi", "dil_mf_CO2e"],
+    var_name="Method",
+    value_name="Cell Size"
+)
+
+fig = sns.relplot(
+    row="Method",
     col="diluent",
-)
-f.map_dataframe(
-    sns.scatterplot,
     x="dil_mf_CO2e",
-    y="westbrook",
+    y="Cell Size",
     hue="mechanism",
+    style="mechanism",
     legend="full",
-    palette=sns.color_palette("colorblind", n_colors=3),
+    data=df_plot_diluted_sim,
+    facet_kws=dict(sharex=True, sharey=False),
+    kind="line",
+    markers=True,
 )
-ax = plt.gca()
-plt.legend()
-plt.xticks([0, 0.01, 0.02])
-ax.xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
-ax.yaxis.set_major_formatter(EngFormatter("mm"))
-f.set_axis_labels("Mole Fraction (CO2e)", "Cell Size")
-plt.tight_layout()
-sns.despine()
+x_formatter = PercentFormatter(xmax=1, decimals=0)
+y_formatter = EngFormatter("m")
+ax = fig.axes[0, 0]  # should work for all b/c sharex
+ax.set_xticks([0, 0.01, 0.02])
+fig.set_xlabels("Mole Fraction (CO2e)")
+for a in fig.axes.flatten():
+    a.xaxis.set_major_formatter(x_formatter)
+    a.yaxis.set_major_formatter(y_formatter)
 
+plt.subplots_adjust(top=0.925)
+plt.suptitle(r"Simulated Cell Sizes, C3H8-air $\phi$=1", weight="bold")
 plt.show()
