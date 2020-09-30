@@ -187,10 +187,13 @@ def process_all_schlieren(
 if __name__ == "__main__":
     import sys
     if len(sys.argv) < 3:
-        raise ValueError(
-            "must include processed_tube_data_h5, schlieren_data_h5, "
-            "and *dates_to_process"
-        )
+        suffix = "ggggg"
+        processed_tube_data_h5 = f"/d/Data/Processed/Data/data_{suffix}.h5"
+        schlieren_data_h5 = f"/d/Data/Processed/Data/schlieren_{suffix}.h5"
+        dates_to_process = [
+            "2020-09-17",  # Su 2020 Week 14
+            "2020-09-18",  # Su 2020 Week 14
+        ]
     else:
         processed_tube_data_h5 = sys.argv[1]
         schlieren_data_h5 = sys.argv[2]
