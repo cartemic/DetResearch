@@ -96,7 +96,7 @@ def _velocity_calculator(
         Array of inter-diode velocities in m/s, calculated using the
         maximum gradient.
     """
-    bad_value = unp.uarray([np.NaN], np.NaN)
+    bad_value = np.array([0]) * un.ufloat(np.NaN, np.NaN)
     diode_dataframe = load_diode_data(
         diode_data_file,
         apply_lowpass
@@ -150,8 +150,8 @@ def load_diode_data(
     """
     # import data
     tf = TdmsFile(diode_data_file)
-    if len(tf.group_channels("diodes")) == 0 or \
-            len(tf.group_channels("diodes")[0].data) > 0:
+    if len(tf["diodes"].channels()) == 0 or \
+            len(tf["diodes"].channels()[0].data) > 0:
         # diodes.tdms has data
         data = TdmsFile(diode_data_file).as_dataframe()
         for key in data.keys():
@@ -166,9 +166,9 @@ def load_diode_data(
     else:
         # empty tdms file
         data = pd.DataFrame(
-            columns=[c.path for c in tf.group_channels("diodes")],
+            columns=[c.path for c in tf["diodes"].channels()],
             data=np.array(
-                [[np.NaN] * 50 for _ in tf.group_channels("diodes")]).T
+                [[np.NaN] * 50 for _ in tf["diodes"].channels()]).T
         )
 
     return data
