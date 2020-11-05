@@ -151,6 +151,8 @@ def wrapped_zndsolve(
                 break
             except ct.CanteraError:
                 pass
+            except ValueError:
+                pass
         else:
             # let it break if it's gonna break after max tries
             out = sd.znd.zndsolve(
@@ -218,7 +220,8 @@ class CellSize:
             perturbation_fraction=1e-2,
             max_tries_znd=5,
             max_step_znd=1e-4,
-            max_tries_cv=10
+            max_tries_cv=10,
+            cv_end_time=1e-6
     ):
         # sdt import is here to avoid any module-level weirdness stemming from
         # Solution object modification
@@ -328,13 +331,12 @@ class CellSize:
         temp_a = self.Ts * 1.02
         gas.TPX = temp_a, Ps, q
 
-        base_t_end = 1e-6
         # cv_out_0 = sd.cv.cvsolve(gas)
         cv_out_0 = wrapped_cvsolve(
             gas,
             sd,
             max_tries_cv,
-            base_t_end
+            cv_end_time
         )
 
         temp_b = self.Ts * 0.98
@@ -344,7 +346,7 @@ class CellSize:
             gas,
             sd,
             max_tries_cv,
-            base_t_end
+            cv_end_time
         )
 
         # Approximate effective activation energy for CV explosion
