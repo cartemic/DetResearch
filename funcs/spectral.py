@@ -163,6 +163,22 @@ def get_radial_intensity(
     return radii, intensity
 
 
+def peaks_to_measurements(
+        peak_x,
+        peak_y,
+        delta_px,
+        delta_mm,
+        theta,
+        img_square_size
+):
+    px_perpendicular = img_square_size / peak_x
+    px_projected = px_perpendicular / np.cos(theta * np.pi / 180)
+    cell_size = delta_mm / delta_px * px_projected
+    rescaled_energy = (peak_y - np.max(peak_y)) * \
+        (100 - 10) / (np.max(peak_y) - np.min(peak_y)) + 100
+    return cell_size, rescaled_energy
+
+
 if __name__ == "__main__":
     from skimage import io, color
     img = io.imread("../scripts/spectral/celledges.jpg")
@@ -179,3 +195,11 @@ if __name__ == "__main__":
     x, y = get_radial_intensity(psd, 30, 0)
     plt.plot(x, y)
     plt.show()
+
+    # from matlab, for px mm conversion checking
+    pks_x = np.array([4.419, 9.016, 13.61, 17.85])
+    pks_y = np.array([230.5, 224.9, 217.4, 197.7])
+    n_px = 85
+    n_mm = 50
+    print(peaks_to_measurements(pks_x, pks_y, n_px, n_mm, 30, psd.shape[0]))
+
