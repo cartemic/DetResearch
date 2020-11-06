@@ -56,7 +56,7 @@ def fix(n):
     return int(np.floor(abs(n)) * sign)
 
 
-# @njit
+@njit
 def get_angular_intensity(
         psd,
         radius,
@@ -104,7 +104,7 @@ def get_angular_intensity(
     return 180 / half_steps * (np.arange(1, 1025) - half_steps), intensity
 
 
-# @njit
+@njit
 def get_radial_intensity(
         psd,
         theta,
