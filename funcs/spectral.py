@@ -53,10 +53,10 @@ def fix(n):
         sign = -1
     else:
         sign = 1
-    return int(round(abs(n)) * sign)
+    return int(np.floor(abs(n)) * sign)
 
 
-@njit
+# @njit
 def get_angular_intensity(
         psd,
         radius,
@@ -65,17 +65,17 @@ def get_angular_intensity(
 ):
     half_steps = n_steps // 2
     intensity = np.zeros(n_steps)
-    buffer = np.zeros((n_steps, n_steps)) * np.NaN
+    buffer = np.zeros((n_steps, n_steps))
     win_size = (2 * window + 1) ** 2
     x_c, y_c = get_center(psd)
     img_h, img_w = psd.shape
 
     for idx_int in range(n_steps):
-        theta = np.pi / half_steps * (idx_int - half_steps)
+        theta = np.pi / half_steps * (idx_int + 1 - half_steps)
         cos_th = np.cos(theta)
         sin_th = np.sin(theta)
-        x = x_c - radius * sin_th
-        y = y_c + radius * cos_th
+        x = x_c - radius * sin_th + 1
+        y = y_c + radius * cos_th + 1
         m = fix(x)
         n = fix(y)
 
@@ -87,14 +87,16 @@ def get_angular_intensity(
                         for l in range(-window, window + 1):
                             if (0 <= i + k) & (i + k < img_h) & \
                                     (0 <= j + l) & (j + l < img_w):
-                                local_sum += psd[i + k, j + l] / win_size
+                                local_sum += psd[i + k - 1, j + l - 1] / \
+                                    win_size
                     buffer[i, j] = local_sum
 
             p = x - m
             q = y - n
             comp_p = 1 - p
             comp_q = 1 - q
-            intensity[idx_int] = comp_p * comp_q * buffer[m, n] + \
+            intensity[idx_int] = \
+                comp_p * comp_q * buffer[m, n] + \
                 p * comp_q * buffer[m + 1, n] + \
                 q * comp_p * buffer[m, n + 1] + \
                 p * q * buffer[m + 1, n + 1]
@@ -102,7 +104,7 @@ def get_angular_intensity(
     return 180 / half_steps * (np.arange(1, 1025) - half_steps), intensity
 
 
-@njit
+# @njit
 def get_radial_intensity(
         psd,
         theta,
@@ -110,7 +112,7 @@ def get_radial_intensity(
         half_steps=1024
 ):
     n_steps = half_steps * 2 + 1  # mirror about 0
-    buf = np.zeros((n_steps, n_steps)) * np.NaN
+    buffer = np.zeros((n_steps, n_steps)) * np.NaN
     x_c, y_c = get_center(psd)
     img_h, img_w = psd.shape
     win_size = (2 * window + 1) ** 2
@@ -127,9 +129,9 @@ def get_radial_intensity(
         )
     ) / half_steps * np.arange(-half_steps, half_steps+1)
 
-    for idx, radius in enumerate(radii):
-        x = x_c - radius * sin_theta
-        y = y_c + radius * cos_theta
+    for idx_int, radius in enumerate(radii):
+        x = x_c - radius * sin_theta + 1
+        y = y_c + radius * cos_theta + 1
         m = fix(x)
         n = fix(y)
 
@@ -143,19 +145,20 @@ def get_radial_intensity(
                                     (i + k < img_h) & \
                                     (0 <= j + l) & \
                                     (j + l < img_w):
-                                local_sum += psd[i + k, j + l] / win_size
+                                local_sum += psd[i + k - 1, j + l - 1] / \
+                                    win_size
 
-                    buf[i, j] = local_sum
+                    buffer[i, j] = local_sum
 
             p = x - m
             q = y - n
             comp_p = 1 - p
             comp_q = 1 - q
-            intensity[idx] = \
-                comp_p * comp_q * buf[m, n] + \
-                p * comp_q * buf[m+1, n] + \
-                q * comp_p * buf[m, n+1] + \
-                p * q * buf[m+1, n+1]
+            intensity[idx_int-1] = \
+                comp_p * comp_q * buffer[m, n] + \
+                p * comp_q * buffer[m + 1, n] + \
+                q * comp_p * buffer[m, n + 1] + \
+                p * q * buffer[m + 1, n + 1]
 
     return radii, intensity
 
@@ -165,11 +168,11 @@ if __name__ == "__main__":
     img = io.imread("../scripts/spectral/celledges.jpg")
     img = color.rgb2gray(img)
     from matplotlib import pyplot as plt
-    plt.imshow(img)
-    plt.figure()
+    # plt.imshow(img)
+    # plt.figure()
     psd = calc_psd(img)
-    plt.imshow(psd)
-    plt.figure()
+    # plt.imshow(psd)
+    # plt.figure()
     x, y = get_angular_intensity(psd, 50, 3)
     plt.plot(x, y)
     plt.figure()
