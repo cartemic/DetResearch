@@ -1,6 +1,6 @@
 import numpy as np
 from numba import jit, njit
-from scipy import fftpack, ndimage
+from warnings import catch_warnings, simplefilter
 
 
 def grayscale(img):
@@ -32,11 +32,11 @@ def fspecial_gauss(
 def calc_psd(img):
     wind = img * fspecial_gauss(img.shape, 0.2*min(img.shape))
     wind = grayscale(wind)
-    fourtrans = fftpack.fft2(wind)
+    fourtrans = np.fft.fft2(wind)
     absolu = np.abs(fourtrans)
     powspecden = np.square(absolu)
     loga = np.log(powspecden)
-    final = fftpack.fftshift(loga)
+    final = np.fft.fftshift(loga)
     return grayscale(final)
 
 
@@ -65,10 +65,10 @@ def get_angular_intensity(
 ):
     half_steps = n_steps // 2
     intensity = np.zeros(n_steps)
-    buffer = np.zeros((n_steps, n_steps))
+    img_h, img_w = psd.shape
+    buffer = np.zeros((img_w, img_w))
     win_size = (2 * window + 1) ** 2
     x_c, y_c = get_center(psd)
-    img_h, img_w = psd.shape
 
     for idx_int in range(n_steps):
         theta = np.pi / half_steps * (idx_int + 1 - half_steps)
@@ -112,9 +112,9 @@ def get_radial_intensity(
         half_steps=1024
 ):
     n_steps = half_steps * 2 + 1  # mirror about 0
-    buffer = np.zeros((n_steps, n_steps)) * np.NaN
-    x_c, y_c = get_center(psd)
     img_h, img_w = psd.shape
+    buffer = np.zeros((img_w, img_w)) * np.NaN
+    x_c, y_c = get_center(psd)
     win_size = (2 * window + 1) ** 2
 
     intensity = np.zeros(n_steps)
@@ -154,7 +154,7 @@ def get_radial_intensity(
             q = y - n
             comp_p = 1 - p
             comp_q = 1 - q
-            intensity[idx_int-1] = \
+            intensity[idx_int] = \
                 comp_p * comp_q * buffer[m, n] + \
                 p * comp_q * buffer[m + 1, n] + \
                 q * comp_p * buffer[m, n + 1] + \
@@ -171,7 +171,11 @@ def peaks_to_measurements(
         theta,
         img_square_size
 ):
-    px_perpendicular = img_square_size / peak_x
+    px_perpendicular = img_square_size / np.where(
+        np.isclose(peak_x, 0),
+        np.NaN,
+        peak_x
+    )
     px_projected = px_perpendicular / np.cos(theta * np.pi / 180)
     cell_size = delta_mm / delta_px * px_projected
     rescaled_energy = (peak_y - np.max(peak_y)) * \
@@ -179,27 +183,82 @@ def peaks_to_measurements(
     return cell_size, rescaled_energy
 
 
-if __name__ == "__main__":
-    from skimage import io, color
-    img = io.imread("../scripts/spectral/celledges.jpg")
-    img = color.rgb2gray(img)
-    from matplotlib import pyplot as plt
-    # plt.imshow(img)
-    # plt.figure()
-    psd = calc_psd(img)
-    # plt.imshow(psd)
-    # plt.figure()
-    x, y = get_angular_intensity(psd, 50, 3)
-    plt.plot(x, y)
-    plt.figure()
-    x, y = get_radial_intensity(psd, 30, 0)
-    plt.plot(x, y)
-    plt.show()
+def img_to_ax_coords(points, center):
+    return points + center
 
-    # from matlab, for px mm conversion checking
-    pks_x = np.array([4.419, 9.016, 13.61, 17.85])
-    pks_y = np.array([230.5, 224.9, 217.4, 197.7])
-    n_px = 85
-    n_mm = 50
-    print(peaks_to_measurements(pks_x, pks_y, n_px, n_mm, 30, psd.shape[0]))
 
+def ax_to_img_coords(points, center):
+    return points - center
+
+
+def get_xy(img):
+    x = np.ones_like(img) * np.arange(img.shape[1])[:, None].T
+    y = np.ones_like(img) * np.arange(img.shape[0])[:, None]
+    return x, y
+
+
+def get_radius(x, y):
+    return np.sqrt(x**2 + y**2)
+
+
+def get_angle(x, y):
+    with catch_warnings():
+        simplefilter("ignore")
+        angle = 90 - (np.arctan(x / y) * 180 / np.pi)
+        angle[y < 0] += 180
+        angle[np.isnan(angle)] = 0
+        return angle
+
+
+def get_mask(thetas, radii, mask_angles, angle_pm, safe_rad):
+    mask_out = np.ones_like(thetas).astype(bool)
+    for a in mask_angles:
+        if a < angle_pm:
+            mask_out[
+                ((thetas < np.mod(a + angle_pm, 360)) |
+                 (thetas > np.mod(a - angle_pm, 360))) &
+                (radii > safe_rad)
+            ] = False
+        else:
+            mask_out[
+                ((thetas < np.mod(a + angle_pm, 360)) &
+                 (thetas > np.mod(a - angle_pm, 360))) &
+                (radii > safe_rad)
+            ] = False
+    return mask_out
+
+
+# if __name__ == "__main__":
+#     from skimage import io, color
+#     img = io.imread("../scripts/spectral/1841.png")
+#     img = color.rgb2gray(img)
+#     from matplotlib import pyplot as plt
+#     # plt.imshow(img)
+#     # plt.figure()
+#     psd = calc_psd(img)
+#     plt.imshow(psd)
+#     plt.figure()
+#     x, y = get_angular_intensity(psd, 100, 5)
+#     plt.plot(x, y)
+#     plt.figure()
+#     x, y = get_radial_intensity(psd, 47, 0, half_steps=2048)
+#     plt.plot(x, y)
+#     #
+#     # # from matlab, for px mm conversion checking
+#     # pks_x = np.array([4.419, 9.016, 13.61, 17.85])
+#     # pks_y = np.array([230.5, 224.9, 217.4, 197.7])
+#     # n_px = 85
+#     # n_mm = 50
+#
+#
+#     pks_x = np.array([4.71308, 10.3554, 13.9602, 17.8002])
+#     pks_y = np.array([229.223, 211.307, 203.069, 210.483])
+#     n_px = 2284.
+#     n_mm = 300.
+#
+#
+#     print(peaks_to_measurements(pks_x, pks_y, n_px, n_mm, 30, psd.shape[0]))
+#     #
+#     # plt.figure()
+#     # plt.loglog(*peaks_to_measurements(x, y, n_px, n_mm, 30, psd.shape[0]))
+#     plt.show()
