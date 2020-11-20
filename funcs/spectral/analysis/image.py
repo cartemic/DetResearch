@@ -1,6 +1,7 @@
+from warnings import catch_warnings, simplefilter
+
 import numpy as np
 from numba import jit, njit
-from warnings import catch_warnings, simplefilter
 
 
 def grayscale(img):
@@ -226,39 +227,3 @@ def get_mask(thetas, radii, mask_angles, angle_pm, safe_rad):
                 (radii > safe_rad)
             ] = False
     return mask_out
-
-
-# if __name__ == "__main__":
-#     from skimage import io, color
-#     img = io.imread("../scripts/spectral/1841.png")
-#     img = color.rgb2gray(img)
-#     from matplotlib import pyplot as plt
-#     # plt.imshow(img)
-#     # plt.figure()
-#     psd = calc_psd(img)
-#     plt.imshow(psd)
-#     plt.figure()
-#     x, y = get_angular_intensity(psd, 100, 5)
-#     plt.plot(x, y)
-#     plt.figure()
-#     x, y = get_radial_intensity(psd, 47, 0, half_steps=2048)
-#     plt.plot(x, y)
-#     #
-#     # # from matlab, for px mm conversion checking
-#     # pks_x = np.array([4.419, 9.016, 13.61, 17.85])
-#     # pks_y = np.array([230.5, 224.9, 217.4, 197.7])
-#     # n_px = 85
-#     # n_mm = 50
-#
-#
-#     pks_x = np.array([4.71308, 10.3554, 13.9602, 17.8002])
-#     pks_y = np.array([229.223, 211.307, 203.069, 210.483])
-#     n_px = 2284.
-#     n_mm = 300.
-#
-#
-#     print(peaks_to_measurements(pks_x, pks_y, n_px, n_mm, 30, psd.shape[0]))
-#     #
-#     # plt.figure()
-#     # plt.loglog(*peaks_to_measurements(x, y, n_px, n_mm, 30, psd.shape[0]))
-#     plt.show()
