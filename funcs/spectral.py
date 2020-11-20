@@ -176,7 +176,7 @@ def peaks_to_measurements(
         np.NaN,
         peak_x
     )
-    px_projected = px_perpendicular / np.cos(theta * np.pi / 180)
+    px_projected = px_perpendicular / np.abs(np.cos(theta * np.pi / 180))
     cell_size = delta_mm / delta_px * px_projected
     rescaled_energy = (peak_y - np.max(peak_y)) * \
         (100 - 10) / (np.max(peak_y) - np.min(peak_y)) + 100
