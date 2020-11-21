@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from scipy.signal import find_peaks
+from scipy.signal import find_peaks, savgol_filter
 from skimage import io
 from skimage.color import rgb2gray
 from skimage.filters import sobel
@@ -18,6 +18,10 @@ def run(
         delta_px,
         delta_mm,
         max_measurement_mm,
+        min_measurement_mm,
+        apply_savgol=False,
+        savgol_window_fraction=0.01,
+        savgol_order=3,
         to_keep=None,
         return_plot_outputs=False
 ):
@@ -74,7 +78,6 @@ def run(
     psd_final = image.calc_psd(edges)
 
     # Perform angular intensity scan
-    psd_filtered = image.calc_psd(edges)
     angle, int_angle = image.get_angular_intensity(
         psd_final,
         angular_scan_radius,
@@ -83,7 +86,6 @@ def run(
 
     ind_ang_pks = find_peaks(int_angle, prominence=0.1, width=20)[0]
     pks_ang = angle[ind_ang_pks]
-    pks_int = int_angle[ind_ang_pks]
     best_angle = pks_ang[pks_ang > 0].max()
 
     # perform radial intensity scan
@@ -104,10 +106,20 @@ def run(
         psd_final.shape[0]
     )
     distance = np.where(np.isnan(distance), 1e16, distance)
-    dist_mask = (distance >= 0) & (distance <= max_measurement_mm)
+    dist_mask = (distance >= min_measurement_mm) & \
+                (distance <= max_measurement_mm)
+
+    if apply_savgol:
+        savgol_window = np.ceil(
+            psd_final.shape[0] * savgol_window_fraction / 2
+        ).astype(int) * 2 + 1
+        if savgol_window <= savgol_order:
+            savgol_window = np.ceil(savgol_order / 2).astype(int) * 2 + 1
+        int_radius = savgol_filter(int_radius, savgol_window, savgol_order)
+
     idx_pks = find_peaks(
         int_radius[dist_mask],
-        prominence=0.025
+        # prominence=0.025
     )[0][1:]
 
     # filter and rescale measurements
@@ -228,37 +240,3 @@ def get_measurements_from_radial_scan(
 
     return df_out
 
-# if __name__ == "__main__":
-#     from skimage import io, color
-#     img = io.imread("../scripts/spectral/1841.png")
-#     img = color.rgb2gray(img)
-#     from matplotlib import pyplot as plt
-#     # plt.imshow(img)
-#     # plt.figure()
-#     psd = calc_psd(img)
-#     plt.imshow(psd)
-#     plt.figure()
-#     x, y = get_angular_intensity(psd, 100, 5)
-#     plt.plot(x, y)
-#     plt.figure()
-#     x, y = get_radial_intensity(psd, 47, 0, half_steps=2048)
-#     plt.plot(x, y)
-#     #
-#     # # from matlab, for px mm conversion checking
-#     # pks_x = np.array([4.419, 9.016, 13.61, 17.85])
-#     # pks_y = np.array([230.5, 224.9, 217.4, 197.7])
-#     # n_px = 85
-#     # n_mm = 50
-#
-#
-#     pks_x = np.array([4.71308, 10.3554, 13.9602, 17.8002])
-#     pks_y = np.array([229.223, 211.307, 203.069, 210.483])
-#     n_px = 2284.
-#     n_mm = 300.
-#
-#
-#     print(peaks_to_measurements(pks_x, pks_y, n_px, n_mm, 30, psd.shape[0]))
-#     #
-#     # plt.figure()
-#     # plt.loglog(*peaks_to_measurements(x, y, n_px, n_mm, 30, psd.shape[0]))
-#     plt.show()
