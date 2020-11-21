@@ -15,8 +15,8 @@ def measurements(
 ):
     fig_meas, ax_meas = plt.subplots(
         1, 2,
-        figsize=(12, 4),
-        gridspec_kw={'width_ratios': [3, 1]}
+        figsize=(16, 4),
+        gridspec_kw={'width_ratios': [2, 1]}
     )
 
     # left plot
@@ -28,11 +28,11 @@ def measurements(
         title_meas_pks += f" (Top {to_measure} Measurements" + \
                           " by Relative Intensity)"
     ax_meas[0].set_title(title_meas_pks)
-    ax_meas[0].semilogx(
+    ax_meas[0].plot(
         line_cell_sizes,
         line_intensities
     )
-    ax_meas[0].semilogx(
+    ax_meas[0].plot(
         df_measurements["Cell Size"],
         df_measurements["Intensity"],
         "ro"
@@ -68,9 +68,9 @@ def scans(
         radial_scan_intensities,
         radial_scan_window
 ):
-    angular_scan_window = angular_scan_window ** 2 + 1
-    radial_scan_window = radial_scan_window ** 2 + 1
-    fig_scans, ax_scans = plt.subplots(1, 2, figsize=(8, 4))
+    angular_scan_window = angular_scan_window * 2 + 1
+    radial_scan_window = radial_scan_window * 2 + 1
+    fig_scans, ax_scans = plt.subplots(1, 2, figsize=(16, 4))
 
     # left plot
     ax_scans[0].set_title(
@@ -114,7 +114,7 @@ def image_filtering(
     edge_detected,
     final_psd,
     scan_radius,
-    figsize=None
+    figsize=(16, 10)
 ):
     fig_images, ax_images = plt.subplots(2, 3, figsize=figsize)
     fig_images.canvas.set_window_title("Images")
