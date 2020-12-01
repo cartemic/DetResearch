@@ -15,6 +15,7 @@ from tkinter import Tk
 from tkinter import filedialog as fd
 
 import numpy as np
+import pandas as pd
 import scipy.signal as signal
 import uncertainties as un
 from nptdms import TdmsFile
@@ -95,7 +96,7 @@ def _velocity_calculator(
         Array of inter-diode velocities in m/s, calculated using the
         maximum gradient.
     """
-    bad_value = unp.uarray([np.NaN], np.NaN)
+    bad_value = np.array([0]) * un.ufloat(np.NaN, np.NaN)
     diode_dataframe = load_diode_data(
         diode_data_file,
         apply_lowpass
@@ -148,14 +149,27 @@ def load_diode_data(
         Dataframe of diode data, with time stamps removed if they are present
     """
     # import data
-    data = TdmsFile(diode_data_file).as_dataframe()
-    for key in data.keys():
-        # remove time column
-        if 'diode' not in key.replace('diodes', '').lower():
-            data = data.drop(key, axis=1)
+    tf = TdmsFile(diode_data_file)
+    if len(tf["diodes"].channels()) == 0 or \
+            len(tf["diodes"].channels()[0].data) > 0:
+        # diodes.tdms has data
+        data = TdmsFile(diode_data_file).as_dataframe()
+        for key in data.keys():
+            # remove time column
+            if "diode" not in key.replace("diodes", "").lower():
+                data = data.drop(key, axis=1)
 
-    if apply_lowpass:
-        data = data.apply(_diode_filter)
+        if apply_lowpass:
+            # noinspection PyTypeChecker
+            data = data.apply(_diode_filter)
+
+    else:
+        # empty tdms file
+        data = pd.DataFrame(
+            columns=[c.path for c in tf["diodes"].channels()],
+            data=np.array(
+                [[np.NaN] * 50 for _ in tf["diodes"].channels()]).T
+        )
 
     return data
 
@@ -253,6 +267,7 @@ def calculate_velocity(
                   ] for instance, location in enumerate(diode_data_location)
                  ]
             )
+            pool.close()
 
             # sort result by instance (to match inputs) and build array of
             # the results for output

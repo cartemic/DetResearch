@@ -1,2 +1,2 @@
 [run]
-omit = conftest.py
+omit = */tests/*, */__init__.py

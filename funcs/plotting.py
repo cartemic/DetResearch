@@ -1,7 +1,8 @@
-import seaborn as sns
-from . import database as db
 import pandas as pd
+import seaborn as sns
 from matplotlib import pyplot as plt
+
+from . import database as db
 
 
 def change_axis_legend_cols(axis, ncol):

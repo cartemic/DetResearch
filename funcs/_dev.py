@@ -37,4 +37,3 @@ def convert_dir_to_local(dir_to_convert):
 
         dirs = [d] + dirs
     return dir_out
-

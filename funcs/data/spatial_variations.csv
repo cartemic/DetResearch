@@ -1,0 +1,5 @@
+date,start_shot,end_shot,spatial_date,spatial_dir,notes
+2020-03-21,,1,2020-03-21,spatial,Shots 0 and 1 were during failed testing after midnight the night before
+2020-03-21,2,,2020-03-21,spatial_1,Actual test shots for this day
+2020-03-22,,17,2020-03-22,spatial,"Shots 0-17 were during 2020-03-21 testing, but after midnight"
+2020-03-22,18,,2020-03-22,spatial_1,Shots 18 and after were actually on the evening of 2020-03-22.
