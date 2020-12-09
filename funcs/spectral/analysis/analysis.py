@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
-from scipy.signal import find_peaks, savgol_filter
+from scipy.signal import savgol_filter, argrelmax
+from scipy.ndimage import median_filter
 from skimage import io
 from skimage.color import rgb2gray
 from skimage.filters import sobel
@@ -17,8 +18,6 @@ def run(
         radial_scan_half_steps,
         delta_px,
         delta_mm,
-        max_measurement_mm,
-        min_measurement_mm,
         apply_savgol=False,
         savgol_window_fraction=0.01,
         savgol_order=3,
@@ -68,8 +67,11 @@ def run(
     fft = np.fft.fftshift(np.fft.fft2(img_base))
     psd_masked = image.grayscale(mask * psd)
     filtered = image.grayscale(
-        np.real(np.fft.ifft2(np.fft.ifftshift(mask * fft)))
-    )
+        # median_filter(
+            np.real(np.fft.ifft2(np.fft.ifftshift(mask * fft))),
+            # size=img_base.shape[0]//150
+        )
+    # )
 
     # apply sobel filter
     edges = image.grayscale(sobel(filtered))
@@ -84,9 +86,11 @@ def run(
         angular_scan_window
     )
 
-    ind_ang_pks = find_peaks(int_angle, prominence=0.1, width=20)[0]
+    ind_ang_pks = argrelmax(int_angle)
     pks_ang = angle[ind_ang_pks]
-    best_angle = pks_ang[pks_ang > 0].max()
+    best_angle = pks_ang[
+        pks_ang > 0][int_angle[ind_ang_pks][pks_ang > 0].argmax()
+    ]
 
     # perform radial intensity scan
     radius, int_radius = image.get_radial_intensity(
@@ -97,17 +101,16 @@ def run(
     )
 
     # convert radius to cell size and find peaks
-    distance, _ = image.peaks_to_measurements(
-        radius,
-        int_radius,
-        delta_px,
-        delta_mm,
-        best_angle,
-        psd_final.shape[0]
-    )
-    distance = np.where(np.isnan(distance), 1e16, distance)
-    dist_mask = (distance >= min_measurement_mm) & \
-                (distance <= max_measurement_mm)
+    # distance, _ = image.peaks_to_measurements(
+    #     radius,
+    #     int_radius,
+    #     delta_px,
+    #     delta_mm,
+    #     best_angle,
+    #     psd_final.shape[0]
+    # )
+    # distance = np.where(np.isnan(distance), 1e16, distance)
+    dist_mask = (radius > 0)
 
     if apply_savgol:
         savgol_window = np.ceil(
@@ -117,10 +120,7 @@ def run(
             savgol_window = np.ceil(savgol_order / 2).astype(int) * 2 + 1
         int_radius = savgol_filter(int_radius, savgol_window, savgol_order)
 
-    idx_pks = find_peaks(
-        int_radius[dist_mask],
-        # prominence=0.025
-    )[0][1:]
+    idx_pks = argrelmax(int_radius[dist_mask])[0]
 
     # filter and rescale measurements
     if to_keep is not None:
@@ -158,7 +158,10 @@ def run(
 
     if return_plot_outputs:
         out = [
-            df_cells,
+            df_cells.sort_values(
+                ["Relative Energy"],
+                ascending=False
+            ).reset_index(drop=True),
             dict(
                 image_filtering=[
                     img_base,
@@ -183,7 +186,7 @@ def run(
 
                 ],
                 measurements=[
-                    distance[dist_mask],
+                    radius[dist_mask],
                     int_radius[dist_mask],
                     df_cells,
                     to_keep
@@ -192,7 +195,10 @@ def run(
         ]
 
     else:
-        out = df_cells
+        out = df_cells.sort_values(
+            ["Relative Energy"],
+            ascending=False
+        ).reset_index(drop=True)
 
     return out
 
@@ -228,7 +234,8 @@ def get_measurements_from_radial_scan(
     df_out = pd.DataFrame(
         data=meas,
         columns=cols
-    ).sort_values("Relative Energy", ascending=False).reset_index(drop=True)
+    )
+        # .sort_values("Relative Energy", ascending=False).reset_index(drop=True)
 
     if to_keep is not None:
         if isinstance(to_keep, int):

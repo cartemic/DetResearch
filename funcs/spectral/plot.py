@@ -8,16 +8,22 @@ def all_results(run_output):
 
 
 def measurements(
-        line_cell_sizes,
+        line_radii,
         line_intensities,
         df_measurements,
         to_measure=None
 ):
     fig_meas, ax_meas = plt.subplots(
-        1, 2,
+        1, 3,
         figsize=(16, 4),
-        gridspec_kw={'width_ratios': [2, 1]}
+        # gridspec_kw={'width_ratios': [2, 1]}
     )
+
+    max_radius = df_measurements["Radius"].max()
+    min_radius = df_measurements["Radius"].min()
+    rad_distance = max_radius - min_radius
+    max_radius += 0.1 * rad_distance
+    min_radius -= 0.1 * rad_distance
 
     # left plot
     title_meas_pks = "Measurement Peaks"
@@ -25,19 +31,25 @@ def measurements(
         title_meas_pks += r" (Relative Intensity $\geq$" + \
                           f" {to_measure * 100:.0f}%)"
     elif isinstance(to_measure, int):
-        title_meas_pks += f" (Top {to_measure} Measurements" + \
-                          " by Relative Intensity)"
+        title_meas_pks += f" (First {to_measure})"
     ax_meas[0].set_title(title_meas_pks)
     ax_meas[0].plot(
-        line_cell_sizes,
-        line_intensities
+        line_radii[
+            (line_radii >= min_radius) &
+            (line_radii <= max_radius)
+        ],
+        line_intensities[
+            (line_radii >= min_radius) &
+            (line_radii <= max_radius)
+        ]
     )
     ax_meas[0].plot(
-        df_measurements["Cell Size"],
+        df_measurements["Radius"],
         df_measurements["Intensity"],
         "ro"
     )
-    ax_meas[0].set_xlabel("Cell Size (mm)")
+    ax_meas[0].set_xlim([min_radius, max_radius])
+    ax_meas[0].set_xlabel("Distance from Center (px)")
     ax_meas[0].set_ylabel("Intensity")
 
     # right plot
@@ -52,6 +64,7 @@ def measurements(
     ax_meas[1].set_xlabel("Cell Size (mm)")
     ax_meas[1].set_ylabel("Relative Intensity (%)")
 
+    circle_plot(df_measurements, ax_meas[2], marker_scale=0.5)
     # both plots
     sns.despine()
 
@@ -149,3 +162,19 @@ def image_filtering(
         )
     )
     return fig_images, ax_images
+
+
+def circle_plot(df_cells, ax, color="C0", marker_scale=1.):
+    df_plot = df_cells.sort_values("Radius").reset_index(drop=True)
+    for i, row in df_plot.iterrows():
+        ax.plot(
+            i+1,
+            row["Cell Size"],
+            "o",
+            color=color,
+            ms=row["Relative Energy"]*marker_scale,
+            alpha=0.7
+        )
+
+    ax.set_xlim([0, len(df_cells)+1])
+    ax.set_ylim([0, ax.get_ylim()[1]])
