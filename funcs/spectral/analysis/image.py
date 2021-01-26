@@ -1,7 +1,9 @@
 from warnings import catch_warnings, simplefilter
 
 import numpy as np
+from matplotlib import pyplot as plt
 from numba import jit, njit
+from skimage.transform import rotate
 
 
 def grayscale(img):
@@ -108,78 +110,12 @@ def get_angular_intensity(
                 q * comp_p * buffer[m, n + 1] + \
                 p * q * buffer[m + 1, n + 1]
 
-    return 180 / half_steps * (np.arange(1, 1025) - half_steps), intensity
+    return 180 / half_steps * (np.arange(1, n_steps+1) - half_steps), intensity
 
 
-# @njit
-# def get_radial_intensity(
-#         psd,
-#         theta,
-#         window,
-#         half_steps=1024
-# ):
-#     n_steps = half_steps * 2 + 1  # mirror about 0
-#     img_h, img_w = psd.shape
-#     # buffer = np.zeros((img_w+1, img_w+1)) * np.NaN
-#     x_c, y_c = get_center(psd)
-#     win_size = (2 * window + 1) ** 2
-#
-#     intensity = np.zeros(n_steps)
-#     cos_theta = np.cos(theta * np.pi / 180)
-#     sin_theta = np.sin(theta * np.pi / 180)
-#
-#     radii = np.sqrt(
-#         np.sum(
-#             np.square(
-#                 np.array([img_h, img_w]) / 2
-#             )
-#         )
-#     ) / half_steps * np.arange(-half_steps, half_steps+1)
-#
-#     xs = x_c - radii * sin_theta + 1
-#     ys = y_c + radii * cos_theta + 1
-#     ms = fix(xs)
-#     ns = fix(ys)
-#     buffer = np.zeros((ms.max()+2, ns.max()+2)) * np.NaN
-#
-#     for idx_int in range(n_steps):
-#         x = xs[idx_int]
-#         y = ys[idx_int]
-#         m = ms[idx_int]
-#         n = ns[idx_int]
-#
-#         if (0 <= m) & (m < img_h) & (0 <= n) & (n < img_w):
-#             for i in (m, m+1):
-#                 for j in (n, n+1):
-#                     local_sum = 0
-#                     for k in range(-window, window + 1):
-#                         for l in range(-window, window + 1):
-#                             if (0 <= i + k) & \
-#                                     (i + k < img_h) & \
-#                                     (0 <= j + l) & \
-#                                     (j + l < img_w):
-#                                 local_sum += psd[i + k - 1, j + l - 1] / \
-#                                     win_size
-#
-#                     buffer[i, j] = local_sum
-#
-#             p = x - m
-#             q = y - n
-#             comp_p = 1 - p
-#             comp_q = 1 - q
-#             intensity[idx_int] = \
-#                 comp_p * comp_q * buffer[m, n] + \
-#                 p * comp_q * buffer[m + 1, n] + \
-#                 q * comp_p * buffer[m, n + 1] + \
-#                 p * q * buffer[m + 1, n + 1]
-#
-#     return radii, intensity
-from skimage.transform import rotate
 def get_radial_intensity(
         psd,
         theta,
-        window,
-        half_steps=1024
 ):
     rot = rotate(psd, -theta)
     xc, yc = get_center(rot)
@@ -191,7 +127,6 @@ def get_radial_intensity(
 
 def peaks_to_measurements(
         peak_x,
-        peak_y,
         delta_px,
         delta_mm,
         theta,
@@ -204,9 +139,7 @@ def peaks_to_measurements(
     )
     px_projected = px_perpendicular / np.abs(np.cos(theta * np.pi / 180))
     cell_size = delta_mm / delta_px * px_projected
-    rescaled_energy = (peak_y - np.max(peak_y)) * \
-        (100 - 10) / (np.max(peak_y) - np.min(peak_y)) + 100
-    return cell_size, rescaled_energy
+    return cell_size
 
 
 def img_to_ax_coords(points, center):
@@ -236,7 +169,7 @@ def get_angle(x, y):
         return angle
 
 
-def get_mask(thetas, radii, mask_angles, angle_pm, safe_rad):
+def get_reject_mask(thetas, radii, mask_angles, angle_pm, safe_rad):
     mask_out = np.ones_like(thetas).astype(bool)
     for a in mask_angles:
         if a < angle_pm:
@@ -252,3 +185,36 @@ def get_mask(thetas, radii, mask_angles, angle_pm, safe_rad):
                 (radii > safe_rad)
             ] = False
     return mask_out
+
+
+def get_pass_mask(thetas, radii, mask_angles, angle_pm, safe_rad):
+    mask_out = np.zeros_like(thetas).astype(bool)
+    for a in mask_angles:
+        if a < angle_pm:
+            mask_out[
+                ((thetas < np.mod(a + angle_pm, 360)) |
+                 (thetas > np.mod(a - angle_pm, 360)))
+            ] = True
+        else:
+            mask_out[
+                ((thetas < np.mod(a + angle_pm, 360)) &
+                 (thetas > np.mod(a - angle_pm, 360)))
+            ] = True
+        mask_out[radii <= safe_rad] = True
+    return mask_out
+
+
+def find_best_angle(
+        base_psd,
+        check_angles,
+        n_steps=360,
+        plot=False,
+):
+    thetas = np.linspace(check_angles[0], check_angles[1], n_steps)
+    means = np.ones_like(thetas) * np.NaN
+    base_psd = (base_psd - base_psd.min()) / (base_psd.max() - base_psd.min())
+    for i, t in enumerate(thetas):
+        means[i] = get_radial_intensity(base_psd**7, t)[1].mean()
+    if plot:
+        plt.plot(thetas, means)
+    return thetas[means.argmax()]
