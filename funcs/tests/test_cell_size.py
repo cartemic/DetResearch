@@ -76,7 +76,7 @@ class TestAgainstDemo:
         'Westbrook': 0.00012018245112404462
     }
 
-    cj_speed = 1968.121482986247
+    cj_speed = 1967.8454767711942
     init_press = 100000
     init_temp = 300
     mechanism = 'Mevel2017.cti'

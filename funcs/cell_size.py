@@ -12,8 +12,8 @@ in the following report:
 This script uses SDToolbox, which can be found at
 http://shepherd.caltech.edu/EDL/PublicResources/sdt/
 """
-import numpy as np
 import cantera as ct
+import numpy as np
 
 from .specific_heat_matching import diluted_species_dict
 
@@ -151,6 +151,8 @@ def wrapped_zndsolve(
                 break
             except ct.CanteraError:
                 pass
+            except ValueError:
+                pass
         else:
             # let it break if it's gonna break after max tries
             out = sd.znd.zndsolve(
@@ -201,6 +203,7 @@ class CellSize:
     perturbation_fraction : float
         Fraction by which to perturb the specified reaction's forward and
         reverse rate constants, i.e. dk/k. Defaults to 1e-2 (1%)
+    todo: just make this a frickin function you fool
     """
     def __call__(
             self,
@@ -218,7 +221,8 @@ class CellSize:
             perturbation_fraction=1e-2,
             max_tries_znd=5,
             max_step_znd=1e-4,
-            max_tries_cv=10
+            max_tries_cv=10,
+            cv_end_time=1e-6
     ):
         # sdt import is here to avoid any module-level weirdness stemming from
         # Solution object modification
@@ -328,13 +332,12 @@ class CellSize:
         temp_a = self.Ts * 1.02
         gas.TPX = temp_a, Ps, q
 
-        base_t_end = 1e-6
         # cv_out_0 = sd.cv.cvsolve(gas)
         cv_out_0 = wrapped_cvsolve(
             gas,
             sd,
             max_tries_cv,
-            base_t_end
+            cv_end_time
         )
 
         temp_b = self.Ts * 0.98
@@ -344,7 +347,7 @@ class CellSize:
             gas,
             sd,
             max_tries_cv,
-            base_t_end
+            cv_end_time
         )
 
         # Approximate effective activation energy for CV explosion
@@ -365,7 +368,10 @@ class CellSize:
             limit_species = 'O2'
         limit_species_loc = gas.species_index(limit_species)
         gas.TPX = self.Ts, Ps, q
-        mf_initial = gas.mole_fraction_dict()[limit_species]
+        try:
+            mf_initial = gas.mole_fraction_dict()[limit_species]
+        except KeyError:
+            mf_initial = 0.
         gas.equilibrate('UV')
         mf_final = gas.mole_fraction_dict()[limit_species]
         temp_final = gas.T
