@@ -12,7 +12,6 @@ dependencies:
   - imageio=2.9.0
   - ipython=7.18.1
   - mock=4.0.2
-  - win_inet_pton=1.1.0
   - cryptography=2.3.1
   - pyrsistent=0.16.0
   - brotlipy=0.7.0
@@ -49,7 +48,6 @@ dependencies:
   - pygments=2.6.1
   - prometheus_client=0.
   - pandoc=2.10.1
-  - winpty=0.4.3
   - argon2-cffi=20.1.0
   - prompt-toolkit=3.0.7
   - cffi=1.14.2
@@ -69,7 +67,6 @@ dependencies:
   - pytables=3.6.1
   - libsodium=1.0.18
   - ipywidgets=7.5.1
-  - pywin32=227
   - pluggy=0.13.1
   - openssl=1.0.2u
   - pycparser=2.20
@@ -82,7 +79,7 @@ dependencies:
   - future=0.18.2
   - uncertainties=3.1.4
   - nptdms=0.27.0
-  - seaborn=0.10.1-1
+  - seaborn=0.9.0
   - scikit-image=0.17.2
   - pint=0.15
   - pyqt=5.9.2
