@@ -26,21 +26,28 @@ def get_spatial_dir(
 ):
     _dir_date = os.path.join(
         base_dir,
-        date,
-        "spatial"
+        date
     )
-    if not os.path.exists(_dir_date):
-        _dir_date = os.path.join(
+    contents = os.listdir(_dir_date)
+    if ".old" in contents:
+        _dir_spatial = os.path.join(
             base_dir,
             date,
             "Camera",
             "spatial"
         )
-        if not os.path.exists(_dir_date):
-            warnings.warn("directory not found: %s" % _dir_date)
-            _dir_date = np.NaN
+    else:
+        _dir_spatial = os.path.join(
+            base_dir,
+            date,
+            "spatial"
+        )
 
-    return _dir_date
+    if not os.path.exists(_dir_spatial):
+        warnings.warn("directory not found: %s" % _dir_spatial)
+        _dir_spatial = np.NaN
+
+    return _dir_spatial
 
 
 def get_varied_spatial_dir(

@@ -1,6 +1,6 @@
 language: python
 python:
-- "3.6"
+- "3.7"
 
 install:
     - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
@@ -15,13 +15,12 @@ install:
     - conda update -q conda
     - conda update -q --all
     - conda config --append channels conda-forge
-    - conda env create -qf env-conda.yaml;
-    - source activate env-conda;
-    - pip install -r env-pip.txt
+    - conda env create -qf env-latest.yaml;
+    - source activate research;
     - wget https://shepherd.caltech.edu/EDL/PublicResources/sdt/SDToolbox.zip;
     - unzip SDToolbox.zip
-    - mv SDToolbox/Python3/sdtoolbox ~/miniconda/envs/env-conda/lib/python3.7/site-packages
-    - mv SDToolbox/cti/* ~/miniconda/envs/env-conda/lib/python3.7/site-packages/cantera/data
+    - mv SDToolbox/Python3/sdtoolbox $HOME/miniconda/envs/research/lib/python3.7/site-packages
+    - mv SDToolbox/cti/* $HOME/miniconda/envs/research/lib/python3.7/site-packages/cantera/data
     - rm -rf SDToolbox
     - rm SDToolbox.zip
 

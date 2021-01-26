@@ -1402,7 +1402,8 @@ class _ProcessStructure2:
     @classmethod
     def _read_fill_tdms(
             cls,
-            dir_shot
+            dir_shot,
+            oxidizer_is_air
     ):
         """
         Read in partial pressures, fill cutoff pressures, initial conditions,
@@ -1412,6 +1413,8 @@ class _ProcessStructure2:
         ----------
         dir_shot : str
             shot data directory
+        oxidizer_is_air : bool
+            If oxidizer is air, vacuum is lumped in with oxidizer
 
         Returns
         -------
@@ -1425,7 +1428,7 @@ class _ProcessStructure2:
         fill_tdms = TdmsFile(os.path.join(dir_shot, "fill.tdms"))
         initial = cls._get_initial_conditions(fill_tdms)
         cutoffs = cls._get_fill_cutoffs(fill_tdms)
-        partials = cls._get_partials_from_cutoffs(cutoffs)
+        partials = cls._get_partials_from_cutoffs(cutoffs, oxidizer_is_air)
         dil_mf = cls._get_diluent_mol_frac(partials)
         return dict(
             partials=partials,
@@ -1483,7 +1486,8 @@ class _ProcessStructure2:
 
     @staticmethod
     def _get_partials_from_cutoffs(
-            cutoffs
+            cutoffs,
+            oxidizer_is_air
     ):
         """
         Calculates component partial pressures from fill cutoff pressures
@@ -1492,6 +1496,8 @@ class _ProcessStructure2:
         ----------
         cutoffs : dict
             dictionary of cutoff pressures (output of _get_fill_cutoffs)
+        oxidizer_is_air : bool
+            If oxidizer is air, vacuum is lumped in with oxidizer
 
         Returns
         -------
@@ -1510,12 +1516,14 @@ class _ProcessStructure2:
         else:
             partials["diluent"] = cutoffs["diluent"] - cutoffs["fuel"]
 
-        # TODO: change if oxidizer is not air!!
-        # using nanmin in case fill order changes again in the future
-        partials["oxidizer"] = cutoffs["oxidizer"] - np.nanmin((
+        # using nanmax in case fill order changes again in the future
+        partials["oxidizer"] = cutoffs["oxidizer"] - np.nanmax((
             cutoffs["fuel"],
             cutoffs["diluent"]
-        )) + cutoffs["vacuum"]
+        ))
+
+        if oxidizer_is_air:
+            partials["oxidizer"] += cutoffs["vacuum"]
 
         return partials
 
@@ -1760,7 +1768,8 @@ class _ProcessStructure2:
 
         # measured initial conditions
         # from fill.tdms
-        fill_info = cls._read_fill_tdms(dir_shot)
+        oxidizer_is_air = results["oxidizer"].lower() == "air"
+        fill_info = cls._read_fill_tdms(dir_shot, oxidizer_is_air)
         initial = fill_info["initial"]
         results["p_0"] = initial["pressure"].nominal_value
         results["u_p_0"] = initial["pressure"].std_dev
@@ -1776,6 +1785,8 @@ class _ProcessStructure2:
         results["u_cutoff_diluent"] = cutoffs["diluent"].std_dev
         results["cutoff_oxidizer"] = cutoffs["oxidizer"].nominal_value
         results["u_cutoff_oxidizer"] = cutoffs["oxidizer"].std_dev
+        results["cutoff_vacuum"] = cutoffs["vacuum"].nominal_value
+        results["u_cutoff_vacuum"] = cutoffs["vacuum"].std_dev
 
         # measured partial pressures and dilution
         # from fill.tdms

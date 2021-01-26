@@ -203,6 +203,7 @@ class CellSize:
     perturbation_fraction : float
         Fraction by which to perturb the specified reaction's forward and
         reverse rate constants, i.e. dk/k. Defaults to 1e-2 (1%)
+    todo: just make this a frickin function you fool
     """
     def __call__(
             self,
@@ -367,7 +368,10 @@ class CellSize:
             limit_species = 'O2'
         limit_species_loc = gas.species_index(limit_species)
         gas.TPX = self.Ts, Ps, q
-        mf_initial = gas.mole_fraction_dict()[limit_species]
+        try:
+            mf_initial = gas.mole_fraction_dict()[limit_species]
+        except KeyError:
+            mf_initial = 0.
         gas.equilibrate('UV')
         mf_final = gas.mole_fraction_dict()[limit_species]
         temp_final = gas.T
