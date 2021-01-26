@@ -15,9 +15,8 @@ install:
     - conda update -q conda
     - conda update -q --all
     - conda config --append channels conda-forge
-    - conda env create -qf research_pls.yaml;
+    - conda env create -qf env_latest.yaml;
     - source activate research;
-    - pip install -r env-pip.txt
     - wget https://shepherd.caltech.edu/EDL/PublicResources/sdt/SDToolbox.zip;
     - unzip SDToolbox.zip
     - mv SDToolbox/Python3/sdtoolbox ~/miniconda/envs/env-conda/lib/python3.7/site-packages
