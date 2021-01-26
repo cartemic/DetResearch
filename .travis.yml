@@ -19,9 +19,8 @@ install:
     - source activate research;
     - wget https://shepherd.caltech.edu/EDL/PublicResources/sdt/SDToolbox.zip;
     - unzip SDToolbox.zip
-    - whereis python3.7
-    - mv SDToolbox/Python3/sdtoolbox $HOME/miniconda/envs/env-conda/lib/python3.7/site-packages
-    - mv SDToolbox/cti/* $HOME/miniconda/envs/env-conda/lib/python3.7/site-packages/cantera/data
+    - mv SDToolbox/Python3/sdtoolbox $HOME/miniconda/envs/research/lib/python3.7/site-packages
+    - mv SDToolbox/cti/* $HOME/miniconda/envs/research/lib/python3.7/site-packages/cantera/data
     - rm -rf SDToolbox
     - rm SDToolbox.zip
 
