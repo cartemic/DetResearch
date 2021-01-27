@@ -75,7 +75,7 @@ def run(
     pass_mask = image.get_pass_mask(
         ang,
         rad,
-        [best_angle_0, 360-best_angle_1%90, 180-best_angle_1%90, 180+best_angle_0],
+        [best_angle_0, best_angle_1, 180+best_angle_1, 180+best_angle_0],
         fft_pass[0],
         fft_pass[1]
     )
