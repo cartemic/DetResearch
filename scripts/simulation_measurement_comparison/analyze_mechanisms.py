@@ -57,14 +57,14 @@ class Mechanism(Enum):
     GRI3 = "gri30.cti"
     GRI3HighT = "gri30_highT.cti"
     GRI3Ion = "gri30_ion.cti"
-    Mevel2015 = "Mevel2015.cti"
-    Mevel2018 = "Mevel2018.cti"
-    HexanePartial = "hexanePartial.cti"
-    # SanDiego = "sandiego20161214.cti"
-    # JetSurf = "JetSurf2.cti"
-    # Blanquart = "Blanquart2018.cti"
-    # Aramco = "aramco2.cti"
-    # FFCM = "ffcm1.cti"
+    # Mevel2015 = "Mevel2015.cti"  # contains undeclared duplicate reactions
+    # Mevel2018 = "Mevel2018.cti"  # contains undeclared duplicate reactions
+    # HexanePartial = "hexanePartial.cti"  # contains undeclared duplicate reactions
+    SanDiego = "sandiego20161214.cti"
+    JetSurf = "JetSurf2.cti"
+    Blanquart = "Blanquart2018.cti"
+    Aramco = "aramco2.cti"
+    FFCM = "ffcm1.cti"
 
     @classmethod
     def all(cls) -> List[Mechanism]:
@@ -107,30 +107,26 @@ class Mechanism(Enum):
                 bad_mechanisms.append(cti)
 
         if good_mechanisms:
-            msg = f"\u001b[32mFOUND: {', '.join(sorted(good_mechanisms))}\u001b[0m"
+            msg = f"\u001b[32mCONTAINS REACTANTS: {', '.join(sorted(good_mechanisms))}\u001b[0m"
             print(msg)
         if bad_mechanisms:
-            msg = f"\u001b[31mNOT FOUND: {', '.join(bad_mechanisms)}\u001b[0m"
+            msg = f"\u001b[31mDOES NOT CONTAIN REACTANTS: {', '.join(bad_mechanisms)}\u001b[0m"
             print(msg)
 
     @staticmethod
     def _validate(cti: str) -> Tuple[str, bool]:
-        success = False
-        # noinspection PyBroadException
-        try:
+        with warnings.catch_warnings():
+            # I don't care about deprecations in cantera 3
+            warnings.simplefilter("ignore")
             gas = ct.Solution(cti)
-            good_species = gas.species_names
-            check_species = [d.value for d in Diluent.all() if d is not Diluent.NONE]
-            # noinspection PyTypeChecker
-            check_species.extend([InitialConditions.fuel, InitialConditions.oxidizer])
-            for s in check_species:
-                if s not in good_species:
-                    raise MechanismValidationError
-            success = True
-        except Exception:
-            pass
-
-        return cti, success
+        good_species = gas.species_names
+        check_species = [d.value for d in Diluent.all() if d is not Diluent.NONE]
+        # noinspection PyTypeChecker
+        check_species.extend([InitialConditions.fuel, InitialConditions.oxidizer])
+        for s in check_species:
+            if s not in good_species:
+                return cti, False
+        return cti, True
 
     @classmethod
     def validate_all_cantera_mechanisms(cls):
@@ -231,7 +227,7 @@ def calculate_all_new(getter_func: Callable, diluent_mol_fracs: Tuple[float, ...
     ))
     # cut down number of processes to conserve RAM
     with Pool(initializer=init, initargs=(lock,), processes=8) as pool:
-        # noinspection PyUnresolvedReferences
+        # noinspection PyUnresolvedReferences,PyTestUnpassedFixture
         for _ in tqdm.tqdm(pool.istarmap(getter_func, arg_combinations), total=len(arg_combinations)):
             pass
     pool.join()
@@ -439,11 +435,11 @@ def main():
     # Mechanism.validate_all_cantera_mechanisms()
     # print(get_cj_speed(Mechanism.GRI3HighT, Diluent.NONE, 0.0))
     # calculate_all_new(get_cj_speeds, (0.1, 0.2), False)
-    calculate_all_new(get_cell_sizes, (0.1,), False)
-    with pd.HDFStore(DATA_FILE, "r") as store:
-        df = store["data"]
-    pd.set_option("display.max_columns", None)
-    print(df)
+    # calculate_all_new(get_cell_sizes, (0.1,), False)
+    # with pd.HDFStore(DATA_FILE, "r") as store:
+    #     df = store["data"]
+    # pd.set_option("display.max_columns", None)
+    # print(df)
 
 
 if __name__ == "__main__":
