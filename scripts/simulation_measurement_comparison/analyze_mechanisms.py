@@ -97,36 +97,48 @@ class Mechanism(Enum):
         with Pool() as p:
             results = p.map(cls._validate, ctis)
         p.join()
+        cls._sort_validations_and_print(results)
 
+    @staticmethod
+    def _sort_validations_and_print(results: list[tuple[str, Optional[bool]]]):
         good_mechanisms = []
         bad_mechanisms = []
+        unparseable_mechanisms = []
         for (cti, success) in results:
             if success:
                 good_mechanisms.append(cti)
+            elif success is None:
+                unparseable_mechanisms.append(cti)
             else:
                 bad_mechanisms.append(cti)
-
+        sep = "\n    - "
         if good_mechanisms:
-            msg = f"\u001b[32mCONTAINS REACTANTS: {', '.join(sorted(good_mechanisms))}\u001b[0m"
+            msg = f"\u001b[32mCONTAINS REACTANTS: {sep}{sep.join(sorted(good_mechanisms))}\u001b[0m"
             print(msg)
         if bad_mechanisms:
-            msg = f"\u001b[31mDOES NOT CONTAIN REACTANTS: {', '.join(bad_mechanisms)}\u001b[0m"
+            msg = f"\u001b[31mDOES NOT CONTAIN REACTANTS: {sep}{sep.join(sorted(bad_mechanisms))}\u001b[0m"
+            print(msg)
+        if unparseable_mechanisms:
+            msg = f"\u001b[31mUNPARSEABLE: {sep}{sep.join(sorted(unparseable_mechanisms))}\u001b[0m"
             print(msg)
 
     @staticmethod
-    def _validate(cti: str) -> Tuple[str, bool]:
-        with warnings.catch_warnings():
-            # I don't care about deprecations in cantera 3
-            warnings.simplefilter("ignore")
-            gas = ct.Solution(cti)
-        good_species = gas.species_names
-        check_species = [d.value for d in Diluent.all() if d is not Diluent.NONE]
-        # noinspection PyTypeChecker
-        check_species.extend([InitialConditions.fuel, InitialConditions.oxidizer])
-        for s in check_species:
-            if s not in good_species:
-                return cti, False
-        return cti, True
+    def _validate(cti: str) -> Tuple[str, Optional[bool]]:
+        try:
+            with warnings.catch_warnings():
+                # I don't care about deprecations in cantera 3
+                warnings.simplefilter("ignore")
+                gas = ct.Solution(cti)
+            good_species = gas.species_names
+            check_species = [d.value for d in Diluent.all() if d is not Diluent.NONE]
+            # noinspection PyTypeChecker
+            check_species.extend([InitialConditions.fuel, InitialConditions.oxidizer])
+            for s in check_species:
+                if s not in good_species:
+                    return cti, False
+            return cti, True
+        except:
+            return cti, None
 
     @classmethod
     def validate_all_cantera_mechanisms(cls):
@@ -134,28 +146,16 @@ class Mechanism(Enum):
         for d in ct.get_data_directories():
             mechs_to_validate.update([
                 os.path.split(mech)[1] for mech in
-                glob.glob(os.path.join(d, "*.cti"))  # + glob.glob(os.path.join(d, "*.xml"))
+                glob.glob(os.path.join(d, "*.cti"))
+                + glob.glob(os.path.join(d, "*.xml"))
+                + glob.glob(os.path.join(d, "*.yaml"))
             ])
 
         print("Validating _all_ mechanisms")
         with Pool() as p:
             results = p.map(cls._validate, mechs_to_validate)
         p.join()
-
-        good_mechanisms = []
-        bad_mechanisms = []
-        for (cti, success) in results:
-            if success:
-                good_mechanisms.append(cti)
-            else:
-                bad_mechanisms.append(cti)
-
-        if good_mechanisms:
-            msg = f"\u001b[32mGOOD: {', '.join(sorted(good_mechanisms))}\u001b[0m"
-            print(msg)
-        if bad_mechanisms:
-            msg = f"\u001b[31mBAD: {', '.join(bad_mechanisms)}\u001b[0m"
-            print(msg)
+        cls._sort_validations_and_print(results)
 
 
 class Diluent(Enum):
@@ -431,8 +431,8 @@ def _simulate_cell_sizes(
 
 
 def main():
-    Mechanism.validate_all()
-    # Mechanism.validate_all_cantera_mechanisms()
+    # Mechanism.validate_all()
+    Mechanism.validate_all_cantera_mechanisms()
     # print(get_cj_speed(Mechanism.GRI3HighT, Diluent.NONE, 0.0))
     # calculate_all_new(get_cj_speeds, (0.1, 0.2), False)
     # calculate_all_new(get_cell_sizes, (0.1,), False)
