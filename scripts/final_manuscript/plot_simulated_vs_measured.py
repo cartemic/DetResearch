@@ -8,6 +8,12 @@ from matplotlib import pyplot as plt
 from scripts.final_manuscript.plot_settings import set_palette, set_style, PlotKind
 
 
+sns.set(
+    font="serif",
+    style="white",
+    context="paper",
+)
+
 SCRIPT_DIR = os.path.dirname(__file__)
 CELL_SIZE_DATA_PATH = os.path.join(
     os.path.dirname(SCRIPT_DIR), "simulation_measurement_comparison", "simulated_and_measured_2024_03_02.h5"
@@ -27,14 +33,26 @@ def load_data():
                     cell_size_data,
                     pd.DataFrame(
                         {
-                            "fuel": ["CH4"] * 2,
-                            "oxidizer": ["N2O"] * 2,
-                            "diluent": [row["diluent"]] * 2,
-                            "phi_nom": [row["phi_nom"]] * 2,
-                            "dil_mf_nom": [row["dil_mf_nom"]] * 2,
-                            "cell_size": [row["cell_size_measured"], row["cell_size_westbrook_2"]],
-                            "source": ["measurement", "simulation"],
-                            "uncertainty": [row["u_cell_size_measured"], np.NaN],
+                            "fuel": ["CH4"] * 5,
+                            "oxidizer": ["N2O"] * 5,
+                            "diluent": [row["diluent"]] * 5,
+                            "phi_nom": [row["phi_nom"]] * 5,
+                            "dil_mf_nom": [row["dil_mf_nom"]] * 5,
+                            "cell_size": [
+                                row["cell_size_measured"],
+                                row["cell_size_westbrook"],
+                                row["cell_size_westbrook_2"],
+                                row["cell_size_ng"],
+                                row["cell_size_gavrikov"],
+                            ],
+                            "source": [
+                                "measurement",
+                                "simulation (westbrook)",
+                                "simulation (westbrook, corrected)",
+                                "simulation (ng)",
+                                "simulation (gavrikov)",
+                            ],
+                            "uncertainty": [row["u_cell_size_measured"], np.NaN, np.NaN, np.NaN, np.NaN],
                         }
                     ),
                 ]
@@ -82,7 +100,7 @@ def plot_cell_size(data: pd.DataFrame, show_title: bool, save_plot: bool):
         zorder=2,
         facet_kws=dict(sharey="row"),
     )
-    grid.fig.set_size_inches((7, 6))
+    grid.fig.set_size_inches((7, 3*5))
     if show_title:
         grid.fig.suptitle("Diluent Comparison", weight="bold")
 
@@ -121,7 +139,7 @@ def plot_cell_size(data: pd.DataFrame, show_title: bool, save_plot: bool):
         ax.set_title(
             title.replace("source = ", "")
             .replace("measurement ", "Measured")
-            .replace("simulation ", "Simulated")
+            .replace("simulation ", "Simulated\n")
             .replace("| ", "\n")
             .replace("phi_nom", r"$\phi_{nom}$")
         )
@@ -130,32 +148,44 @@ def plot_cell_size(data: pd.DataFrame, show_title: bool, save_plot: bool):
         if ax.get_ylabel():
             ax.set_ylabel("Cell size (mm)")
     grid.tight_layout()
+    plt.subplots_adjust(right=0.875)
 
     if save_plot:
         grid.fig.savefig("plots/simulated_vs_measured.pdf")
 
-    ratio = (
-        data[data["source"] == "simulation"].set_index(["dil_mf_nom", "phi_nom", "fuel", "oxidizer", "diluent"])[
-            "cell_size"
-        ]
-        / data[data["source"] == "measurement"].set_index(["dil_mf_nom", "phi_nom", "fuel", "oxidizer", "diluent"])[
-            "cell_size"
-        ]
+    data2 = data.set_index(["dil_mf_nom", "phi_nom", "fuel", "oxidizer", "diluent"])
+    measured = data2[data2["source"] == "measurement"]
+    simulated = data2[data2["source"] != "measurement"]
+    ratio = pd.DataFrame()
+    for (source, df_source) in simulated.groupby("source"):
+        df_source["ratio"] = df_source["cell_size"] / measured["cell_size"]
+        ratio = pd.concat((df_source, ratio))
+    grid = sns.relplot(
+        x="phi_nom",
+        y="ratio",
+        col="dil_mf_nom",
+        row="source",
+        hue="diluent",
+        data=ratio,
+        facet_kws=dict(sharey="row"),
     )
-    ratio.name = "ratio"
-    ratio = ratio.reset_index()
-    grid = sns.relplot(x="phi_nom", y="ratio", col="dil_mf_nom", hue="diluent", data=ratio)
-    grid.fig.set_size_inches((7, 3))
+    grid.fig.set_size_inches((7, 3*4))
     if show_title:
         grid.fig.suptitle("Simulated / Measured Cell Size Ratios", weight="bold")
     for ax in grid.axes.flatten():
         title = ax.get_title()
-        ax.set_title(title.replace("dil_mf_nom", "$x_{CO_{2},nom}$"))
+        ax.set_title(
+            title.replace("source = ", "")
+            .replace("dil_mf_nom", "$x_{CO_{2},nom}$")
+            .replace("simulation ", "Simulated\n")
+            .replace("| ", "\n")
+        )
         if ax.get_xlabel():
             ax.set_xlabel(r"$\phi_{nom}$")
         if ax.get_ylabel():
             ax.set_ylabel("Simulated / Measured")
     grid.tight_layout()
+    plt.subplots_adjust(right=0.875)
 
     if save_plot:
         grid.fig.savefig("plots/simulated_measured_ratio.pdf")
@@ -197,15 +227,14 @@ def plot_wave_speed(data: pd.DataFrame, show_title: bool, save_plot: bool):
 
 
 def main():
-    show_plot = False
-    save_plot = True
+    show_plot = True
+    save_plot = False
     show_title = False
 
     set_palette(plot_kind=PlotKind.CONDITION)
     set_style()
     sns.set_style(
         {
-            "font.scale": 0.75,
             "font.family": "serif",
             "font.serif": "Computer Modern",
         }
