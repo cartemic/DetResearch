@@ -86,7 +86,7 @@ def simulate(
         )
 
 
-def run_serial(
+def cell_size_serial(
     co2_dil_mfs: list[float],
     n2_dil_mfs: list[float],
     n2_match: list[str],
@@ -132,7 +132,7 @@ def run_serial(
         counter.update()
 
 
-def run_parallel(
+def cell_size_parallel(
     co2_dil_mfs: list[float],
     n2_dil_mfs: list[float],
     n2_match: list[str],
@@ -189,8 +189,64 @@ def run_parallel(
             counter.update()
 
 
+def match_dil_mf_aft_parallel(
+    mech: str,
+    fuel: str,
+    oxidizer: str,
+    phi: float,
+    co2_dil_mfs: list[float],
+    t0: float,
+    p0: float,
+    counter: tqdm,
+) -> list[float]:
+    with ProcessPoolExecutor() as executor:
+        futures = set()
+        for mf_co2 in co2_dil_mfs:
+            # noinspection PyTypeChecker
+            f = executor.submit(
+                match_dil_mf_aft,
+                mech=mech,
+                fuel=fuel,
+                oxidizer=oxidizer,
+                phi=phi,
+                mf_co2=mf_co2,
+                t0=t0,
+                p0=p0,
+            )
+            futures.add(f)
+        results = []
+
+        for done in concurrent.futures.as_completed(futures):
+            results.append(done.result())
+            counter.update()
+
+    return results
+
+
+def match_dil_mf_aft(
+    mech: str,
+    fuel: str,
+    oxidizer: str,
+    phi: float,
+    mf_co2: float,
+    t0: float,
+    p0: float,
+) -> float:
+    return simulation.thermo.match_adiabatic_temp(
+        mech=mech,
+        fuel=fuel,
+        oxidizer=oxidizer,
+        phi=phi,
+        dil_original="CO2",
+        dil_original_mol_frac=mf_co2,
+        dil_new="N2",
+        init_temp=t0,
+        init_press=p0,
+    )
+
+
 def main():
-    mech = "gri30_highT.xml"
+    mech = "Blanquart2018.cti"
     fuel = "CH4"
     oxidizer = "N2O"
     t0 = 300
@@ -203,34 +259,42 @@ def main():
         clear_simulation_database(path=db_path)
 
     parallelize = True
-    print("Running cell size simulations in ", end="")
-    if parallelize:
-        print("parallel")
-    else:
-        print("series")
-
+    parallel_or_series = "parallel" if parallelize else "series"
+    print(f"Matching CO2 adiabatic flame temperature in {parallel_or_series}")
     co2_dil_mfs = [0.1, 0.2]
-    n2_dil_mfs = [
-        simulation.thermo.match_adiabatic_temp(
-            mech=mech,
-            fuel=fuel,
-            oxidizer=oxidizer,
-            phi=phi,
-            dil_original="CO2",
-            dil_original_mol_frac=mf_co2,
-            dil_new="N2",
-            init_temp=t0,
-            init_press=p0,
-        )
-        for mf_co2 in co2_dil_mfs
-    ] + co2_dil_mfs  # Tad matched + mole fraction matched
+    with tqdm(total=len(co2_dil_mfs), unit="calculation", file=sys.stdout, colour="green", desc="Running") as counter:
+        if parallelize:
+            n2_aft_matched_dil_mfs = match_dil_mf_aft_parallel(
+                mech=mech,
+                fuel=fuel,
+                oxidizer=oxidizer,
+                phi=phi,
+                co2_dil_mfs=co2_dil_mfs,
+                t0=t0,
+                p0=p0,
+                counter=counter,
+            )
+        else:
+            n2_aft_matched_dil_mfs = [match_dil_mf_aft(
+                mech=mech,
+                fuel=fuel,
+                oxidizer=oxidizer,
+                phi=phi,
+                mf_co2=mf_co2,
+                t0=t0,
+                p0=p0,
+            ) for mf_co2 in co2_dil_mfs]
+        counter.set_description_str("Done")
+
+    n2_dil_mfs = n2_aft_matched_dil_mfs + co2_dil_mfs  # Tad matched + mole fraction matched
     n2_match = ["tad" for _ in co2_dil_mfs] + ["mf" for _ in co2_dil_mfs]
     dil_conditions = ["low", "high"]
 
+    print(f"Running cell size simulations in {parallel_or_series}")
     n_conditions = len(co2_dil_mfs) + len(n2_dil_mfs)
     with tqdm(total=n_conditions, unit="simulation", file=sys.stdout, colour="green", desc="Running") as counter:
         if parallelize:
-            run_parallel(
+            cell_size_parallel(
                 co2_dil_mfs=co2_dil_mfs,
                 n2_dil_mfs=n2_dil_mfs,
                 n2_match=n2_match,
@@ -245,7 +309,7 @@ def main():
                 db_path=db_path,
             )
         else:
-            run_serial(
+            cell_size_serial(
                 co2_dil_mfs=co2_dil_mfs,
                 n2_dil_mfs=n2_dil_mfs,
                 n2_match=n2_match,
