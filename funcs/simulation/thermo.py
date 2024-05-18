@@ -205,10 +205,6 @@ def match_adiabatic_temp(
         new_mol_frac,
     )
 
-    The **additional** mole fraction is returned because, in this application,
-    air is being added as a single component, and thus the partial pressure
-    of the **additional** nitrogen is a parameter of interest.
-
     Parameters:
     -----------
     mech : str
