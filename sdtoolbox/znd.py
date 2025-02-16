@@ -114,11 +114,11 @@ def getThermicity(gas):
 
 
 def zndsolve(
-    gas,
-    gas1,
-    U1,
-    t_end=1e-3,
-    max_step=1e-4,
+    gas: ct.Solution,
+    gas1: ct.Solution,
+    U1: float,
+    t_end: float = 1e-3,
+    max_step: float = 1e-4,
     t_eval=None,
     relTol=1e-5,
     absTol=1e-8,
@@ -276,12 +276,13 @@ def zndsolve(
                         net_production_rate=gas.net_production_rates[idx_spec],
                     ), commit=False)
             if rxn_indices is not None:
+                rxn_eqns = gas.reaction_equations()
                 for idx_rxn in rxn_indices:
                     db.reactions.insert_or_update(ReactionData(
                         condition_id=db.conditions_id,
                         run_no=run_no,
                         time=output["time"][i],
-                        reaction=gas.reaction_equation(idx_rxn),
+                        reaction=rxn_eqns[idx_rxn],
                         fwd_rate_constant=gas.forward_rate_constants[idx_rxn],
                         fwd_rate_of_progress=gas.forward_rates_of_progress[idx_rxn],
                         rev_rate_constant=gas.reverse_rate_constants[idx_rxn],

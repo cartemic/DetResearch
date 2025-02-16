@@ -256,12 +256,13 @@ def cvsolve(
                         dy_dt=calc_parameters.dY_dt[idx_spec],
                     ), commit=False)
             if rxn_indices is not None:
+                rxn_eqns = gas.reaction_equations()
                 for idx_rxn in rxn_indices:
                     db.reactions.insert_or_update(ReactionData(
                         condition_id=db.conditions_id,
                         run_no=run_no,
                         time=output["time"][i],
-                        reaction=gas.reaction_equation(idx_rxn),
+                        reaction=rxn_eqns[idx_rxn],
                         fwd_rate_constant=gas.forward_rate_constants[idx_rxn],
                         fwd_rate_of_progress=gas.forward_rates_of_progress[idx_rxn],
                         rev_rate_constant=gas.reverse_rate_constants[idx_rxn],

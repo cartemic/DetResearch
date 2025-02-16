@@ -268,7 +268,7 @@ def calculate(
     diluent: Optional[str],
     diluent_mol_frac: float,
     cj_speed: float,
-    perturbed_reaction: Optional[float] = None,
+    perturbed_reaction: Optional[int] = None,
     perturbation_fraction: float = 1e-2,
     max_tries_znd: int = 10,
     max_step_znd: float = 1e-4,
@@ -446,7 +446,7 @@ def calculate(
         reaction_equation = None
         k_i = None
     else:
-        reaction_equation = base_gas.reaction_equation(perturbed_reaction)
+        reaction_equation = base_gas.reaction_equations()[perturbed_reaction]
         k_i = base_gas.forward_rate_constants[perturbed_reaction]
     return CellSizeResults(
         cell_size=cell_size,
