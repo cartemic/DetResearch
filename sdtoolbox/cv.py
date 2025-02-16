@@ -176,7 +176,7 @@ def cvsolve(
 
     tel = [0., t_end]  # Timespan
 
-    output = {}
+    output: dict = {}
 
     out: OdeResult = typing.cast(
         OdeResult,
@@ -240,7 +240,7 @@ def cvsolve(
                 ), commit=False)
             if spec_indices is not None:
                 for idx_spec in spec_indices:
-                    species = gas.species(idx_spec)
+                    species = gas.species()[idx_spec]
                     db.species.insert_or_update(SpeciesData(
                         condition_id=db.conditions_id,
                         run_no=run_no,
@@ -251,9 +251,9 @@ def cvsolve(
                         creation_rate=gas.net_production_rates[idx_spec],
                         destruction_rate=gas.destruction_rates[idx_spec],
                         net_production_rate=gas.net_production_rates[idx_spec],
-                        a=calc_parameters.a[idx_spec],
-                        b=calc_parameters.b[idx_spec],
-                        dy_dt=calc_parameters.dY_dt[idx_spec],
+                        a=typing.cast(float | None, calc_parameters.a[idx_spec]),
+                        b=typing.cast(float | None, calc_parameters.b[idx_spec]),
+                        dy_dt=typing.cast(float | None, calc_parameters.dY_dt[idx_spec]),
                     ), commit=False)
             if rxn_indices is not None:
                 rxn_eqns = gas.reaction_equations()
@@ -271,9 +271,7 @@ def cvsolve(
                     ), commit=False)
 
     if db is not None:
-        db.bulk_properties.cur.connection.commit()
-        db.species.cur.connection.commit()
-        db.reactions.cur.connection.commit()
+        db.commit_all()
 
     n = temp_grad.argmax()
 

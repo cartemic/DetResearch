@@ -2,11 +2,19 @@ import dataclasses
 import sqlite3
 from enum import Enum
 from functools import cached_property
-from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
 
+import backoff
+import psycopg
+# Cantera's API has gotten kinda unreliable w.r.t. types in more recent versions, but it's there... unfortunately this
+# is still not helpful when it comes to introspection, but at least we know what to look for in the docs
+# noinspection PyUnresolvedReferences
 from cantera import Species
-from retry import retry
+
+
+BACKOFF_MAX_RETRIES = 1
+BACKOFF_JITTER = backoff.random_jitter
+BACKOFF_STRATEGY = backoff.fibo
 
 
 class DatabaseError(Exception):
@@ -25,43 +33,56 @@ class SimulationType(Enum):
     Cv: str = "cv"
 
 
-class SqliteDataBase:
-    def __init__(self, path: Union[str, Path], timeout: float = 600):
-        self.path = path
-        self.timeout = timeout
+class PostgresDatabase:
+    def __init__(self, conninfo: str):
+        self.conninfo = conninfo
         self.con = self.connect()
-        self.con.row_factory = sqlite3.Row
 
     def __del__(self):
         try:
             self.con.commit()
-        except sqlite3.ProgrammingError:
+        except psycopg.OperationalError:
             self.con = self.connect()
         self.con.close()
 
-    def connect(self) -> sqlite3.Connection:
-        return sqlite3.connect(self.path, timeout=self.timeout)
+    def connect(self) -> psycopg.Connection:
+        return psycopg.connect(self.conninfo)
 
 
 class SqliteTable:
-    def __init__(self, db: SqliteDataBase, table_name: str, clear_existing_data: bool = False):
+    def __init__(
+            self,
+            db: PostgresDatabase,
+            table_name: str,
+            clear_existing_data: bool = False,
+    ):
         self.db = db
         self.cur = self.db.con.cursor()
         self.name = table_name
         if self.table_exists() and clear_existing_data:
             self.__clear()
 
+    @backoff.on_exception(
+        BACKOFF_STRATEGY,
+        sqlite3.OperationalError,
+        max_tries=BACKOFF_MAX_RETRIES,
+        jitter=BACKOFF_JITTER,
+    )
     def table_exists(self) -> bool:
-        self.cur.execute("select name from sqlite_master where type='table' and name=:name", {"name": self.name})
+        self.cur.execute(
+            "select true from pg_tables where schemaname='public' and tablename=%(name)s",
+            {"name": self.name},
+        )
         return self.cur.fetchone() is not None
 
-    @retry(sqlite3.OperationalError, tries=10, backoff=2, max_delay=2)
+    @backoff.on_exception(
+        BACKOFF_STRATEGY,
+        sqlite3.OperationalError,
+        max_tries=BACKOFF_MAX_RETRIES,
+        jitter=BACKOFF_JITTER,
+    )
     def __clear(self):
-        self.cur.execute(
-            f"""
-            DROP TABLE IF EXISTS {self.name};
-            """
-        )
+        self.cur.execute(f"DROP TABLE IF EXISTS {self.name} CASCADE;".encode("utf-8"))
 
 
 @dataclasses.dataclass
@@ -78,26 +99,32 @@ class Conditions:
     phi_nom: float
     diluent: Optional[str]
     dil_mf: float
+    perturbed_rxn: int
 
 
 class ConditionTable(SqliteTable):
-    def __init__(self, db: SqliteDataBase, clear_existing_data: bool = False):
+    def __init__(self, db: PostgresDatabase, clear_existing_data: bool = False):
         super().__init__(db=db, table_name=TableName.Conditions.value, clear_existing_data=clear_existing_data)
         if not self.table_exists():
             self.__create()
 
-    @retry(sqlite3.OperationalError, tries=10, backoff=2, max_delay=2)
+    @backoff.on_exception(
+        BACKOFF_STRATEGY,
+        sqlite3.OperationalError,
+        max_tries=BACKOFF_MAX_RETRIES,
+        jitter=BACKOFF_JITTER,
+    )
     def __create(self):
         self.cur.execute(
             f"""
             CREATE TABLE IF NOT EXISTS {self.name} (
-                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                start DATETIME NOT NULL,
-                end DATETIME,
+                id SERIAL PRIMARY KEY NOT NULL,
+                sim_start TIMESTAMPTZ NOT NULL,
+                sim_end TIMESTAMPTZ,
                 sim_type TEXT NOT NULL,
                 mech TEXT NOT NULL,
                 match TEXT,
-                dil_condition TXT NOT NULL,
+                dil_condition TEXT NOT NULL,
                 initial_temp REAL NOT NULL,
                 initial_press REAL NOT NULL,
                 fuel TEXT NOT NULL,
@@ -111,12 +138,18 @@ class ConditionTable(SqliteTable):
                 u_znd REAL,
                 u_cj REAL,
                 cell_size REAL,
-                cell_size_2 REAL
-            );
-            """
+                cell_size_2 REAL,
+                perturbed_rxn INTEGER
+            )
+            """.encode("utf-8")
         )
 
-    @retry(sqlite3.OperationalError, tries=10, backoff=2, max_delay=2)
+    @backoff.on_exception(
+        BACKOFF_STRATEGY,
+        sqlite3.OperationalError,
+        max_tries=BACKOFF_MAX_RETRIES,
+        jitter=BACKOFF_JITTER,
+    )
     def insert(self, test_conditions: Conditions) -> int:
         """
         Stores a row of test data in the current table.
@@ -125,33 +158,79 @@ class ConditionTable(SqliteTable):
         self.cur.execute(
             f"""
             INSERT INTO {self.name} VALUES (
+                DEFAULT,
+                NOW(),
                 Null,
-                CURRENT_TIMESTAMP,
-                Null,
-                :sim_type,
-                :mech,
-                :match,
-                :dil_condition,
-                :initial_temp,
-                :initial_press,
-                :fuel,
-                :oxidizer,
-                :equivalence,
-                :phi_nom,
-                :diluent,
-                :dil_mf,
-                Null,
-                Null,
+                %(sim_type)s,
+                %(mech)s,
+                %(match)s,
+                %(dil_condition)s,
+                %(initial_temp)s,
+                %(initial_press)s,
+                %(fuel)s,
+                %(oxidizer)s,
+                %(equivalence)s,
+                %(phi_nom)s,
+                %(diluent)s,
+                %(dil_mf)s,
                 Null,
                 Null,
                 Null,
-                Null
-            );
-            """,
+                Null,
+                Null,
+                Null,
+                %(perturbed_rxn)s
+            )
+            RETURNING id;
+            """.encode("utf-8"),
             dataclasses.asdict(test_conditions),
         )
         self.cur.connection.commit()
-        return self.cur.lastrowid
+        return self.cur.fetchone()[0]
+
+    @backoff.on_exception(
+        BACKOFF_STRATEGY,
+        sqlite3.OperationalError,
+        max_tries=BACKOFF_MAX_RETRIES,
+        jitter=BACKOFF_JITTER,
+    )
+    def finalize_run(
+        self,
+        temp_vn: float | None,
+        t_ind: float | None,
+        u_znd: float | None,
+        u_cj: float | None,
+        cell_size: float | None,
+        cell_size_2: float | None,
+        condition_ids: list[int]
+    ) -> None:
+        with self.db.connect() as con:
+            con.execute(
+                """
+                UPDATE
+                    conditions
+                SET
+                    temp_vn = %(temp_vn)s,
+                    t_ind = %(t_ind)s,
+                    u_znd = %(u_znd)s,
+                    u_cj = %(u_cj)s,
+                    cell_size = %(cell_size)s,
+                    cell_size_2 = %(cell_size_2)s,
+                    sim_end = NOW()
+                WHERE
+                    id = ANY(%(condition_ids)s);
+                """,
+                {
+                    "temp_vn": temp_vn,
+                    "t_ind": t_ind,
+                    "u_znd": u_znd,
+                    "u_cj": u_cj,
+                    "cell_size": cell_size,
+                    "cell_size_2": cell_size_2,
+                    "condition_ids": condition_ids,
+                },
+            )
+            con.commit()
 
 
 @dataclasses.dataclass
@@ -172,12 +251,17 @@ class BulkPropertiesData:
 
 
 class BulkPropertiesTable(SqliteTable):
-    def __init__(self, db: SqliteDataBase, clear_existing_data: bool = False):
+    def __init__(self, db: PostgresDatabase, clear_existing_data: bool = False):
         super().__init__(db=db, table_name=TableName.BulkProperties.value, clear_existing_data=clear_existing_data)
         if not self.table_exists():
             self.__create()
 
-    @retry(sqlite3.OperationalError, tries=10, backoff=2, max_delay=2)
+    @backoff.on_exception(
+        BACKOFF_STRATEGY,
+        sqlite3.OperationalError,
+        max_tries=BACKOFF_MAX_RETRIES,
+        jitter=BACKOFF_JITTER,
+    )
     def __create(self):
         self.cur.execute(
             f"""
@@ -196,30 +280,35 @@ class BulkPropertiesTable(SqliteTable):
                 FOREIGN KEY(condition_id) REFERENCES {TableName.Conditions.value}(id)
                 ON UPDATE CASCADE ON DELETE CASCADE
             );
-            """
+            """.encode("utf-8")
         )
 
-    @retry(sqlite3.OperationalError, tries=10, backoff=2, max_delay=2)
+    @backoff.on_exception(
+        BACKOFF_STRATEGY,
+        sqlite3.OperationalError,
+        max_tries=BACKOFF_MAX_RETRIES,
+        jitter=BACKOFF_JITTER,
+    )
     def insert_or_update(self, data: BulkPropertiesData, commit: bool = True):
         self.cur.execute(
             f"""
             INSERT INTO {self.name} VALUES (
-                :condition_id,
-                :run_no,
-                :time,
-                :temperature,
-                :temperature_gradient,
-                :pressure,
-                :cp,
-                :cv,
-                :gamma,
-                :velocity
+                %(condition_id)s,
+                %(run_no)s,
+                %(time)s,
+                %(temperature)s,
+                %(temperature_gradient)s,
+                %(pressure)s,
+                %(cp)s,
+                %(cv)s,
+                %(gamma)s,
+                %(velocity)s
             )
             ON CONFLICT(condition_id, run_no, time) DO UPDATE SET
                 temperature=excluded.temperature,
                 pressure=excluded.pressure,
                 velocity=excluded.velocity;
-            """,
+            """.encode("utf-8"),
             {
                 "condition_id": data.condition_id,
                 "run_no": data.run_no,
@@ -251,12 +340,17 @@ class ReactionData:
 
 
 class ReactionTable(SqliteTable):
-    def __init__(self, db: SqliteDataBase, clear_existing_data: bool = False):
+    def __init__(self, db: PostgresDatabase, clear_existing_data: bool = False):
         super().__init__(db=db, table_name=TableName.Reactions.value, clear_existing_data=clear_existing_data)
         if not self.table_exists():
             self.__create()
 
-    @retry(sqlite3.OperationalError, tries=10, backoff=2, max_delay=2)
+    @backoff.on_exception(
+        BACKOFF_STRATEGY,
+        sqlite3.OperationalError,
+        max_tries=BACKOFF_MAX_RETRIES,
+        jitter=BACKOFF_JITTER,
+    )
     def __create(self):
         self.cur.execute(
             f"""
@@ -274,23 +368,28 @@ class ReactionTable(SqliteTable):
                 FOREIGN KEY(condition_id) REFERENCES {TableName.Conditions.value}(id)
                 ON UPDATE CASCADE ON DELETE CASCADE
             );
-            """
+            """.encode("utf-8")
         )
 
-    @retry(sqlite3.OperationalError, tries=10, backoff=2, max_delay=2)
+    @backoff.on_exception(
+        BACKOFF_STRATEGY,
+        sqlite3.OperationalError,
+        max_tries=BACKOFF_MAX_RETRIES,
+        jitter=BACKOFF_JITTER,
+    )
     def insert_or_update(self, data: ReactionData, commit: bool = True):
         self.cur.execute(
             f"""
             INSERT INTO {self.name} VALUES (
-                :condition_id,
-                :run_no,
-                :time,
-                :reaction,
-                :fwd_rate_constant,
-                :fwd_rate_of_progress,
-                :rev_rate_constant,
-                :rev_rate_of_progress,
-                :net_rate_of_progress
+                %(condition_id)s,
+                %(run_no)s,
+                %(time)s,
+                %(reaction)s,
+                %(fwd_rate_constant)s,
+                %(fwd_rate_of_progress)s,
+                %(rev_rate_constant)s,
+                %(rev_rate_of_progress)s,
+                %(net_rate_of_progress)s
             )
             ON CONFLICT(condition_id, run_no, time, reaction) DO UPDATE SET
                 fwd_rate_constant=excluded.fwd_rate_constant,
@@ -298,7 +397,7 @@ class ReactionTable(SqliteTable):
                 rev_rate_constant=excluded.rev_rate_constant,
                 rev_rate_of_progress=excluded.rev_rate_of_progress,
                 net_rate_of_progress=excluded.net_rate_of_progress;
-            """,
+            """.encode("utf-8"),
             {
                 "condition_id": data.condition_id,
                 "run_no": data.run_no,
@@ -332,12 +431,17 @@ class SpeciesData:
 
 
 class SpeciesTable(SqliteTable):
-    def __init__(self, db: SqliteDataBase, clear_existing_data: bool = False):
+    def __init__(self, db: PostgresDatabase, clear_existing_data: bool = False):
         super().__init__(db=db, table_name=TableName.Species.value, clear_existing_data=clear_existing_data)
         if not self.table_exists():
             self.__create()
 
-    @retry(sqlite3.OperationalError, tries=10, backoff=2, max_delay=2)
+    @backoff.on_exception(
+        BACKOFF_STRATEGY,
+        sqlite3.OperationalError,
+        max_tries=BACKOFF_MAX_RETRIES,
+        jitter=BACKOFF_JITTER,
+    )
     def __create(self):
         self.cur.execute(
             f"""
@@ -358,26 +462,31 @@ class SpeciesTable(SqliteTable):
                 FOREIGN KEY(condition_id) REFERENCES {TableName.Conditions.value}(id)
                 ON UPDATE CASCADE ON DELETE CASCADE
             );
-            """
+            """.encode("utf-8")
         )
 
-    @retry(sqlite3.OperationalError, tries=10, backoff=2, max_delay=2)
+    @backoff.on_exception(
+        BACKOFF_STRATEGY,
+        sqlite3.OperationalError,
+        max_tries=BACKOFF_MAX_RETRIES,
+        jitter=BACKOFF_JITTER,
+    )
     def insert_or_update(self, data: SpeciesData, commit: bool = True):
         self.cur.execute(
             f"""
             INSERT INTO {self.name} VALUES (
-                :condition_id,
-                :run_no,
-                :time,
-                :species,
-                :mole_frac,
-                :concentration,
-                :creation_rate,
-                :destruction_rate,
-                :net_production_rate,
-                :a,
-                :b,
-                :dy_dt
+                %(condition_id)s,
+                %(run_no)s,
+                %(time)s,
+                %(species)s,
+                %(mole_frac)s,
+                %(concentration)s,
+                %(creation_rate)s,
+                %(destruction_rate)s,
+                %(net_production_rate)s,
+                %(a)s,
+                %(b)s,
+                %(dy_dt)s
             )
             ON CONFLICT(condition_id, run_no, time, species) DO UPDATE SET
                 mole_frac=excluded.mole_frac,
@@ -385,7 +494,7 @@ class SpeciesTable(SqliteTable):
                 creation_rate=excluded.creation_rate,
                 destruction_rate=excluded.destruction_rate,
                 net_production_rate=excluded.net_production_rate;
-            """,
+            """.encode("utf-8"),
             {
                 "condition_id": data.condition_id,
                 "run_no": data.run_no,
@@ -406,33 +515,38 @@ class SpeciesTable(SqliteTable):
 
 
 class SimulationDatabase:
-    db: SqliteDataBase
+    db: PostgresDatabase
     conditions: ConditionTable
     conditions_id: int
     reactions: ReactionTable
     species: SpeciesTable
 
-    def __init__(self, db: SqliteDataBase, conditions: Conditions):
+    def __init__(self, db: PostgresDatabase, conditions: Conditions):
         self.db = db
         self.conditions = ConditionTable(db)
         self.conditions_id = self.conditions.insert(conditions)
         self.reactions = ReactionTable(db)
         self.species = SpeciesTable(db)
-        self.bulk_properties = BulkPropertiesTable(self.db)
+        self.bulk_properties = BulkPropertiesTable(db)
 
     def reconnect(self):
-        self.db = SqliteDataBase(path=self.db.path)
+        self.db = PostgresDatabase(conninfo=self.db.conninfo)
         self.conditions = ConditionTable(self.db)
         self.reactions = ReactionTable(self.db)
         self.species = SpeciesTable(self.db)
         self.bulk_properties = BulkPropertiesTable(self.db)
 
+    def commit_all(self):
+        self.bulk_properties.cur.connection.commit()
+        self.species.cur.connection.commit()
+        self.reactions.cur.connection.commit()
 
-def clear_simulation_database(path: Union[str, Path]):
+
+def clear_simulation_database(conninfo: str):
     """
     Convenience function to make resets easier between simulation re-runs
     """
-    db = SqliteDataBase(path=path)
+    db = PostgresDatabase(conninfo=conninfo)
     _ = ConditionTable(db, clear_existing_data=True)
     _ = ReactionTable(db, clear_existing_data=True)
     _ = SpeciesTable(db, clear_existing_data=True)

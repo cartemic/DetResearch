@@ -174,6 +174,8 @@ def wrapped_zndsolve(
         base_gas.TPX = init_tpx_base
         tries += 1
         if tries < config.max_tries:
+            # JFC cantera
+            # noinspection PyUnresolvedReferences
             try:
                 out = sdtoolbox.znd.zndsolve(
                     gas,
@@ -329,6 +331,8 @@ def calculate(
     )
 
     # SOLVE ZND DETONATION ODES
+    # JFC cantera
+    # noinspection PyTypeChecker
     znd_result = wrapped_zndsolve(
         gas=gas,
         base_gas=base_gas,
@@ -475,13 +479,13 @@ def calculate_westbrook_only(
     dil_condition: str,
     diluent_mol_frac: float,
     cj_speed: float,
-    perturbed_reaction: Optional[float] = None,
+    perturbed_reaction: Optional[int] = None,
     perturbation_fraction: float = 1e-2,
     rxn_indices: Optional[list[int]] = None,
     spec_indices: Optional[list[int]] = None,
-    db_path: Optional[str] = None,
+    conninfo: Optional[str] = None,
 ) -> CellSizeResults:
-    db = sdtoolbox.output.SqliteDataBase(path=db_path) if db_path is not None else None
+    db = sdtoolbox.output.PostgresDatabase(conninfo=conninfo) if conninfo is not None else None
 
     conditions_ids = []
 
@@ -527,10 +531,11 @@ def calculate_westbrook_only(
             phi_nom=phi_nom,
             diluent=diluent,
             dil_mf=diluent_mol_frac,
+            perturbed_rxn=perturbed_reaction,
         )
         sim_db = None  # instantiating a SimulationDatabase here will add unnecessary ZND rows to the database
         # sim_db = sdtoolbox.output.SimulationDatabase(db=db, conditions=conditions)
-        # conditions_ids.append(str(sim_db.conditions_id))
+        # conditions_ids.append(sim_db.conditions_id)
     else:
         sim_db = None
 
@@ -560,7 +565,7 @@ def calculate_westbrook_only(
         # noinspection PyUnboundLocalVariable
         conditions.sim_type = sdtoolbox.output.SimulationType.Cv.value
         sim_db = sdtoolbox.output.SimulationDatabase(db=db, conditions=conditions)
-        conditions_ids.append(str(sim_db.conditions_id))
+        conditions_ids.append(sim_db.conditions_id)
 
     cv_out_0 = wrapped_cvsolve(
         gas=gas,
@@ -586,39 +591,22 @@ def calculate_westbrook_only(
         ng=np.nan,
     )
 
-    if db is not None:
-        with db.connect() as con:
-            con.execute(
-                f"""
-                UPDATE
-                    conditions
-                SET
-                    temp_vn = :temp_vn,
-                    t_ind = :t_ind,
-                    u_znd = :u_znd,
-                    u_cj = :u_cj,
-                    cell_size = :cell_size,
-                    cell_size_2 = :cell_size_2,
-                    end = CURRENT_TIMESTAMP
-                WHERE
-                    id in ({','.join(conditions_ids)});
-                """,
-                {
-                    "temp_vn": temp_vn,
-                    "t_ind": cv_out_0.induction_time,
-                    "u_znd": znd_velocity,
-                    "u_cj": cj_speed,
-                    "cell_size": cell_size.westbrook,
-                    "cell_size_2": _cell_size_westbrook(cv_out_0.induction_time * (cj_speed - znd_velocity)),
-                },
-            )
-            con.commit()
+    if sim_db is not None:
+        sim_db.conditions.finalize_run(
+            temp_vn=temp_vn,
+            t_ind=cv_out_0.induction_time,
+            u_znd=znd_velocity,
+            u_cj=cj_speed,
+            cell_size=cell_size.westbrook,
+            cell_size_2=_cell_size_westbrook(cv_out_0.induction_time * (cj_speed - znd_velocity)),
+            condition_ids=conditions_ids,
+        )
 
     if perturbed_reaction is None:
         reaction_equation = None
         k_i = None
     else:
-        reaction_equation = base_gas.reaction_equation(perturbed_reaction)
+        reaction_equation = base_gas.reaction_equations()[perturbed_reaction]
         k_i = base_gas.forward_rate_constants[perturbed_reaction]
     return CellSizeResults(
         cell_size=cell_size,
