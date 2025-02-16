@@ -211,7 +211,7 @@ class BulkPropertiesTable(SqliteTable):
                 :temperature_gradient,
                 :pressure,
                 :cp,
-                :cp,
+                :cv,
                 :gamma,
                 :velocity
             )
