@@ -14,6 +14,8 @@ import numpy as np
 import pandas as pd
 import tqdm
 from pandas.errors import PerformanceWarning
+from scipy.stats import t
+
 from simulation.cell_size import CvConfig
 from uncertainties import unumpy as unp
 
@@ -32,13 +34,16 @@ OXIDIZER = "N2O"
 LOCAL_TZ = zoneinfo.ZoneInfo("US/Pacific")
 TODAY = datetime.datetime.now(LOCAL_TZ).date().isoformat()
 
+THIS_SCRIPT_DIR = Path(__file__).absolute().parent
+
 
 def main(with_inerts: bool = False, westbrook_only: bool = True):
-    mech = "gri30_highT_inert_co2.yaml" if with_inerts else DEFAULT_MECH
+    mech = "gri30_highT_inerts.yaml" if with_inerts else "gri30_highT.yaml"
+    maybe_inerts = "_inerts" if with_inerts else ""
     df_measured = read_in_measured_data()
 
     mech_name = Path(mech).name
-    output_base = Path(__file__).absolute().parent / f"simulated_and_measured_{TODAY}_{mech_name}"
+    output_base = THIS_SCRIPT_DIR / f"simulated_and_measured_{TODAY}_{mech_name}{maybe_inerts}"
     df_result = simulate_measured_conditions(
         df_measured,
         mech=mech,
@@ -46,10 +51,31 @@ def main(with_inerts: bool = False, westbrook_only: bool = True):
         westbrook_only=westbrook_only,
         db_path=output_base.with_suffix(".sqlite") if westbrook_only else None,
     )
-    with warnings.catch_warnings(), pd.HDFStore(str(output_base.with_suffix(".h5")), "w") as store:
+    h5_path = output_base.with_suffix(".h5")
+    with warnings.catch_warnings():
         # Yes, yes, PyTables will pickle stuff, I really don't care here
         warnings.simplefilter("ignore", PerformanceWarning)
-        store["data"] = df_result
+        df_result.to_hdf(h5_path, key="data")
+        add_fixed_uncert(h5_path)
+
+
+def add_fixed_uncert(h5_path: Path) -> None:
+    # wack pandas type hinting
+    # noinspection PyTypeChecker
+    meas: pd.DataFrame = pd.read_hdf(THIS_SCRIPT_DIR / "measurements.h5")
+    # wack pandas type hinting
+    # noinspection PyTypeChecker
+    needs_fixin: pd.DataFrame = pd.read_hdf(h5_path, key="data")
+    for (phi, dil_mf, diluent), data in meas.groupby(["phi_nom", "dil_mf_nom", "diluent"]):
+        cell_size = unp.uarray(data["cell_size"], data["u_cell_size"]).mean()
+        fixed_uncert = cell_size.std_dev * t.ppf(0.975, len(data) - 1)
+        needs_fixin.loc[
+            (needs_fixin["phi_nom"] == phi)
+            & (needs_fixin["dil_mf_nom"] == dil_mf)
+            & (needs_fixin["diluent"] == diluent),
+            "u_cell_size_measured",
+        ] = fixed_uncert
+    needs_fixin.to_hdf(h5_path, key="data_fixed_uncert")
 
 
 def get_column_mean_with_uncertainty(df: pd.DataFrame, column: str):
@@ -248,6 +274,5 @@ def simulate_single_condition(
     return row
 
 
-DEFAULT_MECH = "gri30_highT.yaml"
 if __name__ == "__main__":
-    main()
+    main(with_inerts=True)
