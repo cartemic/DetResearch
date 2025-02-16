@@ -246,7 +246,7 @@ def match_dil_mf_aft(
 
 
 def main():
-    mech = "Blanquart2018.cti"
+    mech = "gri30_highT.xml"
     fuel = "CH4"
     oxidizer = "N2O"
     t0 = 300
