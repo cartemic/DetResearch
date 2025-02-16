@@ -50,7 +50,7 @@ sns.set(
         "ytick.color": axes_color,
         "axes.grid": False,
         "hatch.linewidth": 2,
-    }
+    },
 )
 sns.set_palette(colors)
 
@@ -108,8 +108,7 @@ def plot_window_length(
     ax.set_ylabel("Thickness\n(mm)")
     if show_title:
         ax.set_title(
-            "Window minimum thickness vs. length\n"
-            "Max length {:3.2f} mm at {:3.2f} mm thick".format(
+            "Window minimum thickness vs. length\n" "Max length {:3.2f} mm at {:3.2f} mm thick".format(
                 window_lengths[window_thicknesses <= max_desired_thickness].max().magnitude,
                 max_desired_thickness,
             )
@@ -228,10 +227,7 @@ def plot_mixture_comparison(
         grid.fig.suptitle("Mixture comparison\nMax safe initial pressure vs. Temperature")
     for ax in grid.axes.flatten():
         title = ax.get_title()
-        ax.set_title(
-            title.replace(" = ", " ")
-            .replace(" | ", "\n")
-        )
+        ax.set_title(title.replace(" = ", " ").replace(" | ", "\n"))
         if ax.get_xlabel():
             ax.set_xlabel("$T_{0}$ (K)")
         if ax.get_ylabel():
@@ -291,30 +287,32 @@ def main(
                 "DLF",
             ]
         )
-        with ProcessPoolExecutor() as executor:
-            with tqdm(total=n_runs, unit="calc", file=sys.stdout, colour="green", desc="Running") as counter:
-                futures = {
-                    executor.submit(
-                        calculate_single_tube_result,
-                        size,
-                        schedule,
-                        initial_temperature,
-                        material,
-                        spec,
-                        mechanism,
-                        temperature_key,
-                        pressure_key,
-                    )
-                    for (schedule, size, initial_temperature) in combinations
-                }
+        with (
+            ProcessPoolExecutor() as executor,
+            tqdm(total=n_runs, unit="calc", file=sys.stdout, colour="green", desc="Running") as counter,
+        ):
+            futures = {
+                executor.submit(
+                    calculate_single_tube_result,
+                    size,
+                    schedule,
+                    initial_temperature,
+                    material,
+                    spec,
+                    mechanism,
+                    temperature_key,
+                    pressure_key,
+                )
+                for (schedule, size, initial_temperature) in combinations
+            }
 
-                finished = []
+            finished = []
 
-                for done in concurrent.futures.as_completed(futures):
-                    finished.append(done.result())
-                    counter.update()
+            for done in concurrent.futures.as_completed(futures):
+                finished.append(done.result())
+                counter.update()
 
-                counter.set_description_str("Done")
+            counter.set_description_str("Done")
 
         for result in finished:
             results = pd.concat((results, result.to_frame().T), ignore_index=True)
@@ -341,7 +339,7 @@ def main(
     results_mix = results[(results["NPS"] == nps_mix) & (results["Schedule"] == schedule_mix)].drop(
         [pressure_key, temperature_key, "inner_diameter"], axis=1
     )
-    results_mix["max_main_pressure"] = results_main["max_pressure"].values
+    results_mix["max_main_pressure"] = results_main["max_pressure"].to_numpy()
     results_mix["safe"] = results_mix["max_pressure"] > results_mix["max_main_pressure"]
     if all(results_mix["safe"]):
         print("Mix tube is safe :)")
@@ -412,30 +410,32 @@ def main(
 
     if calculate_second_results:
         results_2 = pd.DataFrame(columns=[pressure_key, temperature_key])
-        with ProcessPoolExecutor() as executor:
-            with tqdm(total=n_runs, unit="calc", file=sys.stdout, colour="green", desc="Running") as counter:
-                futures = {
-                    executor.submit(
-                        calculate_single_tube_result,
-                        size,
-                        schedule,
-                        initial_temperature,
-                        material,
-                        gas_2.mole_fraction_dict(),
-                        mechanism,
-                        temperature_key,
-                        pressure_key,
-                    )
-                    for (schedule, size, initial_temperature) in combinations
-                }
+        with (
+            ProcessPoolExecutor() as executor,
+            tqdm(total=n_runs, unit="calc", file=sys.stdout, colour="green", desc="Running") as counter,
+        ):
+            futures = {
+                executor.submit(
+                    calculate_single_tube_result,
+                    size,
+                    schedule,
+                    initial_temperature,
+                    material,
+                    gas_2.mole_fraction_dict(),
+                    mechanism,
+                    temperature_key,
+                    pressure_key,
+                )
+                for (schedule, size, initial_temperature) in combinations
+            }
 
-                finished = []
+            finished = []
 
-                for done in concurrent.futures.as_completed(futures):
-                    finished.append(done.result())
-                    counter.update()
+            for done in concurrent.futures.as_completed(futures):
+                finished.append(done.result())
+                counter.update()
 
-                counter.set_description_str("Done")
+            counter.set_description_str("Done")
 
         for result in finished:
             results_2 = pd.concat((results_2, result.to_frame().T), ignore_index=True)
@@ -452,7 +452,7 @@ def main(
         with pd.HDFStore(results_file_2, "r") as store:
             results_2 = store.data
 
-    plot_mixture_comparison(results, results_2, temperature_key, pressure_key, show_titles, save_plots,)
+    plot_mixture_comparison(results, results_2, temperature_key, pressure_key, show_titles, save_plots)
 
     if show_plots:
         plt.show()

@@ -5,11 +5,7 @@ from scipy.optimize import minimize
 import sdtoolbox
 
 
-def diluted_species_dict(
-        spec,
-        diluent,
-        diluent_mol_frac
-):
+def diluted_species_dict(spec, diluent, diluent_mol_frac):
     """
     Creates a dictionary of mole fractions diluted by a given amount with a
     given gas mixture
@@ -29,8 +25,8 @@ def diluted_species_dict(
         new mole_fraction_dict to be inserted into the cantera solution object
     """
     # collect total diluent moles
-    moles_dil = 0.
-    diluent_dict = dict()
+    moles_dil = 0.0
+    diluent_dict = {}
     split_diluents = diluent.split(" ")
     if len(split_diluents) > 1:
         for d in split_diluents:
@@ -42,32 +38,23 @@ def diluted_species_dict(
         diluent_dict[diluent] = 1
         moles_dil = 1
 
-    for key in diluent_dict.keys():
+    for key in diluent_dict:
         diluent_dict[key] /= moles_dil
 
     for key, value in diluent_dict.items():
-        if key not in spec.keys():
+        if key not in spec:
             spec[key] = 0
 
         if diluent_mol_frac != 0:
             spec[key] += diluent_dict[key] / (1 / diluent_mol_frac - 1)
 
     new_total_moles = sum(spec.values())
-    for s in spec.keys():
+    for s in spec:
         spec[s] /= new_total_moles
     return spec
 
 
-def get_adiabatic_temp(
-        mech,
-        fuel,
-        oxidizer,
-        phi,
-        diluent,
-        diluent_mol_frac,
-        init_temp,
-        init_press
-):
+def get_adiabatic_temp(mech, fuel, oxidizer, phi, diluent, diluent_mol_frac, init_temp, init_press):
     """
     Calculates the adiabatic flame temperature of a given mixture using
     Cantera
@@ -102,36 +89,18 @@ def get_adiabatic_temp(
         if (diluent.lower() in ("none", "")) or np.isclose(diluent_mol_frac, 0):
             spec = gas.mole_fraction_dict()
         else:
-            spec = diluted_species_dict(
-                gas.mole_fraction_dict(),
-                diluent,
-                diluent_mol_frac
-            )
+            spec = diluted_species_dict(gas.mole_fraction_dict(), diluent, diluent_mol_frac)
 
-        gas.TPX = (
-            init_temp,
-            init_press,
-            spec
-        )
+        gas.TPX = (init_temp, init_press, spec)
         gas.equilibrate("HP")
         temp = gas.T
     except ct.CanteraError:
-        temp = np.NaN
+        temp = np.nan
 
     return temp
 
 
-def temp_error(
-        diluent_mol_frac,
-        target_temp,
-        mech,
-        fuel,
-        oxidizer,
-        phi,
-        diluent,
-        init_temp,
-        init_press
-):
+def temp_error(diluent_mol_frac, target_temp, mech, fuel, oxidizer, phi, diluent, init_temp, init_press):
     """
     Compares the adiabatic flame temperature from a given combination of
     inputs to a target temperature and returns the absolute value of the
@@ -174,22 +143,14 @@ def temp_error(
             diluent=diluent,
             diluent_mol_frac=diluent_mol_frac,
             init_temp=init_temp,
-            init_press=init_press
-        ) - target_temp
+            init_press=init_press,
+        )
+        - target_temp
     )
 
 
 def match_adiabatic_temp(
-        mech,
-        fuel,
-        oxidizer,
-        phi,
-        dil_original,
-        dil_original_mol_frac,
-        dil_new,
-        init_temp,
-        init_press,
-        tol=1e-6
+    mech, fuel, oxidizer, phi, dil_original, dil_original_mol_frac, dil_new, init_temp, init_press, tol=1e-6
 ):
     """
     This function returns the mole fraction of a diluent gas
@@ -236,39 +197,19 @@ def match_adiabatic_temp(
         flame temperature to within the specified tolerance
     """
     target_temp = get_adiabatic_temp(
-        mech,
-        fuel,
-        oxidizer,
-        phi,
-        dil_original,
-        dil_original_mol_frac,
-        init_temp,
-        init_press
+        mech, fuel, oxidizer, phi, dil_original, dil_original_mol_frac, init_temp, init_press
     )
     best = minimize(
         temp_error,
         np.array([dil_original_mol_frac]),
-        args=(
-            target_temp,
-            mech,
-            fuel,
-            oxidizer,
-            phi,
-            dil_new,
-            init_temp,
-            init_press
-        ),
+        args=(target_temp, mech, fuel, oxidizer, phi, dil_new, init_temp, init_press),
         method="Nelder-Mead",
-        tol=tol
+        tol=tol,
     )
     return best.x[0]
 
 
-def get_f_a_st(
-        fuel="C3H8",
-        oxidizer="O2:1 N2:3.76",
-        mech="gri30.cti"
-):
+def get_f_a_st(fuel="C3H8", oxidizer="O2:1 N2:3.76", mech="gri30.yaml"):
     """
     Calculate the stoichiometric fuel/air ratio of an undiluted mixture using
     Cantera. Calculates using only x_fuel to allow for compound oxidizer
@@ -290,20 +231,12 @@ def get_f_a_st(
         oxidizer = "O2:1 N2:3.76"
 
     gas = ct.Solution(mech)
-    gas.set_equivalence_ratio(
-        1,
-        fuel,
-        oxidizer
-    )
+    gas.set_equivalence_ratio(1, fuel, oxidizer)
     x_fuel = gas.mole_fraction_dict()[fuel]
     return x_fuel / (1 - x_fuel)
 
 
-def get_dil_mol_frac(
-        p_fuel,
-        p_oxidizer,
-        p_diluent
-):
+def get_dil_mol_frac(p_fuel, p_oxidizer, p_diluent):
     """
     Parameters
     ----------
@@ -322,11 +255,7 @@ def get_dil_mol_frac(
     return p_diluent / (p_fuel + p_oxidizer + p_diluent)
 
 
-def get_equivalence_ratio(
-        p_fuel,
-        p_oxidizer,
-        f_a_st
-):
+def get_equivalence_ratio(p_fuel, p_oxidizer, f_a_st):
     """
     Simple equivalence ratio function
 
@@ -347,9 +276,7 @@ def get_equivalence_ratio(
     return p_fuel / p_oxidizer / f_a_st
 
 
-def calculate_laminar_flame_speed(
-        gas
-):
+def calculate_laminar_flame_speed(gas):
     """
     Calculates the laminar flame speed of a gas mixture.
     Based on:
@@ -426,7 +353,8 @@ def sound_speed_error(
             diluent_mol_frac=diluent_mol_frac,
             init_temp=init_temp,
             init_press=init_press,
-        ) - target_speed
+        )
+        - target_speed
     )
 
 

@@ -14,29 +14,27 @@ import numpy as np
 import pandas as pd
 import tqdm
 from pandas.errors import PerformanceWarning
-
-from scripts.final_manuscript.co2_reaction_simulations import get_important_reaction_indices, \
-    get_important_species_indices
-from sdtoolbox import output
-from sdtoolbox.postshock import CJspeed
+from simulation.cell_size import CvConfig
 from uncertainties import unumpy as unp
 
 from funcs.simulation import cell_size as cs
 from funcs.simulation import thermo
-from simulation.cell_size import CvConfig
+from scripts.final_manuscript.co2_reaction_simulations import (
+    get_important_reaction_indices,
+    get_important_species_indices,
+)
+from sdtoolbox import output
+from sdtoolbox.postshock import CJspeed
 
 # these are simulation parameters, but will never change in this context
 FUEL = "CH4"
 OXIDIZER = "N2O"
-LOCAL_TZ = zoneinfo.ZoneInfo('US/Pacific')
+LOCAL_TZ = zoneinfo.ZoneInfo("US/Pacific")
 TODAY = datetime.datetime.now(LOCAL_TZ).date().isoformat()
 
 
 def main(with_inerts: bool = False, westbrook_only: bool = True):
-    if with_inerts:
-        mech = "gri30_highT_inert_co2.yaml"
-    else:
-        mech = DEFAULT_MECH
+    mech = "gri30_highT_inert_co2.yaml" if with_inerts else DEFAULT_MECH
     df_measured = read_in_measured_data()
 
     mech_name = Path(mech).name
@@ -63,12 +61,12 @@ def get_column_mean_with_uncertainty(df: pd.DataFrame, column: str):
 def read_in_measured_data():
     data_loc = os.path.join(os.path.join(os.path.dirname(__file__), "measurements.h5"))
     with pd.HDFStore(data_loc, "r") as store:
-        df = store.data
+        measured = store.data
 
-    df = df[(df["fuel"] == FUEL) & (df["oxidizer"] == OXIDIZER)]
+    measured = measured[(measured["fuel"] == FUEL) & (measured["oxidizer"] == OXIDIZER)]
     df_out = pd.DataFrame()
     for idx, ((diluent, phi_nom, dil_mf_nom), df_grouped) in enumerate(
-        df.groupby(["diluent", "phi_nom", "dil_mf_nom"])
+        measured.groupby(["diluent", "phi_nom", "dil_mf_nom"])
     ):
         p_0, u_p_0 = get_column_mean_with_uncertainty(df_grouped, "p_0")
         t_0, u_t_0 = get_column_mean_with_uncertainty(df_grouped, "t_0")
@@ -177,16 +175,8 @@ def simulate_single_condition(
             else:
                 dil_condition = "medium"
             gas = ct.Solution(mech)
-            gas.set_equivalence_ratio(
-                phi,
-                FUEL,
-                OXIDIZER
-            )
-            q = thermo.diluted_species_dict(
-                gas.mole_fraction_dict(),
-                dil,
-                dil_mf
-            )
+            gas.set_equivalence_ratio(phi, FUEL, OXIDIZER)
+            q = thermo.diluted_species_dict(gas.mole_fraction_dict(), dil, dil_mf)
             cj_speed = CJspeed(p_0, t_0, q, mech)
 
             if westbrook_only:
@@ -244,7 +234,9 @@ def simulate_single_condition(
                 f"Caught: {e}\n"
                 "=================\n"
                 f"Conditions:\n{row}\n"
-                "INERT CO2" if dil == "CO2i" else ""
+                "INERT CO2"
+                if dil == "CO2i"
+                else ""
                 f"CV Config:\n{cv_config}\n"
                 f"CJ Speed:\n{cj_speed}\n"
                 f"Traceback:\n{traceback.format_exc()}"

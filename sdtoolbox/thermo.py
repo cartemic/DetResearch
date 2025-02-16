@@ -143,7 +143,7 @@ def soundspeed_fr(gas):
     s0 = gas.entropy_mass
     rho1 = 1.001*rho0
     x0 = gas.X
-    # workaround to avoid unsized object error when only one species in a .cti file
+    # workaround to avoid unsized object error when only one species in a .yaml file
     # (flagged to be fixed in future Cantera version)
     if gas.n_species > 1:
         gas.SVX =  s0, 1./rho1, x0

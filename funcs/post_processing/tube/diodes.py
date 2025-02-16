@@ -14,17 +14,13 @@ import os
 
 import numpy as np
 import pandas as pd
-import scipy.signal as signal
 import uncertainties as un
 from nptdms import TdmsFile
+from scipy import signal
 from uncertainties import unumpy as unp
 
 
-def find_diode_data(
-        data_directory='',
-        base_file_name='diodes.tdms',
-        ignore_hidden=True
-):
+def find_diode_data(data_directory="", base_file_name="diodes.tdms", ignore_hidden=True):
     """
     Finds all diode data for a day of testing
 
@@ -50,26 +46,16 @@ def find_diode_data(
             if ignore_hidden and "." in location[0]:
                 pass
             else:
-                diode_data_locations.append(
-                    os.path.join(location[0], base_file_name)
-                )
+                diode_data_locations.append(os.path.join(location[0], base_file_name))
 
     # raise an error if no folders contain diode output
     if not len(diode_data_locations):
-        raise FileNotFoundError(
-            'No instances of ' + base_file_name + ' found'
-        )
+        raise FileNotFoundError("No instances of " + base_file_name + " found")
 
     return sorted(diode_data_locations)
 
 
-def _velocity_calculator(
-        diode_data_file,
-        sample_specific_velocity,
-        apply_lowpass,
-        multiprocess=False,
-        instance=0
-):
+def _velocity_calculator(diode_data_file, sample_specific_velocity, apply_lowpass, multiprocess=False, instance=0):
     """
 
     Parameters
@@ -87,29 +73,21 @@ def _velocity_calculator(
         Array of inter-diode velocities in m/s, calculated using the
         maximum gradient.
     """
-    bad_value = np.array([0]) * un.ufloat(np.NaN, np.NaN)
-    diode_dataframe = load_diode_data(
-        diode_data_file,
-        apply_lowpass
-    )
+    bad_value = np.array([0]) * un.ufloat(np.nan, np.nan)
+    diode_dataframe = load_diode_data(diode_data_file, apply_lowpass)
 
     try:
-        arrival_times = unp.uarray(
-            diode_dataframe.diff(axis=0).idxmax(axis=0, skipna=True).values,
-            [0.5, 0.5]
-        )
+        arrival_times = unp.uarray(diode_dataframe.diff(axis=0).idxmax(axis=0, skipna=True).values, [0.5, 0.5])
         arrival_diff = np.diff(arrival_times)
 
     except ValueError:
         # empty array, return zero velocity
         arrival_diff = bad_value
 
-    if arrival_diff > 0:
-        calculated_velocity = sample_specific_velocity / arrival_diff
-    else:
-        calculated_velocity = bad_value
+    calculated_velocity = sample_specific_velocity / arrival_diff if arrival_diff > 0 else bad_value
 
-    if calculated_velocity > 3000:
+    max_believable_velocity = 3000  # m/s
+    if calculated_velocity > max_believable_velocity:
         # obvious garbage
         calculated_velocity = bad_value
 
@@ -120,10 +98,7 @@ def _velocity_calculator(
         return calculated_velocity
 
 
-def load_diode_data(
-        diode_data_file,
-        apply_lowpass
-):
+def load_diode_data(diode_data_file, apply_lowpass):
     """
     Loads in diode data from a tdms file given the location
 
@@ -142,11 +117,10 @@ def load_diode_data(
     # import data
     tf = TdmsFile(diode_data_file)
     diode_channels = tf.group_channels("diodes")
-    if len(diode_channels) == 0 or \
-            len(diode_channels[0].data) > 0:
+    if len(diode_channels) == 0 or len(diode_channels[0].data) > 0:
         # diodes.tdms has data
         data = TdmsFile(diode_data_file).as_dataframe()
-        for key in data.keys():
+        for key in data:
             # remove time column
             if "diode" not in key.replace("diodes", "").lower():
                 data = data.drop(key, axis=1)
@@ -158,19 +132,13 @@ def load_diode_data(
     else:
         # empty tdms file
         data = pd.DataFrame(
-            columns=[c.path for c in diode_channels],
-            data=np.array(
-                [[np.NaN] * 50 for _ in diode_channels]).T
+            columns=[c.path for c in diode_channels], data=np.array([[np.nan] * 50 for _ in diode_channels]).T
         )
 
     return data
 
 
-def _diode_filter(
-        data,
-        n=3,
-        wn=0.01
-):
+def _diode_filter(data, n=3, wn=0.01):
     """
     A butterworth lowpass filter for diode data
 
@@ -188,18 +156,18 @@ def _diode_filter(
     numpy.ndarray or pandas.core.frame.DataFrame
         Filtered signal
     """
-    butter = signal.butter(n, wn, btype='lowpass', output='ba')
+    butter = signal.butter(n, wn, btype="lowpass", output="ba")
     return signal.filtfilt(butter[0], butter[1], data)
 
 
 # noinspection PyTypeChecker
 def calculate_velocity(
-        diode_data_location,
-        diode_spacing=0.3048,
-        spacing_uncert=0.00079375,
-        sample_frequency=1e6,
-        lowpass=True,
-        multiprocess=False
+    diode_data_location,
+    diode_spacing=0.3048,
+    spacing_uncert=0.00079375,
+    sample_frequency=1e6,
+    lowpass=True,
+    multiprocess=False,
 ):
     """
     Calculates wave speed from photo diode data
@@ -225,55 +193,46 @@ def calculate_velocity(
     numpy.ndarray
         Array of inter-diode wave speeds
     """
-    specific_velocity = un.ufloat(
-        diode_spacing * sample_frequency,
-        spacing_uncert
-    )
+    specific_velocity = un.ufloat(diode_spacing * sample_frequency, spacing_uncert)
 
     if isinstance(diode_data_location, str):
         # a single path was input as a string
-        return _velocity_calculator(
-            diode_data_location,
-            specific_velocity,
-            lowpass,
-            multiprocess
-        )
+        return _velocity_calculator(diode_data_location, specific_velocity, lowpass, multiprocess)
 
     elif np.isnan(diode_data_location):
         # this means that there was a diode crash during the test, and no data
         # was written to the shot directory. Return a unp.uarray of NaN so that
         # NaNs propagate correctly during post-processing
-        return unp.uarray([np.NaN], np.NaN)
+        return unp.uarray([np.nan], np.nan)
+
+    elif multiprocess:
+        import multiprocessing as mp
+
+        pool = mp.Pool()
+        mp_result = pool.starmap(
+            _velocity_calculator,
+            [
+                [location, specific_velocity, lowpass, multiprocess, instance]
+                for instance, location in enumerate(diode_data_location)
+            ],
+        )
+        pool.close()
+
+        # sort result by instance (to match inputs) and build array of
+        # the results for output
+        mp_result.sort()
+        mp_result = np.array([item for _, item in mp_result])
+        return mp_result
 
     else:
-        if multiprocess:
-            import multiprocessing as mp
-            pool = mp.Pool()
-            mp_result = pool.starmap(
-                _velocity_calculator,
-                [[location,
-                  specific_velocity,
-                  lowpass,
-                  multiprocess,
-                  instance
-                  ] for instance, location in enumerate(diode_data_location)
-                 ]
+        return np.array(
+            list(
+                map(
+                    _velocity_calculator,
+                    list(diode_data_location),
+                    [specific_velocity for _ in range(len(diode_data_location))],
+                    [lowpass for _ in range(len(diode_data_location))],
+                    [multiprocess for _ in range(len(diode_data_location))],
+                )
             )
-            pool.close()
-
-            # sort result by instance (to match inputs) and build array of
-            # the results for output
-            mp_result.sort()
-            mp_result = np.array(
-                [item for _, item in mp_result]
-            )
-            return mp_result
-
-        else:
-            return np.array(list(map(
-                _velocity_calculator,
-                [location for location in diode_data_location],
-                [specific_velocity for _ in range(len(diode_data_location))],
-                [lowpass for _ in range(len(diode_data_location))],
-                [multiprocess for _ in range(len(diode_data_location))]
-            )))
+        )

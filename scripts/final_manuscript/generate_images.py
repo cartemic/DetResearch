@@ -96,7 +96,7 @@ def load_cell_size_data():
         var_name="method",
         value_name="cell_size",
     )
-    data.loc[data["method"] == "simulated", "u_cell_size"] = np.NaN
+    data.loc[data["method"] == "simulated", "u_cell_size"] = np.nan
 
     return data
 
@@ -149,6 +149,8 @@ def plot_cell_sizes(cell_size_data: pd.DataFrame):
         ax.set_ylabel(f"{which}\nCell Size (mm)")
         if ax.get_xlabel() is not None:
             ax.set_xlabel(r"$\phi_{nominal}$")
+        # I don't remember what this magic number means...
+        # ruff: noqa: PLR2004
         if idx < 3:
             title = ax.get_title()
             dil_mf_nom = float(title.split(" = ")[2])
@@ -164,7 +166,6 @@ def plot_cell_sizes(cell_size_data: pd.DataFrame):
                     capsize=3,
                     marker=None,
                 )
-        if idx < 3:
             ax.set_title(
                 ax.get_title()
                 .replace("dil_mf_nom", "$X_{dil, nominal}$ (CO$_2$e)")
@@ -325,6 +326,8 @@ def plot_cell_sizes(cell_size_data: pd.DataFrame):
     plt.savefig(os.path.join(IMAGE_LOCATION, f"cell_size_ratios.{PLOT_FILETYPE}"), format=PLOT_FILETYPE)
 
 
+# Allow private member access for plot stuff
+# ruff: noqa: SLF001
 def plot_measured_wave_speeds(speed_data: pd.DataFrame):
     plt.figure()
     measured_speed_plots = sns.relplot(

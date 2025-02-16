@@ -3,6 +3,9 @@
 import sys
 from multiprocessing import pool as mpp
 
+# Allow private member access and magic values
+# ruff: noqa: SLF001,PLR2004
+
 major = sys.version_info.major
 minor = sys.version_info.minor
 if (major > 3) or (major == 3 and minor >= 8):
@@ -17,14 +20,9 @@ if (major > 3) or (major == 3 and minor >= 8):
 
         task_batches = mpp.Pool._get_tasks(func, iterable, chunksize)
         result = mpp.IMapIterator(self)
-        self._taskqueue.put((
-            self._guarded_task_generation(
-                result._job,
-                mpp.starmapstar,
-                task_batches
-            ),
-            result._set_length
-        ))
+        self._taskqueue.put(
+            (self._guarded_task_generation(result._job, mpp.starmapstar, task_batches), result._set_length)
+        )
         return (item for chunk in result for item in chunk)
 else:
     # noinspection PyUnresolvedReferences,PyArgumentList
@@ -40,14 +38,9 @@ else:
 
         task_batches = mpp.Pool._get_tasks(func, iterable, chunksize)
         result = mpp.IMapIterator(self._cache)
-        self._taskqueue.put((
-            self._guarded_task_generation(
-                result._job,
-                mpp.starmapstar,
-                task_batches
-            ),
-            result._set_length
-        ))
+        self._taskqueue.put(
+            (self._guarded_task_generation(result._job, mpp.starmapstar, task_batches), result._set_length)
+        )
         return (item for chunk in result for item in chunk)
 
 

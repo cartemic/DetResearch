@@ -10,55 +10,28 @@ from matplotlib import widgets
 from skimage import io
 from skimage.filters import sobel_v
 
-from ...dir import d_drive, convert_dir_to_local
-from ...uncertainty import add_uncertainty_terms, u_cell
+from funcs.dir import convert_dir_to_local, d_drive
+from funcs.uncertainty import add_uncertainty_terms, u_cell
 
 u_cell = u_cell["schlieren"]
 
 
-def get_spatial_dir(
-        date,
-        base_dir=os.path.join(
-            d_drive,
-            "Data",
-            "Raw"
-        )
-):
-    _dir_date = os.path.join(
-        base_dir,
-        date
-    )
+def get_spatial_dir(date, base_dir=os.path.join(d_drive, "Data", "Raw")):
+    _dir_date = os.path.join(base_dir, date)
     contents = os.listdir(_dir_date)
     if ".old" in contents:
-        _dir_spatial = os.path.join(
-            base_dir,
-            date,
-            "Camera",
-            "spatial"
-        )
+        _dir_spatial = os.path.join(base_dir, date, "Camera", "spatial")
     else:
-        _dir_spatial = os.path.join(
-            base_dir,
-            date,
-            "spatial"
-        )
+        _dir_spatial = os.path.join(base_dir, date, "spatial")
 
     if not os.path.exists(_dir_spatial):
         warnings.warn("directory not found: %s" % _dir_spatial)
-        _dir_spatial = np.NaN
+        _dir_spatial = np.nan
 
     return _dir_spatial
 
 
-def get_varied_spatial_dir(
-        spatial_date_dir,
-        spatial_dir_name,
-        base_dir=os.path.join(
-            d_drive,
-            "Data",
-            "Raw"
-        )
-):
+def get_varied_spatial_dir(spatial_date_dir, spatial_dir_name, base_dir=os.path.join(d_drive, "Data", "Raw")):
     """
     Some days got weird due to overnight testing, which means that tests on
     those days may have a weird spatial calibration image location.
@@ -80,24 +53,13 @@ def get_varied_spatial_dir(
     )
     if not os.path.exists(_dir_date):
         warnings.warn("directory not found: %s" % _dir_date)
-        _dir_date = np.NaN
+        _dir_date = np.nan
 
     return _dir_date
 
 
-def get_spatial_loc(
-        date,
-        which="near",
-        base_dir=os.path.join(
-            d_drive,
-            "Data",
-            "Raw"
-        )
-):
-    _dir_date = get_spatial_dir(
-        date,
-        base_dir
-    )
+def get_spatial_loc(date, which="near", base_dir=os.path.join(d_drive, "Data", "Raw")):
+    _dir_date = get_spatial_dir(date, base_dir)
     _near = "near.tif"
     _far = "far.tif"
 
@@ -111,10 +73,7 @@ def get_spatial_loc(
         raise ValueError("bad value of `which`")
 
 
-def find_images_in_dir(
-        directory,
-        data_type=".tif"
-):
+def find_images_in_dir(directory, data_type=".tif"):
     """
     Finds all files in a directory of the given file type. This function should
     be applied to either a `bg` or `frames` directory from a single day of
@@ -132,17 +91,10 @@ def find_images_in_dir(
     List[str]
     """
     last_n = -len(data_type)
-    return sorted([
-        os.path.join(directory, f)
-        for f in os.listdir(directory)
-        if f[last_n:] == data_type
-    ])
+    return sorted([os.path.join(directory, f) for f in os.listdir(directory) if f[last_n:] == data_type])
 
 
-def find_shot_images(
-        dir_shot,
-        data_type=".tif"
-):
+def find_shot_images(dir_shot, data_type=".tif"):
     """
     Collects all background and frame images for a single shot directory. Shot
     directory should contain `bg` and `frames` sub-directories.
@@ -185,10 +137,7 @@ def average_frames(frame_paths):
     np.array
         Average image as a numpy array of float64 values
     """
-    return np.array(
-        [io.imread(frame) for frame in frame_paths],
-        dtype='float64'
-    ).mean(axis=0)
+    return np.array([io.imread(frame) for frame in frame_paths], dtype="float64").mean(axis=0)
 
 
 def bg_subtract_all_frames(dir_raw_shot):
@@ -223,7 +172,7 @@ def _maximize_window():
         mng.frame.Maximize(True)
         return True
     elif "Tk" in plt_backend:
-        mng.window_state('zoomed')
+        mng.window_state("zoomed")
         return True
     else:
         print("figure out how to maximize for ", plt_backend)
@@ -231,13 +180,13 @@ def _maximize_window():
 
 
 def collect_spatial_calibration(
-        spatial_file,
-        line_color="r",
-        marker_length_mm=5.08,
-        px_only=False,
-        apply_uncertainty=True,
-        plot_window=None,
-        msg_box=None
+    spatial_file,
+    line_color="r",
+    marker_length_mm=5.08,
+    px_only=False,
+    apply_uncertainty=True,
+    plot_window=None,
+    msg_box=None,
 ):  # pragma: no cover
     image = io.imread(spatial_file)
 
@@ -253,11 +202,7 @@ def collect_spatial_calibration(
     ax.axis("off")
 
     ax.imshow(image)
-    cal_line = widgets.Line2D(
-        [0, 100],
-        [0, 100],
-        c=line_color
-    )
+    cal_line = widgets.Line2D([0, 100], [0, 100], c=line_color)
     ax.add_line(cal_line)
 
     # noinspection PyTypeChecker
@@ -291,31 +236,17 @@ def collect_spatial_calibration(
     # originally intended.
     line_length_mm = num_boxes * marker_length_mm
     if apply_uncertainty:
-        line_length_mm = un.ufloat(
-            line_length_mm,
-            add_uncertainty_terms([
-                u_cell["l_mm"]["b"],
-                u_cell["l_mm"]["p"]
-            ])
-        )
+        line_length_mm = un.ufloat(line_length_mm, add_uncertainty_terms([u_cell["l_mm"]["b"], u_cell["l_mm"]["p"]]))
 
     if px_only:
         return _get_cal_delta_px(linebuilder.xs, linebuilder.ys)
     else:
-        mm_per_px = _calibrate(
-            linebuilder.xs,
-            linebuilder.ys,
-            line_length_mm,
-            apply_uncertainty=apply_uncertainty
-        )
+        mm_per_px = _calibrate(linebuilder.xs, linebuilder.ys, line_length_mm, apply_uncertainty=apply_uncertainty)
 
     return mm_per_px
 
 
-def measure_single_frame(
-        image_array,
-        lc="r"
-):
+def measure_single_frame(image_array, lc="r"):
     m = MeasurementCollector(image_array, lc=lc)
     _maximize_window()
     data = m.get_data()
@@ -323,22 +254,11 @@ def measure_single_frame(
     return data
 
 
-def _get_cal_delta_px(
-        x_data,
-        y_data
-):
-    return np.sqrt(
-            np.square(np.diff(x_data)) +
-            np.square(np.diff(y_data))
-    )
+def _get_cal_delta_px(x_data, y_data):
+    return np.sqrt(np.square(np.diff(x_data)) + np.square(np.diff(y_data)))
 
 
-def _calibrate(
-        x_data,
-        y_data,
-        line_length_mm,
-        apply_uncertainty=True
-):
+def _calibrate(x_data, y_data, line_length_mm, apply_uncertainty=True):
     """
     Calculates a calibration factor to convert pixels to mm by dividing
     the known line length in mm by the L2 norm between two pixels.
@@ -362,15 +282,14 @@ def _calibrate(
     line_length_px = _get_cal_delta_px(x_data, y_data)
 
     if apply_uncertainty:
-        line_length_px = un.ufloat(
-            line_length_px,
-            add_uncertainty_terms([
-                u_cell["l_px"]["b"],
-                u_cell["l_px"]["p"]
-            ])
-        )
+        line_length_px = un.ufloat(line_length_px, add_uncertainty_terms([u_cell["l_px"]["b"], u_cell["l_px"]["p"]]))
 
     return line_length_mm / line_length_px
+
+
+LEFT_CLICK = 1
+MIDDLE_CLICK = 2
+RIGHT_CLICK = 3
 
 
 class LineBuilder(object):  # pragma: no cover
@@ -391,12 +310,7 @@ class LineBuilder(object):  # pragma: no cover
         self.epsilon = epsilon
         self.circles = [
             widgets.Circle(
-                (self.xs[i], self.ys[i]),
-                epsilon,
-                color=line.get_c(),
-                lw=line.get_linewidth(),
-                fill=False,
-                alpha=0.25
+                (self.xs[i], self.ys[i]), epsilon, color=line.get_c(), lw=line.get_linewidth(), fill=False, alpha=0.25
             )
             for i in range(len(self.xs))
         ]
@@ -404,19 +318,10 @@ class LineBuilder(object):  # pragma: no cover
             self.axes.add_artist(c)
 
         self._end_line_length = 2 * np.sqrt(
-            sum([
-                np.diff(self.axes.get_xlim())**2,
-                np.diff(self.axes.get_ylim())**2
-            ])
+            sum([np.diff(self.axes.get_xlim()) ** 2, np.diff(self.axes.get_ylim()) ** 2])
         )
         self._end_lines = [
-            widgets.Line2D(
-                [0, 1],
-                [0, 1],
-                c=line.get_c(),
-                lw=line.get_linewidth(),
-                alpha=0.5*line.get_alpha()
-            )
+            widgets.Line2D([0, 1], [0, 1], c=line.get_c(), lw=line.get_linewidth(), alpha=0.5 * line.get_alpha())
             for _ in self.xs
         ]
         self.set_end_lines()
@@ -426,9 +331,9 @@ class LineBuilder(object):  # pragma: no cover
         self.items = (self.line, *self.circles, *self._end_lines)
 
         self.ind = None
-        canvas.mpl_connect('button_press_event', self.button_press_callback)
-        canvas.mpl_connect('button_release_event', self.button_release_callback)
-        canvas.mpl_connect('motion_notify_event', self.motion_notify_callback)
+        canvas.mpl_connect("button_press_event", self.button_press_callback)
+        canvas.mpl_connect("button_release_event", self.button_release_callback)
+        canvas.mpl_connect("motion_notify_event", self.motion_notify_callback)
 
     def _button(self, event):
         if event.key == "enter":
@@ -438,16 +343,16 @@ class LineBuilder(object):  # pragma: no cover
         if event.inaxes is not None:
             x = np.array(self.line.get_xdata())
             y = np.array(self.line.get_ydata())
-            d = np.sqrt((x-event.xdata)**2 + (y - event.ydata)**2)
+            d = np.sqrt((x - event.xdata) ** 2 + (y - event.ydata) ** 2)
             if min(d) > self.epsilon:
                 return None
             return int(d[0] > d[1])
+        return None
 
     def button_press_callback(self, event):
-        if event.button == 2:
-            # middle click
+        if event.button == MIDDLE_CLICK:
             plt.close(self.axes.get_figure())
-        elif event.button != 1:
+        elif event.button != LEFT_CLICK:
             return
         self.ind = self.get_ind(event)
 
@@ -504,7 +409,7 @@ class LineBuilder(object):  # pragma: no cover
 
     def calculate_end_line_xy(self):
         angle = (self.get_line_angle() + np.pi / 2) % (2 * np.pi)
-        dx = self._end_line_length / 2 * np.sqrt(1 / (1 + np.tan(angle)**2))
+        dx = self._end_line_length / 2 * np.sqrt(1 / (1 + np.tan(angle) ** 2))
         dy = dx * np.tan(angle)
         x_points = [list(x + np.array([1, -1]) * dx) for x in self.xs]
         y_points = [list(y + np.array([1, -1]) * dy) for y in self.ys]
@@ -516,6 +421,8 @@ class LineBuilder(object):  # pragma: no cover
             _line.set_data(x, y)
 
 
+# Allow private member access
+# ruff: noqa: SLF001
 class MeasurementCollector(object):  # pragma: no cover
     # also skipping tests for the same reason as LineBuilder
     class RemoveLine:
@@ -541,32 +448,26 @@ class MeasurementCollector(object):  # pragma: no cover
         # plt.axis("tight")
         self._help = False
         self._title_default = "press 'h' for help"
-        self._title_help = \
-            "HELP MENU\n\n"\
-            "press 'r' to invert colors\n"\
-            "press left mouse to identify a triple point\n"\
-            "press right mouse to delete last measurement\n"\
-            "press 'enter' or center mouse to end measurements\n"\
-            "click and drag horizontally to adjust contrast to red area\n"\
-            "click 'Reset Contrast' button to reset contrast\n"\
+        self._title_help = (
+            "HELP MENU\n\n"
+            "press 'r' to invert colors\n"
+            "press left mouse to identify a triple point\n"
+            "press right mouse to delete last measurement\n"
+            "press 'enter' or center mouse to end measurements\n"
+            "click and drag horizontally to adjust contrast to red area\n"
+            "click 'Reset Contrast' button to reset contrast\n"
             "press 'h' to hide this dialog"
+        )
         self._set_title(self._title_default)
         canvas = ax.figure.canvas
         canvas.mpl_connect("key_press_event", self._button)
-        canvas.mpl_connect('button_release_event', self.button_press_callback)
+        canvas.mpl_connect("button_release_event", self.button_press_callback)
         self.image = self._sharpen(image)
-        self.rect_select = widgets.SpanSelector(
-            self.ax,
-            self.slider_select,
-            "horizontal"
-        )
+        self.rect_select = widgets.SpanSelector(self.ax, self.slider_select, "horizontal")
         # noinspection PyTypeChecker
         # ax2 = plt.axes((0.375, 0.025, 0.25, 0.04))
         # fig.add_axes(ax2)
-        self.btn_reset = widgets.Button(
-            ax2,
-            "Reset Contrast"
-        )
+        self.btn_reset = widgets.Button(ax2, "Reset Contrast")
         self.btn_reset.on_clicked(self.reset_vlim)
         self.ax.imshow(self.image, cmap=self.cmap)
         self.fig.canvas.draw()
@@ -634,9 +535,8 @@ class MeasurementCollector(object):  # pragma: no cover
         self.fig.canvas.draw()
 
     def button_press_callback(self, event):
-        if event.button == 1:
-            # left click
-            if any([d is None for d in [event.xdata, event.ydata]]):
+        if event.button == LEFT_CLICK:
+            if any(d is None for d in [event.xdata, event.ydata]):
                 # ignore clicks outside of image
                 pass
             else:
@@ -644,34 +544,23 @@ class MeasurementCollector(object):  # pragma: no cover
                 self.locs.append(event.ydata)
                 self.fig.canvas.draw()
 
-        elif event.button == 2:
-            # middle click
+        elif event.button == MIDDLE_CLICK:
             plt.close()
-        elif event.button == 3:
-            # right click
-            if self.lines:
-                # noinspection PyProtectedMember
-                self.lines[-1]._visible = False
-                del self.lines[-1], self.locs[-1]
-                self.fig.canvas.draw()
+        elif event.button == RIGHT_CLICK and self.lines:
+            # noinspection PyProtectedMember
+            self.lines[-1]._visible = False
+            del self.lines[-1], self.locs[-1]
+            self.fig.canvas.draw()
 
     def get_data(self):
         plt.show(block=True)
         points = unp.uarray(
-            sorted(np.array(self.locs)),
-            add_uncertainty_terms([
-                u_cell["delta_px"]["b"],
-                u_cell["delta_px"]["p"]
-            ])
+            sorted(np.array(self.locs)), add_uncertainty_terms([u_cell["delta_px"]["b"], u_cell["delta_px"]["p"]])
         )
         return points
 
 
-def get_cell_size_from_delta(
-        delta,
-        l_px_i,
-        l_mm_i
-):
+def get_cell_size_from_delta(delta, l_px_i, l_mm_i):
     """
     Converts pixel triple point deltas to cell size
 
@@ -688,28 +577,12 @@ def get_cell_size_from_delta(
     un.ufloat
         estimated cell size
     """
-    l_px_i = un.ufloat(
-        l_px_i,
-        add_uncertainty_terms([
-            u_cell["l_px"]["b"],
-            u_cell["l_px"]["p"]
-        ])
-    )
-    l_mm_i = un.ufloat(
-        l_mm_i,
-        add_uncertainty_terms([
-            u_cell["l_mm"]["b"],
-            u_cell["l_mm"]["p"]
-        ])
-    )
+    l_px_i = un.ufloat(l_px_i, add_uncertainty_terms([u_cell["l_px"]["b"], u_cell["l_px"]["p"]]))
+    l_mm_i = un.ufloat(l_mm_i, add_uncertainty_terms([u_cell["l_mm"]["b"], u_cell["l_mm"]["p"]]))
     return 2 * delta * l_mm_i / l_px_i
 
 
-def _filter_df_day_shot(
-        df,
-        day_shot_list,
-        return_mask=False
-):
+def _filter_df_day_shot(df, day_shot_list, return_mask=False):
     """
     Filters a dataframe by date and shot number for an arbitrary number of
     date/shot combinations. Returns the indices (for masking) and the filtered
@@ -733,22 +606,20 @@ def _filter_df_day_shot(
     Union[Tuple[pd.DataFrame, np.array], Tuple[pd.DataFrame]]
         (filtered dataframe,) or (filtered dataframe, mask)
     """
-    mask_list = [((df["date"] == date) &
-                  (df["shot"] <= end_shot) &
-                  (df["shot"] >= start_shot))
-                 for (date, start_shot, end_shot) in day_shot_list]
+    mask_list = [
+        ((df["date"] == date) & (df["shot"] <= end_shot) & (df["shot"] >= start_shot))
+        for (date, start_shot, end_shot) in day_shot_list
+    ]
     mask = [False for _ in range(len(df))]
     for m in mask_list:
         mask = m | mask
     if return_mask:
         return df[mask], mask
     else:
-        return df[mask],
+        return (df[mask],)
 
 
-def _check_stored_calibrations(
-        df
-):
+def _check_stored_calibrations(df):
     """
     Check for stored calibrations within a filtered dataframe. All rows are
     checked for:
@@ -780,26 +651,28 @@ def _check_stored_calibrations(
             * all
             * equal
     """
-    out = dict(
-        near=dict(
-            any=False,
-            all=False,
-            equal=False,
-        ),
-        far=dict(
-            any=False,
-            all=False,
-            equal=False,
-        ),
-        centerline=dict(
-            any=False,
-            all=False,
-            equal=False,
-        ),
-    )
+    out = {
+        "near": {
+            "any": False,
+            "all": False,
+            "equal": False,
+        },
+        "far": {
+            "any": False,
+            "all": False,
+            "equal": False,
+        },
+        "centerline": {
+            "any": False,
+            "all": False,
+            "equal": False,
+        },
+    }
 
-    for location in out.keys():
-        values = df["spatial_" + location].values.astype(float)
+    # Not worth fixing right now
+    # ruff: noqa: PLC0206
+    for location in out:
+        values = df["spatial_" + location].to_numpy().astype(float)
         not_nan = ~np.isnan(values)
         out[location]["any"] = np.any(not_nan)
         out[location]["all"] = np.all(not_nan)
@@ -810,63 +683,47 @@ def _check_stored_calibrations(
         else:
             # allclose will cause nanmedian check to fail for NaN as well as
             # for differing numerical values
-            out[location]["equal"] = np.allclose(
-                values,
-                np.nanmedian(values)
-            )
+            out[location]["equal"] = np.allclose(values, np.nanmedian(values))
 
     return out
 
 
 class SpatialCalibration:
     @staticmethod
-    def collect(
-            date,
-            loc_processed_data,
-            loc_schlieren_measurements,
-            raise_if_no_measurements=True
-    ):
+    def collect(date, loc_processed_data, loc_schlieren_measurements, raise_if_no_measurements=True):
         with pd.HDFStore(loc_processed_data, "r") as store_pp:
             # make sure date is in post-processed data
             if date not in store_pp.data["date"].unique():
-                e_str = "date {:s} not in {:s}".format(
-                    date,
-                    loc_processed_data
-                )
+                e_str = "date {:s} not in {:s}".format(date, loc_processed_data)
                 raise ValueError(e_str)
-            else:
-                df_dirs = store_pp.data[
-                    store_pp.data["date"] == date
-                ][["shot", "spatial"]]
-                df_dirs.columns = ["shot", "dir"]
-                df_dirs["dir"] = df_dirs["dir"].apply(
-                    convert_dir_to_local
-                )
+            df_dirs = store_pp.data[store_pp.data["date"] == date][["shot", "spatial"]]
+            df_dirs.columns = ["shot", "dir"]
+            df_dirs["dir"] = df_dirs["dir"].apply(convert_dir_to_local)
 
         with pd.HDFStore(loc_schlieren_measurements, "r+") as store_sc:
-            df_sc = store_sc.data[
-                store_sc.data["date"] == date
-            ]
+            df_sc = store_sc.data[store_sc.data["date"] == date]
             if len(df_sc) == 0 and raise_if_no_measurements:
                 e_str = "no measurements found for %s" % date
                 raise ValueError(e_str)
 
             # collect calibrations
-            df_daily_cal = pd.DataFrame([dict(
-                dir=k,
-                near=un.ufloat(np.NaN, np.NaN),
-                far=un.ufloat(np.NaN, np.NaN),
-            ) for k in df_dirs["dir"].unique()]).set_index("dir")
+            df_daily_cal = pd.DataFrame(
+                [
+                    {
+                        "dir": k,
+                        "near": un.ufloat(np.nan, np.nan),
+                        "far": un.ufloat(np.nan, np.nan),
+                    }
+                    for k in df_dirs["dir"].unique()
+                ]
+            ).set_index("dir")
             desired_cals = ["near", "far"]
             successful_cals = []
             for d, row in df_daily_cal.iterrows():
                 for which in desired_cals:
                     pth_tif = os.path.join(str(d), which + ".tif")
                     if os.path.exists(pth_tif):
-                        df_daily_cal.at[
-                            d,
-                            which
-                        ] = collect_spatial_calibration(pth_tif)
+                        df_daily_cal.at[d, which] = collect_spatial_calibration(pth_tif)
                         successful_cals.append(which)
 
             # apply calibrations
@@ -875,34 +732,24 @@ class SpatialCalibration:
                 # set near and far spatial calibrations
                 for which in successful_cals:
                     key = "spatial_" + which
-                    df_sc[key] = np.where(
-                        row_mask,
-                        df_daily_cal.loc[row["dir"], which].nominal_value,
-                        df_sc[key]
-                    )
+                    df_sc[key] = np.where(row_mask, df_daily_cal.loc[row["dir"], which].nominal_value, df_sc[key])
                     key = "u_" + key
-                    df_sc[key] = np.where(
-                        row_mask,
-                        df_daily_cal.loc[row["dir"], which].std_dev,
-                        df_sc[key]
-                    )
+                    df_sc[key] = np.where(row_mask, df_daily_cal.loc[row["dir"], which].std_dev, df_sc[key])
                     df_sc["spatial_" + which + "_estimated"] = False
 
                 # calculate and set centerline calibration
                 centerline = np.mean(
-                    [unp.uarray(df_sc["spatial_near"], df_sc["u_spatial_near"]),
-                     unp.uarray(df_sc["spatial_far"], df_sc["u_spatial_far"])],
-                    axis=0
+                    [
+                        unp.uarray(df_sc["spatial_near"], df_sc["u_spatial_near"]),
+                        unp.uarray(df_sc["spatial_far"], df_sc["u_spatial_far"]),
+                    ],
+                    axis=0,
                 )
                 df_sc["spatial_centerline"] = np.where(
-                    row_mask,
-                    unp.nominal_values(centerline),
-                    df_sc["spatial_centerline"]
+                    row_mask, unp.nominal_values(centerline), df_sc["spatial_centerline"]
                 )
                 df_sc["u_spatial_centerline"] = np.where(
-                    row_mask,
-                    unp.std_devs(centerline),
-                    df_sc["u_spatial_centerline"]
+                    row_mask, unp.std_devs(centerline), df_sc["u_spatial_centerline"]
                 )
 
             df_out = store_sc.data

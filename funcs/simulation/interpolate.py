@@ -40,14 +40,14 @@ def interpolate(
         n2_new.loc[:, "diluent"] = n2_label
 
         # Extend interp range to accommodate induction time shift
-        n2_interp_times = [-np.inf, *n2[time_column].values, np.inf]
+        n2_interp_times = [-np.inf, *n2[time_column].to_numpy(), np.inf]
         for column in interp_columns:
-            n2_low = n2[column].values[0] if saturate else np.nan
-            n2_high = n2[column].values[-1] if saturate else np.nan
+            n2_low = n2[column].iloc[0] if saturate else np.nan
+            n2_high = n2[column].iloc[-1] if saturate else np.nan
             fit = interp1d(
                 n2_interp_times,
-                [n2_low, *n2[column].values, n2_high],
+                [n2_low, *n2[column].to_numpy(), n2_high],
             )
-            n2_new.loc[:, column] = fit(n2_new[time_column].values)
+            n2_new.loc[:, column] = fit(n2_new[time_column].to_numpy())
         out = pd.concat((out, co2, n2_new))
     return out

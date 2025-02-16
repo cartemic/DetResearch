@@ -38,7 +38,8 @@ with pd.HDFStore("/home/mick/DetResearch/scripts/simulation_measurement_comparis
 all_data = pd.concat((methane_data, propane_data))
 
 # filter out unsuccessful detonations
-all_data = all_data[all_data["wave_speed"] > 1000].reset_index(drop=True)
+min_successful_velocity = 1000  # m/s
+all_data = all_data[all_data["wave_speed"] > min_successful_velocity].reset_index(drop=True)
 
 with pd.HDFStore("/d/Data/Processed/Data/all_tube_data.h5", "w") as store:
     store["data"] = all_data

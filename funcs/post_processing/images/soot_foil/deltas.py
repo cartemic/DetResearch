@@ -1,10 +1,11 @@
 import os
 
 import numpy as np
-from skimage import io, color
+from skimage import color, io
 from uncertainties import unumpy as unp
 
-from ....uncertainty import add_uncertainty_terms, u_cell
+from funcs.uncertainty import add_uncertainty_terms, u_cell
+
 from ._rust import _fast_get_deltas
 
 u_cell = u_cell["soot_foil"]
@@ -68,12 +69,7 @@ class Shot:
         return len(str(self))
 
 
-def get_px_deltas_from_lines(
-        img_path,
-        mask_path=None,
-        use_fast=True,
-        apply_uncertainty=True
-):
+def get_px_deltas_from_lines(img_path, mask_path=None, use_fast=True, apply_uncertainty=True):
     """
     Returns an array of per-row triple point deltas (in pixels) from a given
     image. The spatial calibration factor, mm_per_px, is required in order to
@@ -101,21 +97,12 @@ def get_px_deltas_from_lines(
         deltas = _fast_get_deltas(img_path, mask_path)
     else:
         img = color.rgb2gray(io.imread(img_path))
-        if mask_path:
-            mask = color.rgb2gray(io.imread(mask_path))
-        else:
-            mask = np.zeros_like(img)
+        mask = color.rgb2gray(io.imread(mask_path)) if mask_path else np.zeros_like(img)
         deltas = _slow_get_deltas(img, mask)
 
     if apply_uncertainty:
-        uncert = add_uncertainty_terms([
-            u_cell["delta_px"]["b"],
-            u_cell["delta_px"]["p"]
-        ])
-        deltas = unp.uarray(
-            deltas,
-            uncert
-        )
+        uncert = add_uncertainty_terms([u_cell["delta_px"]["b"], u_cell["delta_px"]["p"]])
+        deltas = unp.uarray(deltas, uncert)
     else:
         deltas = np.array(deltas)
 
@@ -190,11 +177,10 @@ def _slow_get_deltas(
 
     if mask.shape != _img.shape:
         raise ValueError(f"image shape mismatch: {mask.shape} vs. {_img.shape}")
-    else:
-        _mask = mask.copy()
+    _mask = mask.copy()
 
     # NaN out exclusion zones
-    _img = np.where(_mask == 1, np.NaN, _img)
+    _img = np.where(_mask == 1, np.nan, _img)
 
     deltas = []
     for i in range(_img.shape[0]):
@@ -228,14 +214,12 @@ def _get_diffs_from_sub_row(sub_row):
     cell_boundary_indices = np.where(sub_row == 1)[0]
 
     # find how far apart adjacent boundaries are
-    cell_boundary_index_diffs = np.abs(
-        cell_boundary_indices - np.roll(cell_boundary_indices, -1)
-    )[:-1]  # throw out last diff -- roll wraps the first location around!
+    cell_boundary_index_diffs = np.abs(cell_boundary_indices - np.roll(cell_boundary_indices, -1))[
+        :-1
+    ]  # throw out last diff -- roll wraps the first location around!
 
     # throw out adjacent boundaries
-    cell_boundary_index_diffs = (
-        cell_boundary_index_diffs[cell_boundary_index_diffs > 1]
-    )
+    cell_boundary_index_diffs = cell_boundary_index_diffs[cell_boundary_index_diffs > 1]
 
     return cell_boundary_index_diffs
 

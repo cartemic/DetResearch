@@ -1,13 +1,12 @@
 import os
 
+import generate_images
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 from scipy.stats import linregress
-from scipy.stats._stats_mstats_common import LinregressResult
 from skimage import io
 
-import generate_images
 from funcs.post_processing.images.soot_foil import deltas as pp_deltas
 
 
@@ -21,6 +20,7 @@ def main():
     deltas = []
     distance = []
     for i in range(composite_image.shape[0]):
+        # ruff: noqa: SLF001
         row_deltas = pp_deltas._get_measurement_from_row(
             composite_image[i],
             255,
@@ -61,8 +61,7 @@ def main():
     )
     plt.plot(
         delta_series.index,
-        regression_median.slope * delta_series.index
-        + regression_median.intercept,
+        regression_median.slope * delta_series.index + regression_median.intercept,
         label=f"regression R^2={regression_median.rvalue ** 2:.2f}",
     )
     plt.ylabel("triple point delta (px)")

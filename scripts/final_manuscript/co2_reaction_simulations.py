@@ -6,7 +6,6 @@ from typing import Optional
 
 import cantera as ct
 import numpy as np
-
 import simulation.thermo
 from rich.pretty import install
 from tqdm import tqdm
@@ -30,6 +29,8 @@ def get_important_reaction_indices(gas: ct.Solution) -> list[int]:
     return rxn_indices
 
 
+# Not too worried about performance here
+# ruff: noqa: PERF203
 def get_important_species_indices(gas: ct.Solution) -> list[int]:
     species_indices = []
     for spec in ["O2", "O", "N2", "CO2", "CO", "OH", "H"]:
@@ -278,15 +279,18 @@ def main():
                 counter=counter,
             )
         else:
-            n2_aft_matched_dil_mfs = [match_dil_mf_aft(
-                mech=mech,
-                fuel=fuel,
-                oxidizer=oxidizer,
-                phi=phi,
-                mf_co2=mf_co2,
-                t0=t0,
-                p0=p0,
-            ) for mf_co2 in co2_dil_mfs]
+            n2_aft_matched_dil_mfs = [
+                match_dil_mf_aft(
+                    mech=mech,
+                    fuel=fuel,
+                    oxidizer=oxidizer,
+                    phi=phi,
+                    mf_co2=mf_co2,
+                    t0=t0,
+                    p0=p0,
+                )
+                for mf_co2 in co2_dil_mfs
+            ]
         counter.set_description_str("Done")
 
     n2_dil_mfs = n2_aft_matched_dil_mfs + co2_dil_mfs  # Tad matched + mole fraction matched

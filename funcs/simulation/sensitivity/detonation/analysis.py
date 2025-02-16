@@ -1,9 +1,9 @@
 import dataclasses
 
 import sdtoolbox as sd
+from funcs.simulation import cell_size
+from funcs.simulation.sensitivity.gas import build as build_gas
 
-from ... import cell_size
-from ..gas import build as build_gas
 from . import database as db
 
 
@@ -72,13 +72,12 @@ def perform_study(
     overwrite_existing: bool,
 ):
     database = db.DataBase(path=db_path)
-    overwrite_existing = overwrite_existing
 
     # I could definitely be doing a much better job of cache invalidation, but more than anything I want this to run,
     # and this isn't exactly production code so... meh.
     if test_conditions.test_id is None:
         raise ValueError("TestConditions must be initiated prior to study initiation")
-    elif not database.test_conditions_table.test_exists(test_id=test_conditions.test_id):
+    if not database.test_conditions_table.test_exists(test_id=test_conditions.test_id):
         raise db.DatabaseError(f"Test conditions were given for a nonexistent row: {test_conditions}")
 
     if overwrite_existing:
@@ -93,15 +92,14 @@ def perform_study(
             database.perturbed_results_table.update_row(perturbed_results)
         else:
             database.perturbed_results_table.insert_new_row(perturbed_results)
-    else:
-        if not database.perturbed_results_table.row_exists(test_conditions.test_id, perturbed_reaction_no):
-            perturbed_results = calculate_perturbed_cell_size_and_sensitivity(
-                base_test_conditions=test_conditions,
-                perturbed_reaction_no=perturbed_reaction_no,
-                max_step_znd=max_step_znd,
-                perturbation_fraction=perturbation_fraction,
-            )
-            database.perturbed_results_table.insert_new_row(perturbed_results)
+    elif not database.perturbed_results_table.row_exists(test_conditions.test_id, perturbed_reaction_no):
+        perturbed_results = calculate_perturbed_cell_size_and_sensitivity(
+            base_test_conditions=test_conditions,
+            perturbed_reaction_no=perturbed_reaction_no,
+            max_step_znd=max_step_znd,
+            perturbation_fraction=perturbation_fraction,
+        )
+        database.perturbed_results_table.insert_new_row(perturbed_results)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -154,7 +152,7 @@ def calculate_perturbed_cell_size_and_sensitivity(
     base_test_conditions: db.TestConditions,
     perturbed_reaction_no: int,
     max_step_znd: float,
-    perturbation_fraction: float
+    perturbation_fraction: float,
 ) -> db.PerturbedResults:
     if perturbed_reaction_no is None:
         raise ValueError("Cannot calculate perturbed cell sizes with perturbed_reaction = None")
@@ -179,27 +177,28 @@ def calculate_perturbed_cell_size_and_sensitivity(
     )
 
     return db.PerturbedResults(
-            test_id=base_test_conditions.test_id,
-            rxn_no=perturbed_reaction_no,
-            perturbation_fraction=perturbation_fraction,
-            rxn=pert_cell_calcs.reaction_equation,  # won't be None if perturbed_reaction_no is not None
-            k_i=pert_cell_calcs.k_i,  # won't be None if perturbed_reaction_no is not None
-            ind_len_west=pert_cell_calcs.induction_length.westbrook,
-            ind_len_gav=pert_cell_calcs.induction_length.gavrikov,
-            ind_len_ng=pert_cell_calcs.induction_length.ng,
-            cell_size_west=pert_cell_calcs.cell_size.westbrook,
-            cell_size_gav=pert_cell_calcs.cell_size.gavrikov,
-            cell_size_ng=pert_cell_calcs.cell_size.ng,
-            sens_ind_len_west=sensitivity.induction_length.westbrook,
-            sens_ind_len_gav=sensitivity.induction_length.gavrikov,
-            sens_ind_len_ng=sensitivity.induction_length.ng,
-            sens_cell_size_west=sensitivity.cell_size.westbrook,
-            sens_cell_size_gav=sensitivity.cell_size.gavrikov,
-            sens_cell_size_ng=sensitivity.cell_size.ng,
-        )
+        test_id=base_test_conditions.test_id,
+        rxn_no=perturbed_reaction_no,
+        perturbation_fraction=perturbation_fraction,
+        rxn=pert_cell_calcs.reaction_equation,  # won't be None if perturbed_reaction_no is not None
+        k_i=pert_cell_calcs.k_i,  # won't be None if perturbed_reaction_no is not None
+        ind_len_west=pert_cell_calcs.induction_length.westbrook,
+        ind_len_gav=pert_cell_calcs.induction_length.gavrikov,
+        ind_len_ng=pert_cell_calcs.induction_length.ng,
+        cell_size_west=pert_cell_calcs.cell_size.westbrook,
+        cell_size_gav=pert_cell_calcs.cell_size.gavrikov,
+        cell_size_ng=pert_cell_calcs.cell_size.ng,
+        sens_ind_len_west=sensitivity.induction_length.westbrook,
+        sens_ind_len_gav=sensitivity.induction_length.gavrikov,
+        sens_ind_len_ng=sensitivity.induction_length.ng,
+        sens_cell_size_west=sensitivity.cell_size.westbrook,
+        sens_cell_size_gav=sensitivity.cell_size.gavrikov,
+        sens_cell_size_ng=sensitivity.cell_size.ng,
+    )
 
 
-def init(l):
+# ruff: noqa: PLW0603
+def init(lock):
     # noinspection PyGlobalUndefined
     global db_lock
-    db_lock = l
+    db_lock = lock

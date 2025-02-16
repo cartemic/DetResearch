@@ -1,6 +1,7 @@
 """
 Functions for converting directory strings between windows and linux
 """
+
 import os
 import platform
 
@@ -10,6 +11,7 @@ def get_drive(drive_letter):
         return "/" + drive_letter.lower()
     elif platform.system().lower() == "windows":
         return drive_letter.upper() + ":\\"
+    return None
 
 
 d_drive = get_drive("d")
@@ -25,15 +27,14 @@ def convert_dir_to_local(dir_to_convert):
                 # relative directory
                 dir_out = os.path.join(d, *dirs)
                 break
-            else:
-                # absolute windows directory
-                # get rid of semicolon and convert to local
-                dir_out = os.path.join(get_drive(d.replace(":", "")), *dirs)
-                break
-        elif t == "/":
+            # absolute windows directory
+            # get rid of semicolon and convert to local
+            dir_out = os.path.join(get_drive(d.replace(":", "")), *dirs)
+            break
+        if t == "/":
             # absolute linux directory
             dir_out = os.path.join(get_drive(d), *dirs)
             break
 
-        dirs = [d] + dirs
+        dirs = [d, *dirs]
     return dir_out

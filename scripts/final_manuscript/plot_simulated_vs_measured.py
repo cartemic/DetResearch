@@ -5,8 +5,7 @@ import pandas as pd
 import seaborn as sns
 from matplotlib import pyplot as plt
 
-from scripts.final_manuscript.plot_settings import set_palette, set_style, PlotKind
-
+from scripts.final_manuscript.plot_settings import PlotKind, set_palette, set_style
 
 SCRIPT_DIR = os.path.dirname(__file__)
 # CELL_SIZE_DATA_PATH = os.path.join(
@@ -41,7 +40,7 @@ def load_data():
                             "dil_mf_nom": [row["dil_mf_nom"]] * 2,
                             "cell_size": [row["cell_size_measured"], row["cell_size_westbrook_2"]],
                             "source": ["measurement", "simulation"],
-                            "uncertainty": [row["u_cell_size_measured"], np.NaN],
+                            "uncertainty": [row["u_cell_size_measured"], np.nan],
                         }
                     ),
                 ]
@@ -67,10 +66,8 @@ def load_data():
     ]
     # Filter out unsuccessful detonations
     speed_data = speed_data[
-        (speed_data["cj_speed"].notna())
-        & (speed_data["sound_speed"].notna())
-        & (speed_data["wave_speed"].notna())
-        ]
+        (speed_data["cj_speed"].notna()) & (speed_data["sound_speed"].notna()) & (speed_data["wave_speed"].notna())
+    ]
     # Ignore propane/air data
     speed_data = speed_data[speed_data["fuel"] == "CH4"].reset_index(drop=True)
 
@@ -87,40 +84,43 @@ def plot_cell_size(data: pd.DataFrame, show_title: bool, save_plot: bool):
         data=data,
         kind="scatter",
         zorder=2,
-        facet_kws=dict(sharey="row"),
+        facet_kws={"sharey": "row"},
     )
     grid.fig.set_size_inches((7, 6))
     if show_title:
         grid.fig.suptitle("Diluent Comparison", weight="bold")
 
     measurements = data[data["source"] == "measurement"]
-    plot_args = dict(
-        x="dil_mf_nom",
-        y="cell_size",
-        yerr="uncertainty",
-        ls="None",
-        linewidth=0.5,
-        zorder=1,
-        capsize=4,
-        alpha=0.4,
+    plot_args = {
+        "x": "dil_mf_nom",
+        "y": "cell_size",
+        "yerr": "uncertainty",
+        "ls": "None",
+        "linewidth": 0.5,
+        "zorder": 1,
+        "capsize": 4,
+        "alpha": 0.4,
+    }
+    er_low = 0.4
+    er_med = 0.7
+    er_high = 1.0
+    grid.axes[0][0].errorbar(
+        **plot_args, data=measurements[(measurements["phi_nom"] == er_low) & (measurements["diluent"] == CO2)]
     )
     grid.axes[0][0].errorbar(
-        **plot_args, data=measurements[(measurements["phi_nom"] == 0.4) & (measurements["diluent"] == CO2)]
-    )
-    grid.axes[0][0].errorbar(
-        **plot_args, data=measurements[(measurements["phi_nom"] == 0.4) & (measurements["diluent"] == "N2")]
+        **plot_args, data=measurements[(measurements["phi_nom"] == er_low) & (measurements["diluent"] == "N2")]
     )
     grid.axes[0][1].errorbar(
-        **plot_args, data=measurements[(measurements["phi_nom"] == 0.7) & (measurements["diluent"] == CO2)]
+        **plot_args, data=measurements[(measurements["phi_nom"] == er_med) & (measurements["diluent"] == CO2)]
     )
     grid.axes[0][1].errorbar(
-        **plot_args, data=measurements[(measurements["phi_nom"] == 0.7) & (measurements["diluent"] == "N2")]
+        **plot_args, data=measurements[(measurements["phi_nom"] == er_med) & (measurements["diluent"] == "N2")]
     )
     grid.axes[0][2].errorbar(
-        **plot_args, data=measurements[(measurements["phi_nom"] == 1.0) & (measurements["diluent"] == CO2)]
+        **plot_args, data=measurements[(measurements["phi_nom"] == er_high) & (measurements["diluent"] == CO2)]
     )
     grid.axes[0][2].errorbar(
-        **plot_args, data=measurements[(measurements["phi_nom"] == 1.0) & (measurements["diluent"] == "N2")]
+        **plot_args, data=measurements[(measurements["phi_nom"] == er_high) & (measurements["diluent"] == "N2")]
     )
 
     for ax in grid.axes.flatten():

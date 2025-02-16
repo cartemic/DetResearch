@@ -2,28 +2,18 @@ import os
 
 from funcs.post_processing.tube import process
 
-DIR_RAW = os.path.join(
-    os.path.dirname(os.path.realpath(__file__)),
-    "../../data",
-    "post_processing"
-)
+DIR_RAW = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../../data", "post_processing")
 
 
 class TestCollectOldData:
     # noinspection PyTypeChecker
     def test_good_dir(self):
-        assert len(process._ProcessStructure0._collect_test_dirs(
-            DIR_RAW,
-            "2019-10-22"
-        )) == 4
+        assert len(process._ProcessStructure0._collect_test_dirs(DIR_RAW, "2019-10-22")) == 4
 
     # noinspection PyTypeChecker
     def test_bad_dir(self):
         # make sure things don't break on a day with no tests
-        assert len(process._ProcessStructure0._collect_test_dirs(
-            DIR_RAW,
-            "2049-37-55"
-        )) == 0
+        assert len(process._ProcessStructure0._collect_test_dirs(DIR_RAW, "2049-37-55")) == 0
 
 
 class TestCollectSchlierenDirs:

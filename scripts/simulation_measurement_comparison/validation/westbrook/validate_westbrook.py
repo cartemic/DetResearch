@@ -1,27 +1,26 @@
 import concurrent.futures
 import dataclasses
 import datetime
-import sys
-from concurrent.futures import ProcessPoolExecutor
 import os
-from typing import Tuple
-
+import sys
 import traceback
 import warnings
+from concurrent.futures import ProcessPoolExecutor
+from typing import Tuple
 
 import cantera as ct
-import seaborn as sns
 import pandas as pd
-from tqdm import tqdm
+import seaborn as sns
 from matplotlib import pyplot as plt
-from sdtoolbox.postshock import CJspeed
+from tqdm import tqdm
 
 from funcs.simulation import cell_size as cs
+from sdtoolbox.postshock import CJspeed
 
 sns.set_style("darkgrid")
 
 DATA_DIR = os.path.abspath(os.path.dirname(__file__))
-MECH = "gri30.cti"
+MECH = "gri30.yaml"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -40,7 +39,7 @@ CONDITION_MAP = {
     "C2H2_O2": Condition(
         fuel="H2",
         oxidizer="O2",
-        phi=5/2,
+        phi=5 / 2,
     ),
     "C2H2_2_5O2": Condition(
         fuel="C2H2",
@@ -51,32 +50,32 @@ CONDITION_MAP = {
         fuel="CH4",
         oxidizer="O2",
         phi=1,
-    )
+    ),
 }
 
 
 def load_txt(file_name: str) -> pd.DataFrame:
     # saved with p0 in atm and cell size in cm
-    df = pd.read_csv(os.path.join(DATA_DIR, file_name), skiprows=1, names=["pressure", "cell_size"])
-    df["cell_size"] *= 100  # cm -> mm
-    df["pressure"] *= 101325  # atm -> Pa
+    csv_data = pd.read_csv(os.path.join(DATA_DIR, file_name), skiprows=1, names=["pressure", "cell_size"])
+    csv_data["cell_size"] *= 100  # cm -> mm
+    csv_data["pressure"] *= 101325  # atm -> Pa
     mixture = file_name.rstrip(".txt")
-    df["mixture"] = mixture
+    csv_data["mixture"] = mixture
     condition = CONDITION_MAP[mixture]
-    df["fuel"] = condition.fuel
-    df["oxidizer"] = condition.oxidizer
-    df["phi"] = condition.phi
+    csv_data["fuel"] = condition.fuel
+    csv_data["oxidizer"] = condition.oxidizer
+    csv_data["phi"] = condition.phi
 
-    return df
+    return csv_data
 
 
 def load_all_data() -> pd.DataFrame:
-    df = pd.DataFrame()
+    loaded = pd.DataFrame()
     for file in os.listdir(DATA_DIR):
         if file.endswith(".txt"):
-            df = pd.concat((df, load_txt(file_name=file)))
+            loaded = pd.concat((loaded, load_txt(file_name=file)))
 
-    return df
+    return loaded
 
 
 def simulate_single_condition(idx_and_row: Tuple[int, pd.Series], error_log: str) -> Tuple[int, pd.Series]:
@@ -139,21 +138,22 @@ def simulate_measured_conditions(df_measured: pd.DataFrame) -> pd.DataFrame:
     start = datetime.datetime.now().isoformat()
     error_log = f"error_log_{start}"
 
-    with ProcessPoolExecutor() as executor:
-        with tqdm(total=n_meas, unit="calc", file=sys.stdout, colour="green", desc="Running") as counter:
-            # I promise DataFrame.iterrows() returns (int, Series) in this instance
-            # noinspection PyTypeChecker
-            futures = {
-                executor.submit(simulate_single_condition, idx_and_row, error_log)
-                for idx_and_row in df_measured.iterrows()
-            }
-            results = []
+    with (
+        ProcessPoolExecutor() as executor,
+        tqdm(total=n_meas, unit="calc", file=sys.stdout, colour="green", desc="Running") as counter,
+    ):
+        # I promise DataFrame.iterrows() returns (int, Series) in this instance
+        # noinspection PyTypeChecker
+        futures = {
+            executor.submit(simulate_single_condition, idx_and_row, error_log) for idx_and_row in df_measured.iterrows()
+        }
+        results = []
 
-            for done in concurrent.futures.as_completed(futures):
-                results.append(done.result())
-                counter.update()
+        for done in concurrent.futures.as_completed(futures):
+            results.append(done.result())
+            counter.update()
 
-            counter.set_description_str("Done")
+        counter.set_description_str("Done")
 
     df_out = pd.DataFrame()
     for result in sorted(results, key=lambda _r: r[0]):
@@ -181,29 +181,32 @@ if __name__ == "__main__":
         simulated["cell_size_westbrook"] = pd.to_numeric(simulated["cell_size_westbrook"])
         simulated["cell_size_westbrook_2"] = pd.to_numeric(simulated["cell_size_westbrook_2"])
 
-        with pd.HDFStore(os.path.join(DATA_DIR, output_file), "w") as store:
-            with warnings.catch_warnings():
-                # pandas doesn't do types well here, and frankly I'm sick of hearing about it
-                warnings.simplefilter("ignore")
-                store["data"] = simulated
+        with pd.HDFStore(os.path.join(DATA_DIR, output_file), "w") as store, warnings.catch_warnings():
+            # pandas doesn't do types well here, and frankly I'm sick of hearing about it
+            warnings.simplefilter("ignore")
+            store["data"] = simulated
     else:
         simulated = pd.read_hdf(os.path.join(DATA_DIR, output_file))
 
     for westbrook_col, title in zip(("cell_size_westbrook", "cell_size_westbrook_2"), ("Original", "Updated")):
         plot_data = pd.DataFrame()
-        for (_, r) in simulated.iterrows():
-            plot_data = pd.concat([
-                plot_data,
-                pd.DataFrame({
-                    "mixture": [r["mixture"]] * 2,
-                    "fuel": [r["fuel"]] * 2,
-                    "oxidizer": [r["oxidizer"]] * 2,
-                    "phi": [r["phi"]] * 2,
-                    "pressure": [r["pressure"]] * 2,
-                    "cell_size": [r["cell_size"], r[westbrook_col]],
-                    "source": ["literature", "simulation"]
-                })
-            ])
+        for _, r in simulated.iterrows():
+            plot_data = pd.concat(
+                [
+                    plot_data,
+                    pd.DataFrame(
+                        {
+                            "mixture": [r["mixture"]] * 2,
+                            "fuel": [r["fuel"]] * 2,
+                            "oxidizer": [r["oxidizer"]] * 2,
+                            "phi": [r["phi"]] * 2,
+                            "pressure": [r["pressure"]] * 2,
+                            "cell_size": [r["cell_size"], r[westbrook_col]],
+                            "source": ["literature", "simulation"],
+                        }
+                    ),
+                ]
+            )
 
         grid = sns.relplot(x="pressure", y="cell_size", style="source", row="mixture", data=plot_data, kind="scatter")
         grid.set(xscale="log", yscale="log")

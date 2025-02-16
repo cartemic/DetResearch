@@ -4,20 +4,20 @@ from copy import copy
 from functools import wraps
 from time import time
 
-import skimage.filters
-
-import funcs
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import skimage.filters
 import uncertainties as un
-from funcs.post_processing.images.soot_foil import deltas as pp_deltas
 from matplotlib import patches
 from matplotlib import pyplot as plt
 from matplotlib_scalebar.scalebar import ScaleBar
 from scipy.stats import ks_2samp, t, ttest_ind, ttest_ind_from_stats
 from skimage import io, transform
 from uncertainties import unumpy as unp
+
+import funcs
+from funcs.post_processing.images.soot_foil import deltas as pp_deltas
 
 d_drive = funcs.dir.d_drive
 DF_SF_SPATIAL = pd.read_csv(
@@ -40,9 +40,7 @@ SF_IMG_DIR = os.path.join(
     SF_DATE,
     f"Shot {SF_SHOT:02d}",
 )
-SF_SPATIAL_SHOT_MASK = (DF_SF_SPATIAL["date"] == SF_DATE) & (
-    DF_SF_SPATIAL["shot"] == SF_SHOT
-)
+SF_SPATIAL_SHOT_MASK = (DF_SF_SPATIAL["date"] == SF_DATE) & (DF_SF_SPATIAL["shot"] == SF_SHOT)
 SF_DELTA_MM = DF_SF_SPATIAL[SF_SPATIAL_SHOT_MASK]["delta_mm"]
 SF_DELTA_PX = DF_SF_SPATIAL[SF_SPATIAL_SHOT_MASK]["delta_px"]
 PLOT_FILETYPE = "png"
@@ -259,31 +257,23 @@ def get_schlieren_data(estimator):
             f"/d/Data/Processed/Data/schlieren_{group}.h5",
             "r",
         ) as store:
-            df_schlieren_all_frames = pd.concat(
-                (df_schlieren_all_frames, store.data)
-            )
+            df_schlieren_all_frames = pd.concat((df_schlieren_all_frames, store.data))
 
     # fix jacked up measurement
     with pd.HDFStore(
         "/d/Data/Processed/Data/tube_data_2020-08-07.h5",
         "r",
     ) as store:
-        df_schlieren_tube[
-            (
-                (df_schlieren_tube["date"] == "2020-08-07")
-                & (df_schlieren_tube["shot"] == 3)
-            )
-        ] = store.data.iloc[0].values
+        bad_shot = 3
+        df_schlieren_tube[((df_schlieren_tube["date"] == "2020-08-07") & (df_schlieren_tube["shot"] == bad_shot))] = (
+            store.data.iloc[0].to_numpy()
+        )
 
     # After some analysis it looks like I was dumb and used u_delta_px as
     # u_loc_px. This gives an overly large estimate of uncertainty for
     # schlieren. Fix that before continuing with the analysis.
-    df_schlieren_all_frames.loc[:, "u_delta_px"] = (
-        df_schlieren_all_frames["u_loc_px"].copy()
-    )
-    df_schlieren_all_frames.loc[:, "u_loc_px"] = df_schlieren_all_frames[
-        "u_loc_px"
-    ].div(np.sqrt(2))
+    df_schlieren_all_frames.loc[:, "u_delta_px"] = df_schlieren_all_frames["u_loc_px"].copy()
+    df_schlieren_all_frames.loc[:, "u_loc_px"] = df_schlieren_all_frames["u_loc_px"].div(np.sqrt(2))
 
     # calculate cell size measurements
     df_schlieren_tube = df_schlieren_tube[
@@ -293,8 +283,8 @@ def get_schlieren_data(estimator):
         & (df_schlieren_tube["oxidizer"] == "N2O")
         & (df_schlieren_tube["diluent"] == "N2")
     ]
-    df_schlieren_tube["cell_size"] = np.NaN
-    df_schlieren_tube["u_cell_size"] = np.NaN
+    df_schlieren_tube["cell_size"] = np.nan
+    df_schlieren_tube["u_cell_size"] = np.nan
 
     u_delta_bias = np.sqrt(2) / 2
     deltas = unp.uarray(
@@ -311,10 +301,7 @@ def get_schlieren_data(estimator):
 
     for (date, shot), _ in df_schlieren_tube.groupby(["date", "shot"]):
         _df_this_shot = df_schlieren_all_frames[
-            (
-                (df_schlieren_all_frames["date"] == date)
-                & (df_schlieren_all_frames["shot"] == shot)
-            )
+            ((df_schlieren_all_frames["date"] == date) & (df_schlieren_all_frames["shot"] == shot))
         ].dropna()
         df_schlieren_frames = pd.concat((df_schlieren_frames, _df_this_shot))
         if len(_df_this_shot):
@@ -329,16 +316,11 @@ def get_schlieren_data(estimator):
             _meas = estimator(_deltas * _mm_per_px) * 2
             # noinspection PyUnresolvedReferences
             df_schlieren_tube.loc[
-                (
-                    (df_schlieren_tube["date"] == date)
-                    & (df_schlieren_tube["shot"] == shot)
-                ),
+                ((df_schlieren_tube["date"] == date) & (df_schlieren_tube["shot"] == shot)),
                 ["cell_size", "u_cell_size"],
             ] = (_meas.nominal_value, _meas.std_dev)
 
-    df_schlieren_tube = df_schlieren_tube[
-        ~pd.isna(df_schlieren_tube["cell_size"])
-    ]
+    df_schlieren_tube = df_schlieren_tube[~pd.isna(df_schlieren_tube["cell_size"])]
 
     return df_schlieren_frames, df_schlieren_tube
 
@@ -396,21 +378,13 @@ def build_schlieren_images(
     shot = 3
     frame = 0
     tube_data_h5_suffix = "fffff"
-    with pd.HDFStore(
-        f"/d/Data/Processed/Data/data_{tube_data_h5_suffix}.h5", "r"
-    ) as store:
+    with pd.HDFStore(f"/d/Data/Processed/Data/data_{tube_data_h5_suffix}.h5", "r") as store:
         schlieren_key_date = date.replace("-", "_")
-        key = (
-            f"/schlieren/d{schlieren_key_date}/" + f"shot{shot:02d}/"
-            f"frame_{frame:02d}"
-        )
+        key = f"/schlieren/d{schlieren_key_date}/" + f"shot{shot:02d}/" f"frame_{frame:02d}"
         schlieren_raw = np.fliplr(store[key])
 
     # jankily shoehorn spatial calibration into existing function
-    mm_per_px = df_meas[
-        (df_meas["date"] == date)
-        & (df_meas["shot"] == shot)
-        ]["spatial_centerline"].iloc[0]
+    mm_per_px = df_meas[(df_meas["date"] == date) & (df_meas["shot"] == shot)]["spatial_centerline"].iloc[0]
     schlieren_scalebar = get_scale_bar(
         1,
         mm_per_px,
@@ -420,19 +394,14 @@ def build_schlieren_images(
     # trim image to ROI
     limits_x = sorted(limits_x)
     limits_y = sorted(limits_y)
-    schlieren_raw = (
-        schlieren_raw[np.arange(*limits_y), :][:, np.arange(*limits_x)]
-    )
+    schlieren_raw = schlieren_raw[np.arange(*limits_y), :][:, np.arange(*limits_x)]
     schlieren_raw /= schlieren_raw.max()
     schlieren_raw = skimage.filters.unsharp_mask(
         schlieren_raw,
         radius=1.5,
         amount=3,
     )
-    df_meas = df_meas[
-        (df_meas["loc_px"] >= limits_y[0])
-        & (df_meas["loc_px"] <= limits_y[1])
-    ]
+    df_meas = df_meas[(df_meas["loc_px"] >= limits_y[0]) & (df_meas["loc_px"] <= limits_y[1])]
     df_meas["loc_px"] -= limits_y[0]
 
     # raw frame
@@ -461,11 +430,9 @@ def build_schlieren_images(
     ax.axis("off")
     # ax.set_title("Measurements")
     ax.grid(False)
-    for loc_px in df_meas[
-        (df_meas["date"] == date)
-        & (df_meas["shot"] == shot)
-        & (df_meas["frame"] == frame)
-    ]["loc_px"]:
+    for loc_px in df_meas[(df_meas["date"] == date) & (df_meas["shot"] == shot) & (df_meas["frame"] == frame)][
+        "loc_px"
+    ]:
         plt.axhline(
             loc_px,
             c=COLOR_SC,
@@ -514,9 +481,9 @@ def calculate_schlieren_cell_size(
         # remove outliers
         meas_mean = df_schlieren_frames["cell_size"].mean()
         meas_std = df_schlieren_frames["cell_size"].std()
-        mask = (
-            meas_mean - 1.5 * meas_std <= df_schlieren_frames["cell_size"]
-        ) & (df_schlieren_frames["cell_size"] <= meas_mean + 1.5 * meas_std)
+        mask = (meas_mean - 1.5 * meas_std <= df_schlieren_frames["cell_size"]) & (
+            df_schlieren_frames["cell_size"] <= meas_mean + 1.5 * meas_std
+        )
         del meas_std, meas_mean  # make sure we use reduced dataset!
     else:
         # leave em
@@ -529,9 +496,7 @@ def calculate_schlieren_cell_size(
     nominal_values = unp.nominal_values(meas)
     # cell_size_meas = np.sum(meas) / n_meas
     cell_size_meas = 2 * estimator(meas)
-    cell_size_uncert_population = (
-        nominal_values.std() / np.sqrt(n_meas) * t.ppf(0.975, n_meas - 1)
-    )
+    cell_size_uncert_population = nominal_values.std() / np.sqrt(n_meas) * t.ppf(0.975, n_meas - 1)
     # noinspection PyUnresolvedReferences
     cell_size_uncert_schlieren = np.sqrt(
         np.sum(
@@ -658,10 +623,7 @@ def plot_all_schlieren_deltas_distribution(
     name = "schlieren_all_deltas_distribution"
     fig, ax = plt.subplots(figsize=(plot_width, plot_height))
     fig.canvas.set_window_title(name)
-    deltas = (
-        df_schlieren_frames["spatial_centerline"]
-        * df_schlieren_frames["delta_px"]
-    ).dropna()
+    deltas = (df_schlieren_frames["spatial_centerline"] * df_schlieren_frames["delta_px"]).dropna()
     sns.kdeplot(
         deltas,
         ax=ax,
@@ -762,10 +724,7 @@ def plot_both_delta_distributions(
     name = "all_deltas_distributions"
     fig, ax = plt.subplots(figsize=(plot_width, plot_height))
     fig.canvas.set_window_title(name)
-    deltas = (
-        df_schlieren_frames["spatial_centerline"]
-        * df_schlieren_frames["delta_px"]
-    ).dropna()
+    deltas = (df_schlieren_frames["spatial_centerline"] * df_schlieren_frames["delta_px"]).dropna()
     sns.kdeplot(
         deltas,
         ax=ax,
@@ -1005,9 +964,7 @@ def build_soot_foil_images(
 
     # read in zoomed lines
     sf_img_lines_z = sf_imread(os.path.join(SF_IMG_DIR, "lines_zoomed.png"))
-    sf_img_lines_z = np.rot90(
-        np.rot90(sf_img_lines_z)
-    )  # don't want to redo this
+    sf_img_lines_z = np.rot90(np.rot90(sf_img_lines_z))  # don't want to redo this
 
     # plot zoomed lines
     name = "soot_foil_lines_zoomed"
@@ -1125,11 +1082,7 @@ def soot_foil_px_cal_uncertainty(
             2345,
         ]
     )
-    u_px_cal_deltas = (
-        px_cal_deltas.std()
-        / np.sqrt(len(px_cal_deltas))
-        * t.ppf(0.975, len(px_cal_deltas) - 1)
-    )
+    u_px_cal_deltas = px_cal_deltas.std() / np.sqrt(len(px_cal_deltas)) * t.ppf(0.975, len(px_cal_deltas) - 1)
 
     # calculate and apply new calibration pixel uncertainty
     # existing measurement accounts for sqrt2 from delta
@@ -1198,14 +1151,10 @@ def soot_foil_px_cal_uncertainty(
 
 
 def find_row_px_loc(row):
-    row_locs = np.where(row == 255)[0]
-    double_check = row_locs[
-        np.abs(np.diff([row_locs, np.roll(row_locs, -1)], axis=0)).flatten() > 1
-    ]
-    if len(double_check):
-        meas = double_check[0]
-    else:
-        meas = row_locs[0]
+    white = 255
+    row_locs = np.where(row == white)[0]
+    double_check = row_locs[np.abs(np.diff([row_locs, np.roll(row_locs, -1)], axis=0)).flatten() > 1]
+    meas = double_check[0] if len(double_check) else row_locs[0]
     return meas
 
 
@@ -1238,7 +1187,7 @@ def soot_foil_px_delta_uncertainty():
                 n_repeatability_images,
             )
         )
-        * np.NaN
+        * np.nan
     )
     for i, img_loc in enumerate(images):
         img = io.imread(img_loc)
@@ -1260,15 +1209,9 @@ def soot_foil_px_delta_uncertainty():
     u_px_delta_bias = 0.5 * np.sqrt(2)  # accounts for propagation in delta
 
     # calculate and apply new measurement pixel location precision uncertainty
-    uncert_total = np.sqrt(
-        np.sum(np.square(np.array([u_px_delta_bias, u_px_delta_precision])))
-    )
+    uncert_total = np.sqrt(np.sum(np.square(np.array([u_px_delta_bias, u_px_delta_precision]))))
 
-    uncert = {
-        "bias": u_px_delta_bias,
-        "precision": u_px_delta_precision,
-        "total": uncert_total
-    }
+    uncert = {"bias": u_px_delta_bias, "precision": u_px_delta_precision, "total": uncert_total}
 
     return uncert
 
@@ -1321,10 +1264,10 @@ def calculate_soot_foil_cell_size(
 
     if use_cache:
         with pd.HDFStore(cache_file, "r") as store:
-            all_meas = store.data["measurements"].values
-            all_total_uncerts = store.data["total_uncertainties"].values
-            all_cal_px_uncerts = store.data["u_cal_px"].values
-            all_cal_mm_uncerts = store.data["u_cal_mm"].values
+            all_meas = store.data["measurements"].to_numpy()
+            all_total_uncerts = store.data["total_uncertainties"].to_numpy()
+            all_cal_px_uncerts = store.data["u_cal_px"].to_numpy()
+            all_cal_mm_uncerts = store.data["u_cal_mm"].to_numpy()
     else:
         date_shot = (
             # remove 4 at random
@@ -1359,12 +1302,11 @@ def calculate_soot_foil_cell_size(
         all_shots = []
         all_cal_mm_uncerts = []
         all_cal_px_uncerts = []
-        all_n_deltas = np.ones(len(date_shot)) * np.NaN
+        all_n_deltas = np.ones(len(date_shot)) * np.nan
         for idx, (date, shot) in enumerate(date_shot):
             cal_mm, cal_px, u_cal_mm, u_cal_px = DF_SF_SPATIAL[
-                (DF_SF_SPATIAL["date"] == date) &
-                (DF_SF_SPATIAL["shot"] == shot)
-            ][["delta_mm", "delta_px", "u_delta_mm", "u_delta_px"]].values[0]
+                (DF_SF_SPATIAL["date"] == date) & (DF_SF_SPATIAL["shot"] == shot)
+            ][["delta_mm", "delta_px", "u_delta_mm", "u_delta_px"]].to_numpy[0]
             d_px = pp_deltas.get_px_deltas_from_lines(
                 os.path.join(
                     d_drive,
@@ -1392,18 +1334,20 @@ def calculate_soot_foil_cell_size(
             all_meas.extend(list(unp.nominal_values(d_mm)))
             all_total_uncerts.extend(list(unp.std_devs(d_mm)))
             n_current_meas = len(d_mm)
-            all_dates.extend(list([date]*n_current_meas))
-            all_shots.extend(list([shot]*n_current_meas))
+            all_dates.extend(list([date] * n_current_meas))
+            all_shots.extend(list([shot] * n_current_meas))
 
         if save_cache:
-            df_meas = pd.DataFrame([
-                pd.Series(all_dates, name="date"),
-                pd.Series(all_shots, name="shot"),
-                pd.Series(all_meas, name="measurements"),
-                pd.Series(all_total_uncerts, name="total_uncertainties"),
-                pd.Series(all_cal_px_uncerts, name="u_cal_px"),
-                pd.Series(all_cal_mm_uncerts, name="u_cal_mm"),
-            ]).T
+            df_meas = pd.DataFrame(
+                [
+                    pd.Series(all_dates, name="date"),
+                    pd.Series(all_shots, name="shot"),
+                    pd.Series(all_meas, name="measurements"),
+                    pd.Series(all_total_uncerts, name="total_uncertainties"),
+                    pd.Series(all_cal_px_uncerts, name="u_cal_px"),
+                    pd.Series(all_cal_mm_uncerts, name="u_cal_mm"),
+                ]
+            ).T
             with pd.HDFStore(cache_file, "w") as store:
                 store.put("data", df_meas)
 
@@ -1417,9 +1361,7 @@ def calculate_soot_foil_cell_size(
         # remove outliers
         mean = meas_nominal.mean()
         std = meas_nominal.std()
-        meas_mask = (meas_nominal <= mean + std * 1.5) & (
-            meas_nominal >= mean - std * 1.5
-        )
+        meas_mask = (meas_nominal <= mean + std * 1.5) & (meas_nominal >= mean - std * 1.5)
         measurements = measurements[meas_mask]
         meas_nominal = meas_nominal[meas_mask]
         del mean, std  # don't accidentally reuse these!
@@ -1453,24 +1395,17 @@ def calculate_soot_foil_cell_size(
         n_measurements -= 1
         measurements = measurements[1:]
     cell_size_meas = estimator(measurements)
-    cell_size_uncert_population = (
-        meas_nominal.std()
-        / np.sqrt(n_measurements)
-        * t.ppf(0.975, n_measurements - 1)
-    )
+    cell_size_uncert_population = meas_nominal.std() / np.sqrt(n_measurements) * t.ppf(0.975, n_measurements - 1)
 
     # combine uncertainties
-    cell_size_uncert = np.sqrt(
-        np.sum(np.square([cell_size_uncert_population, cell_size_meas.std_dev]))
-    )
+    cell_size_uncert = np.sqrt(np.sum(np.square([cell_size_uncert_population, cell_size_meas.std_dev])))
     uncertainty = {
-        "instrument":
-            {
-                "triple_point_delta_px": uncert_delta_px,
-                "cal_px": np.mean(all_cal_px_uncerts),
-                "cal_mm": np.mean(all_cal_mm_uncerts),
-                "total_mm": cell_size_meas.std_dev,
-            },
+        "instrument": {
+            "triple_point_delta_px": uncert_delta_px,
+            "cal_px": np.mean(all_cal_px_uncerts),
+            "cal_mm": np.mean(all_cal_mm_uncerts),
+            "total_mm": cell_size_meas.std_dev,
+        },
         "population": cell_size_uncert_population,
         "total": cell_size_uncert,
     }
@@ -1572,27 +1507,23 @@ def perform_soot_foil_measurement_study(
         "soot_foil_measurement_study.h5",
     )
     with pd.HDFStore(cache_file, "r") as store:
-        df = store.data
+        data = store.data
 
-    df["date"] = pd.to_datetime(df["date"])
+    data["date"] = pd.to_datetime(data["date"])
 
-    grouped = df.groupby(["date", "shot"])
-    median_per_shot = np.ones(len(grouped)) * np.NaN
-    running_median = np.ones_like(median_per_shot) * np.NaN
-    mean_of_medians = np.ones_like(median_per_shot) * np.NaN
+    grouped = data.groupby(["date", "shot"])
+    median_per_shot = np.ones(len(grouped)) * np.nan
+    running_median = np.ones_like(median_per_shot) * np.nan
+    mean_of_medians = np.ones_like(median_per_shot) * np.nan
     date_shot = []
 
     for i, ((date, shot), df_current) in enumerate(grouped):
         median_per_shot[i] = df_current["measurements"].median()
-        running_median[i] = df[
-            (df["date"] < date)
-            | (
-                (df["date"] == date)
-                & (df["shot"] <= shot)
-            )
-        ]["measurements"].median()
+        running_median[i] = data[(data["date"] < date) | ((data["date"] == date) & (data["shot"] <= shot))][
+            "measurements"
+        ].median()
         date_shot.append(f"{date.date().isoformat()} shot {shot}")
-        mean_of_medians[i] = median_per_shot[:i+1].mean()
+        mean_of_medians[i] = median_per_shot[: i + 1].mean()
 
     # normalize shot median by mean of the two methods
     median_per_shot /= np.mean((mean_of_medians[-1], median_per_shot[-1]))
@@ -1813,7 +1744,8 @@ def get_initial_conditions(df_data):
     for item in ("p_0", "t_0", "phi", "dil_mf", "wave_speed"):
         out[item] = np.nanmean(
             unp.uarray(
-                df_data[item], df_data[f"u_{item}"]  # instrument uncertainty
+                df_data[item],
+                df_data[f"u_{item}"],  # instrument uncertainty
             )
         ) + un.ufloat(  # add population uncertainty
             0, df_data[item].sem() * t.ppf(0.975, len(df_data[item]) - 1)
@@ -1823,7 +1755,8 @@ def get_initial_conditions(df_data):
 
 
 def check_null_hypothesis(p_value, alpha):
-    if np.abs(p_value - alpha) / alpha <= 0.1:  # indeterminate within 10%
+    indeterminate_threshold = 0.1  # indeterminate within 10%
+    if np.abs(p_value - alpha) / alpha <= indeterminate_threshold:
         null_means = "Neither accept nor reject"
     elif p_value > alpha:
         null_means = "Fail to reject"
@@ -2025,12 +1958,7 @@ def main(
     t_test_null = check_null_hypothesis(t_p_value, alpha)
     means = f"{t_test_null} the null hypothesis that means are equal"
     report += get_title_block("Means")
-    report += (
-        f"{means}\n"
-        f"    test statistic: {t_stat:0.2f}\n"
-        f"    p: {t_p_value:0.3e}\n"
-        f"    a: {alpha}\n\n"
-    )
+    report += f"{means}\n" f"    test statistic: {t_stat:0.2f}\n" f"    p: {t_p_value:0.3e}\n" f"    a: {alpha}\n\n"
 
     # compare distributions
     ks_stat, ks_p_value = ks_2samp(
@@ -2040,12 +1968,7 @@ def main(
     ks_test_null = check_null_hypothesis(ks_p_value, alpha)
     dists = f"{ks_test_null} the null hypothesis that distributions are equal"
     report += get_title_block("Distributions")
-    report += (
-        f"{dists}\n"
-        f"    test statistic: {ks_stat:0.2f}\n"
-        f"    p: {ks_p_value:0.3e}\n"
-        f"    a: {alpha}\n\n"
-    )
+    report += f"{dists}\n" f"    test statistic: {ks_stat:0.2f}\n" f"    p: {ks_p_value:0.3e}\n" f"    a: {alpha}\n\n"
 
     # center distributions about zero and compare them
     ks_stat, ks_p_value = ks_2samp(
@@ -2055,12 +1978,7 @@ def main(
     ks_test_null = check_null_hypothesis(ks_p_value, alpha)
     dists = f"{ks_test_null} the null hypothesis that distributions are equal"
     report += get_title_block("Distributions (zero centered)")
-    report += (
-        f"{dists}\n"
-        f"    test statistic: {ks_stat:0.2f}\n"
-        f"    p: {ks_p_value:0.3e}\n"
-        f"    a: {alpha}\n\n"
-    )
+    report += f"{dists}\n" f"    test statistic: {ks_stat:0.2f}\n" f"    p: {ks_p_value:0.3e}\n" f"    a: {alpha}\n\n"
     report += get_title_block("Initial Conditions")
     cj = 2030.0914212517014  # cj speed from previous calc (m/s)
     report += (
@@ -2093,12 +2011,7 @@ def main(
     report += get_title_block("Speeds")
     report += f"CJ speed: {int(cj)} m/s\n"
     means = f"{t_test_speed} the null hypothesis that means are equal"
-    report += (
-        f"{means}\n"
-        f"    test statistic: {t_stat:0.2f}\n"
-        f"    p: {t_p_value:0.3e}\n"
-        f"    a: {alpha}\n\n"
-    )
+    report += f"{means}\n" f"    test statistic: {t_stat:0.2f}\n" f"    p: {t_p_value:0.3e}\n" f"    a: {alpha}\n\n"
 
     print(report)
     if save:

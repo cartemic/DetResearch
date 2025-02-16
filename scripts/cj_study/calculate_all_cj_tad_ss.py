@@ -5,7 +5,8 @@ import numpy as np
 import pandas as pd
 
 from funcs.simulation import thermo
-from sdtoolbox import postshock, thermo as sdt_thermo
+from sdtoolbox import postshock
+from sdtoolbox import thermo as sdt_thermo
 
 MECH = "gri30.xml"
 
@@ -45,7 +46,7 @@ def calculate_single_row(_: int, row: pd.Series) -> pd.Series:
             mech=MECH,
         )
     except ct.CanteraError:
-        cj = np.NaN
+        cj = np.nan
     try:
         gas = postshock.PostShock_eq(
             U1=cj,
@@ -56,7 +57,7 @@ def calculate_single_row(_: int, row: pd.Series) -> pd.Series:
         )
         ss = sdt_thermo.soundspeed_eq(gas)
     except ct.CanteraError:
-        ss = np.NaN
+        ss = np.nan
 
     row["t_ad"] = tad
     row["cj_speed"] = cj

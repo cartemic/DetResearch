@@ -12,6 +12,7 @@ in the following report:
 This script uses SDToolbox, which can be found at
 http://shepherd.caltech.edu/EDL/PublicResources/sdt/
 """
+
 import dataclasses
 from typing import Optional
 
@@ -21,6 +22,7 @@ import numpy as np
 import sdtoolbox
 import sdtoolbox.output
 from sdtoolbox.config import Solver
+
 from .thermo import diluted_species_dict
 
 
@@ -113,7 +115,7 @@ def wrapped_cvsolve(
                     spec_indices=spec_indices,
                     db=db,
                     run_no=tries,
-                    method=config.solver_method
+                    method=config.solver_method,
                 )
                 break
             except:  # noqa: E722
@@ -130,7 +132,7 @@ def wrapped_cvsolve(
                     spec_indices=spec_indices,
                     db=db,
                     run_no=tries,
-                    method=config.solver_method
+                    method=config.solver_method,
                 )
             except:
                 raise
@@ -187,7 +189,7 @@ def wrapped_zndsolve(
                 )
                 break
             except (ct.CanteraError, ValueError):
-                max_step /= 10.
+                max_step /= 10.0
         else:
             # let it break if it's gonna break after max tries
             try:
@@ -216,7 +218,7 @@ def wrapped_zndsolve(
         step=max_step,
         end_time=config.end_time,
         tries=tries,
-        max_temp_time=out["time"][np.argmax(out["T"])]
+        max_temp_time=out["time"][np.argmax(out["T"])],
     )
 
 
@@ -248,19 +250,11 @@ class CellSizeResults:
     @staticmethod
     def empty():
         return CellSizeResults(
-            cell_size=ModelResults(
-                gavrikov=np.NaN,
-                ng=np.NaN,
-                westbrook=np.NaN
-            ),
-            induction_length=ModelResults(
-                gavrikov=np.NaN,
-                ng=np.NaN,
-                westbrook=np.NaN
-            ),
+            cell_size=ModelResults(gavrikov=np.nan, ng=np.nan, westbrook=np.nan),
+            induction_length=ModelResults(gavrikov=np.nan, ng=np.nan, westbrook=np.nan),
             gavrikov_criteria_met=False,
             reaction_equation="",
-            k_i=np.NaN
+            k_i=np.nan,
         )
 
 
@@ -358,10 +352,7 @@ def calculate(
     gas.TPX = temp_a, press_vn, q
 
     #  Gather limiting species and index -- fuel for lean mixtures, oxygen for rich mixtures
-    if equivalence <= 1:
-        limit_species = fuel
-    else:
-        limit_species = 'O2'
+    limit_species = fuel if equivalence <= 1 else "O2"
     limit_species_idx = gas.species_index(limit_species)
 
     # cv_out_0 = sdtoolbox.cv.cvsolve(gas)
@@ -402,15 +393,18 @@ def calculate(
     ).T
     gavrikov_criteria = {
         "Ea/RTps": activation_energy / ct.gas_constant / temp_post_shock_gavrikov,
-        "Tvn/T0": temp_vn / initial_temp
+        "Tvn/T0": temp_vn / initial_temp,
     }
     # see pg 32 of https://doi.org/10.1016/S0010-2180(99)00076-0
-    gavrikov_criteria_met = all((
-        gavrikov_criteria["Ea/RTps"] <= 16,
-        gavrikov_criteria["Ea/RTps"] >= 3,
-        gavrikov_criteria["Tvn/T0"] <= 8,
-        gavrikov_criteria["Tvn/T0"] >= 1.5,
-    ))
+    # ruff: noqa: PLR2004
+    gavrikov_criteria_met = all(
+        (
+            gavrikov_criteria["Ea/RTps"] <= 16,
+            gavrikov_criteria["Ea/RTps"] >= 3,
+            gavrikov_criteria["Tvn/T0"] <= 8,
+            gavrikov_criteria["Tvn/T0"] >= 1.5,
+        )
+    )
 
     #  Find Gavrikov induction time based on 50% limiting species
     #  consumption, fuel for lean mixtures, oxygen for rich mixtures
@@ -418,10 +412,10 @@ def calculate(
     try:
         mf_initial = gas.mole_fraction_dict()[limit_species]
     except KeyError:
-        mf_initial = 0.
-    gas.equilibrate('UV')
+        mf_initial = 0.0
+    gas.equilibrate("UV")
     mf_final = gas.mole_fraction_dict()[limit_species]
-    mf_gav = 0.5*(mf_initial - mf_final) + mf_final
+    mf_gav = 0.5 * (mf_initial - mf_final) + mf_final
     t_gav = np.nanmax(cv_out_0.time[cv_out_0.limit_species_mole_fraction > mf_gav], initial=0)
 
     # Ng et al definition of max thermicity width
@@ -429,9 +423,9 @@ def calculate(
     chi_ng = activation_energy * znd_result.induction_length / (cj_speed_density_corrected / znd_result.max_thermicity)
 
     induction_length = ModelResults(
-        westbrook=cv_out_0.induction_time*znd_result.velocity,
-        westbrook_2=cv_out_0.induction_time*(cj_speed - znd_result.velocity),
-        gavrikov=t_gav*znd_result.velocity,
+        westbrook=cv_out_0.induction_time * znd_result.velocity,
+        westbrook_2=cv_out_0.induction_time * (cj_speed - znd_result.velocity),
+        gavrikov=t_gav * znd_result.velocity,
         ng=znd_result.induction_length,
     )
 
@@ -463,7 +457,7 @@ def calculate(
         znd_step=znd_result.step,
         znd_end_time=znd_result.end_time,
         znd_tries=znd_result.tries,
-        znd_max_temp_time=znd_result.max_temp_time
+        znd_max_temp_time=znd_result.max_temp_time,
     )
 
 
@@ -487,10 +481,7 @@ def calculate_westbrook_only(
     spec_indices: Optional[list[int]] = None,
     db_path: Optional[str] = None,
 ) -> CellSizeResults:
-    if db_path is not None:
-        db = sdtoolbox.output.SqliteDataBase(path=db_path)
-    else:
-        db = None
+    db = sdtoolbox.output.SqliteDataBase(path=db_path) if db_path is not None else None
 
     conditions_ids = []
 
@@ -561,10 +552,7 @@ def calculate_westbrook_only(
     gas.TPX = temp_a, press_vn, q
 
     #  Gather limiting species and index -- fuel for lean mixtures, oxygen for rich mixtures
-    if equivalence <= 1:
-        limit_species = fuel
-    else:
-        limit_species = 'O2'
+    limit_species = fuel if equivalence <= 1 else "O2"
     limit_species_idx = gas.species_index(limit_species)
 
     if db is not None:
@@ -586,16 +574,16 @@ def calculate_westbrook_only(
     induction_length = ModelResults(
         westbrook=cv_out_0.induction_time * znd_velocity,
         westbrook_2=cv_out_0.induction_time * (cj_speed - znd_velocity),
-        gavrikov=np.NaN,
-        ng=np.NaN,
+        gavrikov=np.nan,
+        ng=np.nan,
     )
 
     # calculate and return cell size results
     cell_size = ModelResults(
         westbrook=_cell_size_westbrook(induction_length=induction_length.westbrook),
         westbrook_2=_cell_size_westbrook(induction_length=induction_length.westbrook_2),
-        gavrikov=np.NaN,
-        ng=np.NaN,
+        gavrikov=np.nan,
+        ng=np.nan,
     )
 
     if db is not None:
@@ -621,8 +609,8 @@ def calculate_westbrook_only(
                     "u_znd": znd_velocity,
                     "u_cj": cj_speed,
                     "cell_size": cell_size.westbrook,
-                    "cell_size_2": _cell_size_westbrook(cv_out_0.induction_time * (cj_speed - znd_velocity))
-                }
+                    "cell_size_2": _cell_size_westbrook(cv_out_0.induction_time * (cj_speed - znd_velocity)),
+                },
             )
             con.commit()
 
@@ -670,7 +658,7 @@ def _cell_size_ng(chi_ng: float, induction_length: float) -> float:
     Calculates cell size using the correlation given by Ng, H. D., Ju, Y.,
     & Lee, J. H. S. (2007). Assessment of detonation hazards in
     high-pressure hydrogen storage from chemical sensitivity analysis.
-    International Journal of Hydrogen Energy, 32(1), 93–99.
+    International Journal of Hydrogen Energy, 32(1), 93-99.
     https://doi.org/10.1016/j.ijhydene.2006.03.012 using equations (1) and
     (2) along with the coefficients given in Table 1.
 
@@ -688,7 +676,7 @@ def _cell_size_ng(chi_ng: float, induction_length: float) -> float:
     b = np.array([-0.02929128383850, 1.026325073064710e-5, -1.031921244571857e-9])
 
     # Equation 1
-    chi_pow = np.power(chi_ng, range(1, len(a)+1))
+    chi_pow = np.power(chi_ng, range(1, len(a) + 1))
     cell_size = (a_0 + (a / chi_pow + b * chi_pow).sum()) * induction_length
 
     return cell_size
@@ -698,8 +686,8 @@ def _cell_size_gavrikov(temp_0: float, temp_vn: float, activation_energy: float,
     """
     Calculates cell size using the correlation given by Gavrikov, A.I.,
     Efimenko, A.A., & Dorofeev, S.B. (2000). A model for detonation cell
-    size prediction from chemical kinetics. Combustion and Flame, 120(1–2),
-    19–33. https://doi.org/10.1016/S0010-2180(99)00076-0 using equation (5)
+    size prediction from chemical kinetics. Combustion and Flame, 120(1-2),
+    19-33. https://doi.org/10.1016/S0010-2180(99)00076-0 using equation (5)
     along with coefficients given in Table 1
 
     Parameters
@@ -726,15 +714,18 @@ def _cell_size_gavrikov(temp_0: float, temp_vn: float, activation_energy: float,
 
     # Equation 5
     gav_y = temp_vn / temp_0
-    cell_size = np.power(
-        10,
-        gav_y * (a * gav_y - b)
-        + activation_energy * (c * activation_energy - d + (e - f * gav_y) * gav_y)
-        + g * np.log(gav_y)
-        + h * np.log(activation_energy)
-        + gav_y * (i / activation_energy - k * gav_y / np.power(activation_energy, m))
-        - j
-    ) * induction_length
+    cell_size = (
+        np.power(
+            10,
+            gav_y * (a * gav_y - b)
+            + activation_energy * (c * activation_energy - d + (e - f * gav_y) * gav_y)
+            + g * np.log(gav_y)
+            + h * np.log(activation_energy)
+            + gav_y * (i / activation_energy - k * gav_y / np.power(activation_energy, m))
+            - j,
+        )
+        * induction_length
+    )
 
     return cell_size
 
@@ -744,7 +735,7 @@ def _cell_size_westbrook(induction_length: float) -> float:
     Calculates cell size using the correlation given by Westbrook, C. K., &
     Urtiew, P. A. (1982). Chemical kinetic prediction of critical parameters
     in gaseous detonations. Symposium (International) on Combustion, 19(1),
-    615–623. https://doi.org/10.1016/S0082-0784(82)80236-1
+    615-623. https://doi.org/10.1016/S0082-0784(82)80236-1
 
     Parameters
     ----------

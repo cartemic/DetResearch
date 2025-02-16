@@ -9,6 +9,7 @@ CREATED BY:
     CIRE and Propulsion Lab
     cartemic@oregonstate.edu
 """
+
 import dataclasses
 import sqlite3
 from functools import lru_cache
@@ -58,7 +59,7 @@ class TestConditions:
             self.ind_len_west,
             self.cell_size_ng,
             self.cell_size_gav,
-            self.cell_size_west
+            self.cell_size_west,
         )
 
 
@@ -84,7 +85,7 @@ class PerturbedResults:
 
     def to_dict(self):
         d = dataclasses.asdict(self)
-        return {k: v for (k, v) in d.items()}
+        return dict(d.items())
 
 
 def _table_exists(cur: sqlite3.Cursor, name: str) -> bool:
@@ -195,6 +196,8 @@ class BaseReactionTable:
         return bool(self.cur.fetchone()["has_some"])
 
 
+# Allow manipulation of _test_id
+# ruff: noqa: SLF001
 class TestConditionsTable:
     name = "test_conditions"
 
@@ -422,7 +425,7 @@ class PerturbedResultsTable:
         """
         self.cur.execute(
             f"SELECT * from {self.name} WHERE (test_id, rxn_no) = (:test_id, :rxn_no)",
-            dict(test_id=test_id, rxn_no=rxn_no),
+            {"test_id": test_id, "rxn_no": rxn_no},
         )
 
         return len(self.cur.fetchall()) > 0
@@ -506,7 +509,7 @@ class PerturbedResultsTable:
         """
         Fetches all rows from the current test.
         """
-        self.cur.execute(f"SELECT * FROM {self.name} WHERE test_id = :test_id", dict(test_id=test_id))
+        self.cur.execute(f"SELECT * FROM {self.name} WHERE test_id = :test_id", {"test_id": test_id})
 
         return [self._row_to_perturbed_results(row) for row in self.cur.fetchall()]
 
@@ -516,7 +519,7 @@ class PerturbedResultsTable:
         """
         self.cur.execute(
             f"SELECT * FROM {self.name} WHERE (test_id, rxn_no) = (:test_id, :rxn_no)",
-            dict(test_id=test_id, rxn_no=rxn_no),
+            {"test_id": test_id, "rxn_no": rxn_no},
         )
 
         return self._row_to_perturbed_results(self.cur.fetchone())

@@ -32,8 +32,9 @@ Tested with:
 Under these operating systems:
     Windows 10
 """
-import numpy as np
 import cantera as ct
+import numpy as np
+
 import sdtoolbox as sd
 
 
@@ -102,14 +103,14 @@ def ng(delta, chi):
                 (b3 * chi + b2) * chi + b1) * chi)
 
 
-if __name__ == '__main__':
-    print('demo_ZND_CJ_cell')
+if __name__ == "__main__":
+    print("demo_ZND_CJ_cell")
 
     P1 = 100000
     T1 = 300
-    q = 'H2:2 O2:1 N2:3.76'
-    mech = 'Mevel2017.cti'
-    fname = 'h2air'
+    q = "H2:2 O2:1 N2:3.76"
+    mech = "Mevel2017.cti"
+    fname = "h2air"
 
     cj_speed = sd.postshock.CJspeed(P1, T1, q, mech)
 
@@ -144,8 +145,8 @@ if __name__ == '__main__':
     CVout2 = sd.cv.cvsolve(gas)
 
     # Approximate effective activation energy for CV explosion
-    taua = CVout1['ind_time']
-    taub = CVout2['ind_time']
+    taua = CVout1["ind_time"]
+    taub = CVout2["ind_time"]
     if taua == 0 or taub == 0:
         theta_effective_CV = 0
     else:
@@ -156,125 +157,125 @@ if __name__ == '__main__':
     #  Find Gavrikov induction length based on 50% limiting species consumption,
     #  fuel for lean mixtures, oxygen for rich mixtures
     #  Westbrook time based on 50% temperature rise
-    limit_species = 'H2'
+    limit_species = "H2"
     limit_species_loc = gas.species_index(limit_species)
     gas.TPX = Ts, Ps, q
     X_initial = gas.mole_fraction_dict()[limit_species]
-    gas.equilibrate('UV')
+    gas.equilibrate("UV")
     X_final = gas.mole_fraction_dict()[limit_species]
     T_final = gas.T
     X_gav = 0.5*(X_initial - X_final) + X_final
     T_west = 0.5*(T_final - Ts) + Ts
-    bb = len(CVout1['speciesX'][:, limit_species_loc])
+    bb = len(CVout1["speciesX"][:, limit_species_loc])
 
     t_gav = np.nanmax(
         np.concatenate([
-            CVout1['time'][CVout1['speciesX'][limit_species_loc] > X_gav],
+            CVout1["time"][CVout1["speciesX"][limit_species_loc] > X_gav],
             [0]
         ])
     )
-    x_gav = t_gav*out['U'][0]
+    x_gav = t_gav*out["U"][0]
 
     t_west = np.nanmax(
         np.concatenate([
-            CVout1['time'][CVout1['T'] < T_west],
+            CVout1["time"][CVout1["T"] < T_west],
             [0]
         ])
     )
-    x_west = t_west*out['U'][0]
+    x_west = t_west*out["U"][0]
 
     # Ng et al definition of max thermicity width
-    max_thermicity_width_ZND = u_cj/max(out['thermicity'])
-    chi_ng = theta_effective_CV*out['ind_len_ZND']/max_thermicity_width_ZND
+    max_thermicity_width_ZND = u_cj/max(out["thermicity"])
+    chi_ng = theta_effective_CV*out["ind_len_ZND"]/max_thermicity_width_ZND
     cell_gav = gavrikov(x_gav, theta_effective_CV, Ts, T1)
-    cell_ng = ng(out['ind_len_ZND'], chi_ng)
+    cell_ng = ng(out["ind_len_ZND"], chi_ng)
 
-    print('ZND computation results ')
-    print('Mixture ', q)
-    print('Mechanism ', mech)
-    print('Initial temperature {0:8.3e} K'.format(T1))
-    print('Initial pressure {0:8.3e} Pa'.format(P1))
-    print('CJ speed {0:8.3e} m/s'.format(cj_speed))
-    print(' ')
+    print("ZND computation results ")
+    print("Mixture ", q)
+    print("Mechanism ", mech)
+    print("Initial temperature {0:8.3e} K".format(T1))
+    print("Initial pressure {0:8.3e} Pa".format(P1))
+    print("CJ speed {0:8.3e} m/s".format(cj_speed))
+    print(" ")
     print(
-        'Reaction zone computation end time = {0:8.3e} s'.format(
-            out['tfinal']
+        "Reaction zone computation end time = {0:8.3e} s".format(
+            out["tfinal"]
         )
     )
     print(
-        'Reaction zone computation end distance = {0:8.3e} m'.format(
-            out['xfinal']
+        "Reaction zone computation end distance = {0:8.3e} m".format(
+            out["xfinal"]
         )
     )
-    print(' ')
-    print('T (K), initial = {0:1.5f}, final {1:1.5f}, max {2:1.5f}'.format(
-            out['T'][0], out['T'][-1], max(out['T'])
-        )
-    )
-    print(
-        'P (Pa), initial = {0:1.3f}, final {1:1.3f}, max {2:1.3f}'.format(
-            out['P'][0], out['P'][-1], max(out['P'])
+    print(" ")
+    print("T (K), initial = {0:1.5f}, final {1:1.5f}, max {2:1.5f}".format(
+            out["T"][0], out["T"][-1], max(out["T"])
         )
     )
     print(
-        'M, initial = initial = {0:1.3f}, final {1:1.3f}, max {2:1.3f}'.format(
-            out['M'][0], out['M'][-1], max(out['M'])
+        "P (Pa), initial = {0:1.3f}, final {1:1.3f}, max {2:1.3f}".format(
+            out["P"][0], out["P"][-1], max(out["P"])
         )
     )
     print(
-        'u (m/s), initial = {0:1.5f}, final {1:1.5f}, cj {2:1.5f}'.format(
-            out['U'][0], out['U'][-1], u_cj
-        )
-    )
-    print(' ')
-    print(
-        'Reaction zone thermicity half-width = {0:8.3e} m'.format(
-            out['exo_len_ZND']
+        "M, initial = initial = {0:1.3f}, final {1:1.3f}, max {2:1.3f}".format(
+            out["M"][0], out["M"][-1], max(out["M"])
         )
     )
     print(
-        'Reaction zone maximum thermicity distance = {0:8.3e} ,'.format(
-            out['ind_len_ZND']
+        "u (m/s), initial = {0:1.5f}, final {1:1.5f}, cj {2:1.5f}".format(
+            out["U"][0], out["U"][-1], u_cj
+        )
+    )
+    print(" ")
+    print(
+        "Reaction zone thermicity half-width = {0:8.3e} m".format(
+            out["exo_len_ZND"]
         )
     )
     print(
-        'Reaction zone thermicity half-time = {0:8.3e} s'.format(
-            out['exo_time_ZND']
+        "Reaction zone maximum thermicity distance = {0:8.3e} ,".format(
+            out["ind_len_ZND"]
         )
     )
     print(
-        'Reaction zone maximum thermicity time = {0:8.3e} s'.format(
-            out['ind_time_ZND']
+        "Reaction zone thermicity half-time = {0:8.3e} s".format(
+            out["exo_time_ZND"]
         )
     )
     print(
-        'Reaction zone width (u_cj/sigmadot_max) = {0:8.3e} m'.format(
+        "Reaction zone maximum thermicity time = {0:8.3e} s".format(
+            out["ind_time_ZND"]
+        )
+    )
+    print(
+        "Reaction zone width (u_cj/sigmadot_max) = {0:8.3e} m".format(
             max_thermicity_width_ZND
         )
     )
-    print(' ')
-    print('CV computation results ')
-    print('Time to dT/dt_max = {0:8.3e} s'.format(CVout1['ind_time']))
+    print(" ")
+    print("CV computation results ")
+    print("Time to dT/dt_max = {0:8.3e} s".format(CVout1["ind_time"]))
     print(
-        'Distance to dT/dt_max = {0:8.3e} m'.format(
-            CVout1['ind_time'] * out['U'][0]
+        "Distance to dT/dt_max = {0:8.3e} m".format(
+            CVout1["ind_time"] * out["U"][0]
         )
     )
-    print('Reduced activation energy) = {0:8.3e}'.format(theta_effective_CV))
-    print('Time to 50% consumption = {0:8.3e} s'.format(t_gav))
-    print('Distance to 50% consumption = {0:8.3e} m'.format(x_gav))
-    print('Time to 50% temperature rise = {0:8.3e} s'.format(t_west))
-    print('Distance to 50% temperature = {0:8.3e} m'.format(x_west))
-    print(' ')
-    print('Cell size predictions ')
-    print('Gavrikov correlation {0:8.3e} m'.format(cell_gav))
-    print('Ng et al Chi Parameter {0:8.3e} m'.format(chi_ng))
-    print('Ng et al correlation {0:8.3e} m'.format(cell_ng))
-    print('Westbrook correlation {0:8.3e} m'.format(29*x_west))
+    print("Reduced activation energy) = {0:8.3e}".format(theta_effective_CV))
+    print("Time to 50% consumption = {0:8.3e} s".format(t_gav))
+    print("Distance to 50% consumption = {0:8.3e} m".format(x_gav))
+    print("Time to 50% temperature rise = {0:8.3e} s".format(t_west))
+    print("Distance to 50% temperature = {0:8.3e} m".format(x_west))
+    print(" ")
+    print("Cell size predictions ")
+    print("Gavrikov correlation {0:8.3e} m".format(cell_gav))
+    print("Ng et al Chi Parameter {0:8.3e} m".format(chi_ng))
+    print("Ng et al correlation {0:8.3e} m".format(cell_ng))
+    print("Westbrook correlation {0:8.3e} m".format(29*x_west))
 
     sd.utilities.znd_plot(
         out,
         maxx=0.002,
-        major_species={'H2', 'O2', 'H2O'},
-        minor_species={'H', 'O', 'OH', 'H2O2', 'HO2'}
+        major_species={"H2", "O2", "H2O"},
+        minor_species={"H", "O", "OH", "H2O2", "HO2"}
     )

@@ -4,6 +4,10 @@ version = "0.1.0"
 description = ""
 authors = ["Mick <cartemic@proton.me>"]
 readme = "README.md"
+packages = [
+    { include = "sdtoolbox" },
+    { include = "scripts" }
+]
 
 [tool.poetry.dependencies]
 python = "=3.12.*"
@@ -11,7 +15,7 @@ pip = "^24.3.1"
 cantera = "^3.1.0"
 h5py = "^3.12.1"
 nptdms = "^1.9.0"
-numpy = "^2.2.1"
+numpy = "<2.1"
 pandas = "^2.2.3"
 pint = "^0.24.4"
 scikit-image = "^0.25.0"
@@ -20,6 +24,7 @@ tables = "^3.10.2"
 tqdm = "^4.67.1"
 uncertainties = "^3.2.2"
 retry = "^0.9.2"
+numba = "^0.60.0"
 
 [tool.poetry.group.docs.dependencies]
 nbsphinx = "^0.9.6"
@@ -54,9 +59,10 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.ruff]
 line-length = 120
+extend-exclude = ["sdtoolbox", "sd_matlab_test", "*.ipynb"]
 lint.select = [
     "A",  # Prevent builtin shadowing
-    "ANN",  # Check for missing type annotations and `typing.Any`
+#    "ANN",  # Check for missing type annotations and `typing.Any`
     "ARG",  # Check for unused args
     "C4",  # flake8-comprehension checks
     "COM818",  # Comma police, arrest this man
@@ -97,6 +103,10 @@ lint.ignore = [
     "ERA001",  # todo: temporarily allow commented-out code :(
     "PLR0913",  # todo: temporarily allow piles of function arguments
     "ANN10",  # Allow untyped `self`, `cls`
+    "PD002",  # Not worth removing inplace at this point
+    "PLR0915",  # Not worth refactoring long things at this point
+    "PLR0912",  # Same goes for overly branched things
+    "PD008",  # Allow DataFrame.at()
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -104,7 +114,7 @@ lint.ignore = [
     "E402",  # Allow interesting imports in __init__, e.g. for version checks
     "F401",  # Unused imports can be used to define the shape of the API and are therefore okay in __init__
 ]
-"**/*_test.py" = [
+"**/test_*.py" = [
     "S101",  # Allow `assert` in tests
     "PLR2004",  # Allow direct comparison with values in tests
     "SLF001",  # Allow private member access in tests

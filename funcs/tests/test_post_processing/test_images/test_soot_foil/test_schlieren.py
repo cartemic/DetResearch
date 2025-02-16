@@ -10,19 +10,15 @@ class TestBinarizeArray(TestCase):
         """
         binarize_array raises an error on bad values
         """
-        with self.subTest("zero"):
-            with self.assertRaises(ValueError):
-                deltas._binarize_array(np.array([0]))
+        with self.subTest("zero"), self.assertRaises(ValueError):
+            deltas._binarize_array(np.array([0]))
 
-        with self.subTest("negative"):
-            with self.assertRaises(ValueError):
-                deltas._binarize_array(np.array([0]))
+        with self.subTest("negative"), self.assertRaises(ValueError):
+            deltas._binarize_array(np.array([0]))
 
-        with self.subTest("NaN"):
-            with self.assertRaises(ValueError):
-                with self.assertWarns(RuntimeWarning):
-                    # numpy throws a runtime warning for all-NaN slice
-                    deltas._binarize_array(np.array([np.NaN]))
+        with self.subTest("NaN"), self.assertRaises(ValueError), self.assertWarns(RuntimeWarning):
+            # numpy throws a runtime warning for all-NaN slice
+            deltas._binarize_array(np.array([np.nan]))
 
     def test_good_value(self):
         """
@@ -45,7 +41,7 @@ class TestGetDiffsFromSubRow(TestCase):
         """
         get_diffs_from_sub_row works properly
         """
-        sub_row = np.array([np.NaN, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1])
+        sub_row = np.array([np.nan, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1])
         good = np.array([3, 2, 2])
 
         test = deltas._get_diffs_from_sub_row(sub_row)
@@ -58,7 +54,7 @@ class TestGetDiffsFromRow(TestCase):
         """
         get_diffs_from_row handles all-NaN input
         """
-        test = deltas._get_diffs_from_row(np.array([np.NaN]))
+        test = deltas._get_diffs_from_row(np.array([np.nan]))
 
         np.testing.assert_array_equal(test, np.array([]))
 
@@ -74,7 +70,7 @@ class TestGetDiffsFromRow(TestCase):
         """
         get_diffs_from_row works properly
         """
-        row = np.array([1, 0, 0, 1, np.NaN, 1, 0, 1, np.NaN, np.NaN, 1, np.NaN])
+        row = np.array([1, 0, 0, 1, np.nan, 1, 0, 1, np.nan, np.nan, 1, np.nan])
         good = np.array([3, 2])
 
         test = deltas._get_diffs_from_row(row)
@@ -100,16 +96,20 @@ class TestSlowGetDeltas(TestCase):
         """
         _slow_get_deltas works properly
         """
-        img = np.array([
-            [1, 0, 1, 0, 0, 1, 0, 1],
-            [1, 0, 1, 0, 0, 1, 0, 1],
-            [1, 0, 1, 0, 0, 1, 0, 1],
-        ])
-        mask = np.array([
-            [0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 1, 0, 0, 0, 0, 0, 1],  # NaNs out both 0 and 1
-            [0, 1, 1, 1, 1, 0, 0, 0],  # NaNs out both 0 and 1
-        ])
+        img = np.array(
+            [
+                [1, 0, 1, 0, 0, 1, 0, 1],
+                [1, 0, 1, 0, 0, 1, 0, 1],
+                [1, 0, 1, 0, 0, 1, 0, 1],
+            ]
+        )
+        mask = np.array(
+            [
+                [0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 1, 0, 0, 0, 0, 0, 1],  # NaNs out both 0 and 1
+                [0, 1, 1, 1, 1, 0, 0, 0],  # NaNs out both 0 and 1
+            ]
+        )
         good = np.array([2, 3, 2, 3, 2])  # second row only has the 3 px gap
 
         test = deltas._slow_get_deltas(
@@ -123,14 +123,18 @@ class TestSlowGetDeltas(TestCase):
         """
         _slow_get_deltas works properly
         """
-        img = np.array([
-            [1, 0, 1, 0, 0, 1, 0, 1],
-            [1, 0, 1, 0, 0, 1, 0, 1],
-        ])
-        mask = np.array([
-            [0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0],
-        ])
+        img = np.array(
+            [
+                [1, 0, 1, 0, 0, 1, 0, 1],
+                [1, 0, 1, 0, 0, 1, 0, 1],
+            ]
+        )
+        mask = np.array(
+            [
+                [0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0],
+            ]
+        )
         good = np.array([2, 3, 2, 2, 3, 2])
 
         test = deltas._slow_get_deltas(

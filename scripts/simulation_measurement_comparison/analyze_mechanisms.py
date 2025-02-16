@@ -1,24 +1,23 @@
 from __future__ import annotations
+
 import dataclasses
 import glob
 import itertools
-import warnings
-from multiprocessing import Lock, Pool
 import os.path
 import time
+import warnings
 from enum import Enum
-from typing import Optional, Tuple, List, Any, Dict, Callable
+from multiprocessing import Lock, Pool
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import cantera as ct
 import numpy as np
 import pandas as pd
 import tqdm
-from sdtoolbox.postshock import CJspeed
 
+from funcs.simulation import cell_size, thermo
 from funcs.simulation.sensitivity.istarmap import istarmap  # noqa: F401
-from funcs.simulation import cell_size
-from funcs.simulation import thermo
-
+from sdtoolbox.postshock import CJspeed
 
 DATA_FILE = os.path.join(os.path.abspath(os.path.dirname(__file__)), "mechanism_comparison_results.h5")
 lock = Lock()
@@ -54,23 +53,23 @@ class DataUpdate:
 
 
 class Mechanism(Enum):
-    GRI3 = "gri30.cti"
-    GRI3HighT = "gri30_highT.cti"
-    GRI3Ion = "gri30_ion.cti"
-    # Mevel2015 = "Mevel2015.cti"  # contains undeclared duplicate reactions
-    # Mevel2018 = "Mevel2018.cti"  # contains undeclared duplicate reactions
-    # HexanePartial = "hexanePartial.cti"  # contains undeclared duplicate reactions
-    SanDiego = "sandiego20161214.cti"
-    JetSurf = "JetSurf2.cti"
-    Blanquart = "Blanquart2018.cti"
-    Aramco = "aramco2.cti"
-    FFCM = "ffcm1.cti"
+    GRI3 = "gri30.yaml"
+    GRI3HighT = "gri30_highT.yaml"
+    GRI3Ion = "gri30_ion.yaml"
+    # Mevel2015 = "Mevel2015.yaml"  # contains undeclared duplicate reactions
+    # Mevel2018 = "Mevel2018.yaml"  # contains undeclared duplicate reactions
+    # HexanePartial = "hexanePartial.yaml"  # contains undeclared duplicate reactions
+    SanDiego = "sandiego20161214.yaml"
+    JetSurf = "JetSurf2.yaml"
+    Blanquart = "Blanquart2018.yaml"
+    Aramco = "aramco2.yaml"
+    FFCM = "ffcm1.yaml"
 
     @classmethod
     def all(cls) -> List[Mechanism]:
         gri = []
         non_gri = []
-        for _, mech in cls.__members__.items():
+        for mech in cls.__members__.values():
             if "gri3" in mech.value:
                 gri.append(mech)
             else:
@@ -85,7 +84,7 @@ class Mechanism(Enum):
     @classmethod
     def min_itemsize(cls):
         longest = 0
-        for _, mech in cls.__members__.items():
+        for mech in cls.__members__.values():
             longest = max(len(mech.value), longest)
 
         return longest
@@ -93,7 +92,7 @@ class Mechanism(Enum):
     @classmethod
     def validate_all(cls):
         print("Validating mechanisms")
-        ctis = [mech.value for _, mech in cls.__members__.items()]
+        ctis = [mech.value for mech in cls.__members__.values()]
         with Pool() as p:
             results = p.map(cls._validate, ctis)
         p.join()
@@ -104,7 +103,7 @@ class Mechanism(Enum):
         good_mechanisms = []
         bad_mechanisms = []
         unparseable_mechanisms = []
-        for (cti, success) in results:
+        for cti, success in results:
             if success:
                 good_mechanisms.append(cti)
             elif success is None:
@@ -136,20 +135,23 @@ class Mechanism(Enum):
             for s in check_species:
                 if s not in good_species:
                     return cti, False
-            return cti, True
-        except:
+        except Exception:
             return cti, None
+        else:
+            return cti, True
 
     @classmethod
     def validate_all_cantera_mechanisms(cls):
         mechs_to_validate = set()
         for d in ct.get_data_directories():
-            mechs_to_validate.update([
-                os.path.split(mech)[1] for mech in
-                glob.glob(os.path.join(d, "*.cti"))
-                + glob.glob(os.path.join(d, "*.xml"))
-                + glob.glob(os.path.join(d, "*.yaml"))
-            ])
+            mechs_to_validate.update(
+                [
+                    os.path.split(mech)[1]
+                    for mech in glob.glob(os.path.join(d, "*.yaml"))
+                    + glob.glob(os.path.join(d, "*.xml"))
+                    + glob.glob(os.path.join(d, "*.yaml"))
+                ]
+            )
 
         print("Validating _all_ mechanisms")
         with Pool() as p:
@@ -205,7 +207,7 @@ class InitialConditions:
                     diluent_mol_frac,
                     diluent.value,
                     InitialConditions.t0,
-                    InitialConditions.p0
+                    InitialConditions.p0,
                 )
 
             new_mole_fractions = thermo.diluted_species_dict(
@@ -219,12 +221,7 @@ class InitialConditions:
 
 
 def calculate_all_new(getter_func: Callable, diluent_mol_fracs: Tuple[float, ...], force_calc: bool):
-    arg_combinations = tuple(itertools.product(
-        Mechanism.all(),
-        Diluent.all(),
-        diluent_mol_fracs,
-        (force_calc,)
-    ))
+    arg_combinations = tuple(itertools.product(Mechanism.all(), Diluent.all(), diluent_mol_fracs, (force_calc,)))
     # cut down number of processes to conserve RAM
     with Pool(initializer=init, initargs=(lock,), processes=8) as pool:
         # noinspection PyUnresolvedReferences,PyTestUnpassedFixture
@@ -233,6 +230,7 @@ def calculate_all_new(getter_func: Callable, diluent_mol_fracs: Tuple[float, ...
     pool.join()
 
 
+# ruff: noqa: PLW0603
 def init(l):  # noqa: E741
     global lock
     lock = l
@@ -245,15 +243,19 @@ def _new_data_row(
     co2e_dil_mf: float,
     updates_dict: Dict[str, str],
 ):
-    data = pd.DataFrame({
-        DataColumn.mechanism.value: mech.value,
-        DataColumn.fuel.value: InitialConditions.fuel,
-        DataColumn.oxidizer.value: InitialConditions.oxidizer,
-        DataColumn.diluent.value: diluent.as_string(),
-        DataColumn.co2e_diluent_mole_fraction.value: co2e_dil_mf,
-        DataColumn.actual_diluent_mole_fraction.value: actual_dil_mf,
-        **updates_dict
-    }, index=[0], columns=DataColumn.all())
+    data = pd.DataFrame(
+        {
+            DataColumn.mechanism.value: mech.value,
+            DataColumn.fuel.value: InitialConditions.fuel,
+            DataColumn.oxidizer.value: InitialConditions.oxidizer,
+            DataColumn.diluent.value: diluent.as_string(),
+            DataColumn.co2e_diluent_mole_fraction.value: co2e_dil_mf,
+            DataColumn.actual_diluent_mole_fraction.value: actual_dil_mf,
+            **updates_dict,
+        },
+        index=[0],
+        columns=DataColumn.all(),
+    )
     object_keys = (
         DataColumn.mechanism.value,
         DataColumn.fuel.value,
@@ -273,34 +275,29 @@ def update_results(
     co2e_dil_mf: float,
     updates: List[DataUpdate],
 ):
-    with lock:
-        with pd.HDFStore(DATA_FILE, "a") as store:
-            updates_dict = {update.column.value: update.value for update in updates}
-            if "/data" in store.keys():
-                for update in updates:
-                    mask = (
-                        (store["data"][DataColumn.mechanism.value] == mech.value)
-                        & (store["data"][DataColumn.diluent.value] == diluent.as_string())
-                        & np.isclose(store["data"][DataColumn.co2e_diluent_mole_fraction.value], co2e_dil_mf)
-                    )
-                    if mask.any():
-                        update_row = store["data"][mask]
-                        update_row[update.column.value] = update.value
-                        store.remove("data", where=mask)
-                        store.append("data", update_row, format="table")
-                    else:
-                        store.append(
-                            "data", _new_data_row(mech, diluent, actual_dil_mf, co2e_dil_mf, updates_dict)
-                        )
-                        break
-            else:
-                df = _new_data_row(mech, diluent, actual_dil_mf, co2e_dil_mf, updates_dict)
-                store.put(
-                    "data", df, format="table", min_itemsize={DataColumn.mechanism.value: Mechanism.min_itemsize()}
+    with lock, pd.HDFStore(DATA_FILE, "a") as store:
+        updates_dict = {update.column.value: update.value for update in updates}
+        if "/data" in store:
+            for update in updates:
+                mask = (
+                    (store["data"][DataColumn.mechanism.value] == mech.value)
+                    & (store["data"][DataColumn.diluent.value] == diluent.as_string())
+                    & np.isclose(store["data"][DataColumn.co2e_diluent_mole_fraction.value], co2e_dil_mf)
                 )
+                if mask.any():
+                    update_row = store["data"][mask]
+                    update_row[update.column.value] = update.value
+                    store.remove("data", where=mask)
+                    store.append("data", update_row, format="table")
+                else:
+                    store.append("data", _new_data_row(mech, diluent, actual_dil_mf, co2e_dil_mf, updates_dict))
+                    break
+        else:
+            data = _new_data_row(mech, diluent, actual_dil_mf, co2e_dil_mf, updates_dict)
+            store.put("data", data, format="table", min_itemsize={DataColumn.mechanism.value: Mechanism.min_itemsize()})
 
 
-def get_cj_speed(mech: Mechanism, diluent: Diluent, diluent_mol_frac: float, force_calc: bool = False,) -> float:
+def get_cj_speed(mech: Mechanism, diluent: Diluent, diluent_mol_frac: float, force_calc: bool = False) -> float:
     if diluent is Diluent.NONE:
         diluent_mol_frac = 0.0
     elif np.isclose(diluent_mol_frac, 0.0):
@@ -325,17 +322,9 @@ def _calculate_cj_speed(mech: Mechanism, diluent: Diluent, co2e_dil_mf: float) -
         actual_dil_mf = co2e_dil_mf  # = 0
 
     t0 = time.time()
-    cj = CJspeed(
-        P1=InitialConditions.p0,
-        T1=InitialConditions.t0,
-        q=gas.mole_fraction_dict(),
-        mech=mech.value
-    )
+    cj = CJspeed(P1=InitialConditions.p0, T1=InitialConditions.t0, q=gas.mole_fraction_dict(), mech=mech.value)
     t1 = time.time()
-    updates = [
-        DataUpdate(DataColumn.cj_speed, cj),
-        DataUpdate(DataColumn.cj_time, t1-t0)
-    ]
+    updates = [DataUpdate(DataColumn.cj_speed, cj), DataUpdate(DataColumn.cj_time, t1 - t0)]
     update_results(mech, diluent, actual_dil_mf, co2e_dil_mf, updates)
 
     return cj
@@ -343,16 +332,15 @@ def _calculate_cj_speed(mech: Mechanism, diluent: Diluent, co2e_dil_mf: float) -
 
 def _try_loading_value(mech: Mechanism, diluent: Diluent, co2e_dil_mf: float, col: DataColumn) -> Optional[float]:
     val = None
-    with lock:
-        with pd.HDFStore(DATA_FILE, "a") as store:
-            if "/data" in store.keys():
-                maybe_data = store["data"][
-                    (store["data"][DataColumn.mechanism.value] == mech.value)
-                    & (store["data"][DataColumn.diluent.value] == diluent.as_string())
-                    & np.isclose(store["data"][DataColumn.co2e_diluent_mole_fraction.value], co2e_dil_mf)
-                ]
-                if len(maybe_data):
-                    val = maybe_data[col.value].values[0]
+    with lock, pd.HDFStore(DATA_FILE, "a") as store:
+        if "/data" in store:
+            maybe_data = store["data"][
+                (store["data"][DataColumn.mechanism.value] == mech.value)
+                & (store["data"][DataColumn.diluent.value] == diluent.as_string())
+                & np.isclose(store["data"][DataColumn.co2e_diluent_mole_fraction.value], co2e_dil_mf)
+            ]
+            if len(maybe_data):
+                val = maybe_data[col.value].iloc[0]
 
     return val
 
@@ -414,7 +402,7 @@ def _simulate_cell_sizes(
         dt = t1 - t0
     except Exception:
         cell_sizes = cell_size.CellSizeResults.empty()
-        dt = np.NaN
+        dt = np.nan
 
     gavrikov = cell_sizes.cell_size.gavrikov
     ng = cell_sizes.cell_size.ng
@@ -423,7 +411,7 @@ def _simulate_cell_sizes(
         DataUpdate(DataColumn.gavrikov, gavrikov),
         DataUpdate(DataColumn.ng, ng),
         DataUpdate(DataColumn.westbrook, westbrook),
-        DataUpdate(DataColumn.cell_size_time, dt)
+        DataUpdate(DataColumn.cell_size_time, dt),
     ]
     update_results(mech, diluent, actual_dil_mf, co2e_dil_mf, updates)
 

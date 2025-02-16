@@ -15,7 +15,7 @@ if __name__ == "__main__":
     df_result = pd.DataFrame()
     use_multiprocessing = True
     n_cores = None  # None for all cores
-    mech = "gri30_highT.cti"
+    mech = "gri30_highT.yaml"
     fuel = "CH4"
     oxidizer = "N2O"
     dil_base = "CO2"
@@ -30,17 +30,7 @@ if __name__ == "__main__":
                 for dil_mf_base in dil_mfs_base:
                     if dil != dil_base:
                         # adjust mole fraction
-                        dil_mf = match_adiabatic_temp(
-                            mech,
-                            fuel,
-                            oxidizer,
-                            phi,
-                            dil_base,
-                            dil_mf_base,
-                            dil,
-                            t0,
-                            p0
-                        )
+                        dil_mf = match_adiabatic_temp(mech, fuel, oxidizer, phi, dil_base, dil_mf_base, dil, t0, p0)
                     else:
                         dil_mf = dil_mf_base
                     # run analysis and save results
@@ -54,7 +44,7 @@ if __name__ == "__main__":
                         dil,
                         dil_mf,
                         use_multiprocessing=use_multiprocessing,
-                        n_cores=n_cores
+                        n_cores=n_cores,
                     )
                     df_new = combine_results(df_new, ser_info_new)
                     df_result = pd.concat((df_result, df_new), axis=0)

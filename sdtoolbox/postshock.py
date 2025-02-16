@@ -292,7 +292,7 @@ def CJspeed(
         P1 = initial pressure (Pa)
         T1 = initial temperature (K)
         q = reactant species mole fractions in one of Cantera's recognized formats
-        mech = cti file containing mechanism data (e.g. 'gri30.cti')
+        mech = cti file containing mechanism data (e.g. 'gri30.yaml')
 
     OPTIONAL INPUT:
         fullOutput = set True for R-squared value and pre-formatted plot data
@@ -382,7 +382,7 @@ def PostShock_fr(
         P1 = initial pressure (Pa)
         T1 = initial temperature (K)
         q = reactant species mole fractions in one of Cantera's recognized formats
-        mech = cti file containing mechanism data (e.g. 'gri30.cti')
+        mech = cti file containing mechanism data (e.g. 'gri30.yaml')
     
     OUTPUT:
         gas = gas object at frozen post-shock state
@@ -425,7 +425,7 @@ def PostShock_eq(
         P1 = initial pressure (Pa)
         T1 = initial temperature (K)
         q = reactant species mole fractions in one of Cantera's recognized formats
-        mech = cti file containing mechanism data (e.g. 'gri30.cti')
+        mech = cti file containing mechanism data (e.g. 'gri30.yaml')
 
     OUTPUT:
         gas = gas object at equilibrium post-shock state
@@ -438,7 +438,7 @@ def PostShock_eq(
     gas = perturbation.perturbed_gas(mech=mech, rxn_no=perturbed_rxn_no, perturbation_fraction=perturbation_fraction)
 
     # INTIAL CONDITIONS    
-    # workaround to avoid unsized object error when only one species in a .cti file
+    # workaround to avoid unsized object error when only one species in a .yaml file
     # (flagged to be fixed in future Cantera version)
     if len(q) > 1:
         gas.TPX = T1, P1, q

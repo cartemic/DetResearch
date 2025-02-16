@@ -11,14 +11,16 @@
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
 import os
+
+from recommonmark.parser import CommonMarkParser
+
 # import sys
 # sys.path.insert(0, os.path.abspath('.'))
 from recommonmark.transform import AutoStructify
-from recommonmark.parser import CommonMarkParser
-
 
 # -- Project information -----------------------------------------------------
 
+# ruff: noqa: A001
 project = "ONR Detonation Tube Documentation"
 copyright = "2020, Mick Carter"
 author = "Mick Carter"
@@ -41,18 +43,16 @@ extensions = [
 autosummary_generate = True
 napoleon_google_docstring = False
 
-source_parsers = {
-    ".md": CommonMarkParser
-}
+source_parsers = {".md": CommonMarkParser}
 source_suffix = [".rst", ".md"]
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ['_templates']
+templates_path = ["_templates"]
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 
 # -- Options for HTML output -------------------------------------------------
@@ -61,9 +61,7 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 # a list of builtin themes.
 #
 html_theme = "sphinx_rtd_theme"
-html_theme_options = {
-    "collapse_navigation": False
-}
+html_theme_options = {"collapse_navigation": False}
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -92,6 +90,6 @@ def setup(app):
             "enable_auto_toc_tree": True,
             "auto_toc_max_depth": 4,
         },
-        True
+        True,
     )
     app.add_transform(AutoStructify)

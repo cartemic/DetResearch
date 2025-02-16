@@ -1,6 +1,7 @@
-from funcs.simulation import thermo
-import multiprocessing as mp
 import itertools
+import multiprocessing as mp
+
+from funcs.simulation import thermo
 
 FUEL = "CH4"
 OXIDIZER = "N2O"

@@ -8,14 +8,10 @@ def all_results(run_output):
     pass
 
 
-def measurements(
-        line_radii,
-        line_intensities,
-        df_measurements,
-        to_measure=None
-):
+def measurements(line_radii, line_intensities, df_measurements, to_measure=None):
     fig_meas, ax_meas = plt.subplots(
-        1, 3,
+        1,
+        3,
         figsize=(16, 4),
     )
     fig_meas.canvas.set_window_title("Measurements")
@@ -29,21 +25,14 @@ def measurements(
     # left plot
     title_meas_pks = "Measurement Peaks"
     if isinstance(to_measure, float):
-        title_meas_pks += r" (Relative Intensity $\geq$" + \
-                          f" {to_measure * 100:.0f}%)"
+        title_meas_pks += r" (Relative Intensity $\geq$" + f" {to_measure * 100:.0f}%)"
     elif isinstance(to_measure, int):
         title_meas_pks += f" (First {to_measure})"
     ax_meas[0].set_title(title_meas_pks)
     for i, rads in enumerate(line_radii):
         ax_meas[0].plot(
-            rads[
-                (rads >= min_radius) &
-                (rads <= max_radius)
-            ],
-            line_intensities[i][
-                (rads >= min_radius) &
-                (rads <= max_radius)
-            ],
+            rads[(rads >= min_radius) & (rads <= max_radius)],
+            line_intensities[i][(rads >= min_radius) & (rads <= max_radius)],
             alpha=0.5,
         )
     sns.scatterplot(
@@ -77,29 +66,19 @@ def measurements(
         data=df_measurements.sort_values(["Cell Size"]),
         ax=ax_meas[1],
         legend=False,
-        palette=["C0", "C1"]
+        palette=["C0", "C1"],
     )
 
     ax_meas[1].set_xlabel("Cell Size (mm)")
     ax_meas[1].set_ylabel("Relative Intensity (%)")
-    plt.setp(
-        ax_meas[1].get_xticklabels(),
-        rotation=30,
-        horizontalalignment="center"
-    )
+    plt.setp(ax_meas[1].get_xticklabels(), rotation=30, horizontalalignment="center")
 
     labels = []
     for i, (th, df_th) in enumerate(df_measurements.groupby("Theta")):
-        circle_plot(
-            df_th,
-            ax_meas[2],
-            marker_scale=0.5,
-            color=f"C{i}"
+        circle_plot(df_th, ax_meas[2], marker_scale=0.5, color=f"C{i}")
+        labels.append(rf"$\theta$ = {th:0.2f} deg")
 
-        )
-        labels.append(fr"$\theta$ = {th:0.2f} deg")
-
-    ax_meas[2].set_ylim([0, df_measurements["Cell Size"].max()*1.1])
+    ax_meas[2].set_ylim([0, df_measurements["Cell Size"].max() * 1.1])
     circles = [Circle((0, 0), color=f"C{i}") for i in range(len(labels))]
     for a in ax_meas:
         a.legend(circles, labels, frameon=False)
@@ -131,7 +110,6 @@ def image_filtering(
 
     fig_images, ax_images = plt.subplots(2, 3, figsize=figsize)
     fig_images.canvas.set_window_title("Images")
-    ax_images = ax_images
     for a in ax_images.flatten():
         a.axis("off")
     ax_images[0, 0].set_title("Base Image")
@@ -155,20 +133,20 @@ def image_filtering(
     return fig_images, ax_images
 
 
-def circle_plot(df_cells, ax, color="C0", marker_scale=1.):
+def circle_plot(df_cells, ax, color="C0", marker_scale=1.0):
     df_plot = df_cells.sort_values("Radius").reset_index(drop=True)
     for i, row in df_plot.iterrows():
         ax.plot(
-            i+1,
+            i + 1,
             row["Cell Size"],
             "o",
             color=color,
-            ms=row["Relative Energy"]*marker_scale,
+            ms=row["Relative Energy"] * marker_scale,
             alpha=0.7,
             clip_on=False,
         )
 
-    ax.set_xlim([0, len(df_cells)+1])
+    ax.set_xlim([0, len(df_cells) + 1])
     ax.set_ylim([0, ax.get_ylim()[1]])
     ax.set_title("Measured Cell Sizes")
     ax.set_xlabel("Peak #")

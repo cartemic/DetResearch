@@ -19,7 +19,7 @@ from sdtoolbox.thermo import soundspeed_fr
 FUEL = "CH4"
 OXIDIZER = "N2O"
 MECH = "gri30_highT.yaml"
-LOCAL_TZ = zoneinfo.ZoneInfo('US/Pacific')
+LOCAL_TZ = zoneinfo.ZoneInfo("US/Pacific")
 
 
 def main():
@@ -45,12 +45,12 @@ def read_in_measured_data():
         "measurements.h5",
     )
     with pd.HDFStore(data_loc, "r") as store:
-        df = store.data
+        data = store.data
 
-    df = df[(df["fuel"] == FUEL) & (df["oxidizer"] == OXIDIZER)]
+    data = data[(data["fuel"] == FUEL) & (data["oxidizer"] == OXIDIZER)]
     df_out = pd.DataFrame()
     for idx, ((diluent, phi_nom, dil_mf_nom), df_grouped) in enumerate(
-        df.groupby(["diluent", "phi_nom", "dil_mf_nom"])
+        data.groupby(["diluent", "phi_nom", "dil_mf_nom"])
     ):
         p_0, u_p_0 = get_column_mean_with_uncertainty(df_grouped, "p_0")
         t_0, u_t_0 = get_column_mean_with_uncertainty(df_grouped, "t_0")

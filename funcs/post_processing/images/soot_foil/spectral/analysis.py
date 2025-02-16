@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
-from scipy.signal import argrelmax
 from scipy.ndimage import gaussian_filter
+from scipy.signal import argrelmax
 from skimage import io
 from skimage.color import rgb2gray
 from skimage.filters import sobel
@@ -9,15 +9,7 @@ from skimage.filters import sobel
 from . import image
 
 
-def run(
-        image_path,
-        fft_pass,
-        delta_px,
-        delta_mm,
-        bg_subtract=True,
-        to_keep=None,
-        return_plot_outputs=False
-):
+def run(image_path, fft_pass, delta_px, delta_mm, bg_subtract=True, to_keep=None, return_plot_outputs=False):
     """
     todo: clean up this documentation
 
@@ -53,31 +45,19 @@ def run(
 
     # build and apply FFT mask
     reject_band = 20
-    reject_mask = image.get_reject_mask(
-        ang,
-        rad,
-        [0, 90, 180, 270],
-        reject_band,
-        fft_pass[1]
-    )
+    reject_mask = image.get_reject_mask(ang, rad, [0, 90, 180, 270], reject_band, fft_pass[1])
 
     fft = np.fft.fftshift(np.fft.fft2(img_base))
     psd_masked = image.grayscale(reject_mask * psd)  # reject only
     r_max = 250  # cut down on useless calcs by only looking at middle of psd
     best_angle_0 = image.find_best_angle(
-        psd_masked[xc-r_max:xc+r_max, yc-r_max:yc+r_max],
-        (reject_band, 90-reject_band)
+        psd_masked[xc - r_max : xc + r_max, yc - r_max : yc + r_max], (reject_band, 90 - reject_band)
     )
     best_angle_1 = image.find_best_angle(
-        psd_masked[xc-r_max:xc+r_max, yc-r_max:yc+r_max],
-        (90+reject_band, 180-reject_band)
+        psd_masked[xc - r_max : xc + r_max, yc - r_max : yc + r_max], (90 + reject_band, 180 - reject_band)
     )
     pass_mask = image.get_pass_mask(
-        ang,
-        rad,
-        [best_angle_0, best_angle_1, 180+best_angle_1, 180+best_angle_0],
-        fft_pass[0],
-        fft_pass[1]
+        ang, rad, [best_angle_0, best_angle_1, 180 + best_angle_1, 180 + best_angle_0], fft_pass[0], fft_pass[1]
     )
     psd_masked = image.grayscale(pass_mask * psd)  # pass only
     filtered = image.grayscale(
@@ -90,12 +70,10 @@ def run(
     # get edge detected PSD and recalculate best angles
     psd_final = image.calc_psd(edges)
     best_angle_0 = image.find_best_angle(
-        psd_final[xc-r_max:xc+r_max, yc-r_max:yc+r_max],
-        (reject_band, 90-reject_band)
+        psd_final[xc - r_max : xc + r_max, yc - r_max : yc + r_max], (reject_band, 90 - reject_band)
     )
     best_angle_1 = image.find_best_angle(
-        psd_final[xc-r_max:xc+r_max, yc-r_max:yc+r_max],
-        (90+reject_band, 180-reject_band)
+        psd_final[xc - r_max : xc + r_max, yc - r_max : yc + r_max], (90 + reject_band, 180 - reject_band)
     )
 
     # perform radial intensity scan
@@ -109,9 +87,9 @@ def run(
     )
 
     # find peaks
-    dist_mask_0 = (radius_0 > 0)
+    dist_mask_0 = radius_0 > 0
     idx_pks_0 = argrelmax(int_radius_0[dist_mask_0])[0]
-    dist_mask_1 = (radius_1 > 0)
+    dist_mask_1 = radius_1 > 0
     idx_pks_1 = argrelmax(int_radius_1[dist_mask_1])[0]
 
     # collect, filter and rescale measurements
@@ -123,7 +101,7 @@ def run(
         best_angle_0,
         psd_final.shape[0],
         to_keep=to_keep,
-        save_original=True
+        save_original=True,
     )
     df_cells_0["Theta"] = best_angle_0
     df_cells_1 = get_measurements_from_radial_scan(
@@ -134,7 +112,7 @@ def run(
         best_angle_1,
         psd_final.shape[0],
         to_keep=to_keep,
-        save_original=True
+        save_original=True,
     )
     df_cells_1["Theta"] = best_angle_1
     df_cells = pd.concat((df_cells_0, df_cells_1)).reset_index(drop=True)
@@ -142,12 +120,9 @@ def run(
 
     if return_plot_outputs:
         out = [
-            df_cells.sort_values(
-                ["Relative Energy"],
-                ascending=False
-            ).reset_index(drop=True),
-            dict(
-                image_filtering=[
+            df_cells.sort_values(["Relative Energy"], ascending=False).reset_index(drop=True),
+            {
+                "image_filtering": [
                     img_base,
                     psd,
                     psd_masked,
@@ -155,26 +130,17 @@ def run(
                     edges,
                     psd_final,
                 ],
-                measurements=[
-                    (
-                        radius_0[dist_mask_0],
-                        radius_1[dist_mask_1]
-                    ),
-                    (
-                        int_radius_0[dist_mask_0],
-                        int_radius_1[dist_mask_1]
-                    ),
+                "measurements": [
+                    (radius_0[dist_mask_0], radius_1[dist_mask_1]),
+                    (int_radius_0[dist_mask_0], int_radius_1[dist_mask_1]),
                     df_cells,
-                    to_keep
+                    to_keep,
                 ],
-            )
+            },
         ]
 
     else:
-        out = df_cells.sort_values(
-            ["Relative Energy"],
-            ascending=False
-        ).reset_index(drop=True)
+        out = df_cells.sort_values(["Relative Energy"], ascending=False).reset_index(drop=True)
 
     return out
 
@@ -184,22 +150,16 @@ def load_image(image_path):
 
 
 def get_measurements_from_radial_scan(
-        radii,
-        intensities,
-        delta_px,
-        delta_mm,
-        angle,
-        img_size,
-        to_keep=None,
-        save_original=False,
+    radii,
+    intensities,
+    delta_px,
+    delta_mm,
+    angle,
+    img_size,
+    to_keep=None,
+    save_original=False,
 ):
-    meas = image.peaks_to_measurements(
-        radii,
-        delta_px,
-        delta_mm,
-        angle,
-        img_size
-    )
+    meas = image.peaks_to_measurements(radii, delta_px, delta_mm, angle, img_size)
     rescaled_intensities = rescale_energy(intensities)
     if save_original:
         meas = np.array([radii, intensities, meas, rescaled_intensities]).T
@@ -207,10 +167,7 @@ def get_measurements_from_radial_scan(
     else:
         meas = np.array(meas, rescaled_intensities).T
         cols = ["Cell Size", "Relative Energy"]
-    df_out = pd.DataFrame(
-        data=meas,
-        columns=cols
-    )
+    df_out = pd.DataFrame(data=meas, columns=cols)
 
     if to_keep is not None:
         if isinstance(to_keep, int):
@@ -224,5 +181,4 @@ def get_measurements_from_radial_scan(
 
 
 def rescale_energy(energy_peaks):
-    return (energy_peaks - np.max(energy_peaks)) * \
-        (100 - 10) / (np.max(energy_peaks) - np.min(energy_peaks)) + 100
+    return (energy_peaks - np.max(energy_peaks)) * (100 - 10) / (np.max(energy_peaks) - np.min(energy_peaks)) + 100

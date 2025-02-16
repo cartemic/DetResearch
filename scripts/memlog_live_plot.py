@@ -1,9 +1,9 @@
 import os
 
-import seaborn as sns
-from matplotlib import pyplot as plt
 import pandas as pd
+import seaborn as sns
 import typer
+from matplotlib import pyplot as plt
 
 sns.set_style("whitegrid")
 
@@ -16,6 +16,7 @@ def main(log_path: str):
     fig, ax = plt.subplots(1, 1)
     n_data_points = 0
     n_retries = 0
+    max_retries = 5
     while True:
         try:
             data = pd.read_csv(log_path)
@@ -31,7 +32,7 @@ def main(log_path: str):
         else:
             n_data_points = len(data)
             n_retries = 0
-        if n_retries == 5:
+        if n_retries == max_retries:
             print("No more data found")
             raise typer.Exit()
 

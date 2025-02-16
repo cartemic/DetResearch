@@ -3,7 +3,7 @@ import sqlite3
 from dataclasses import dataclass
 from functools import cached_property
 from sqlite3 import Connection
-from typing import Literal, Optional, Union, Tuple
+from typing import Literal, Optional, Tuple, Union
 
 import matplotlib as mpl
 import numpy as np
@@ -230,7 +230,7 @@ class SimulationPlot:
             all_axes.append(self.velocity)
         for axes in all_axes:
             axes.yaxis.get_offset_text().set_fontsize(self._axis_fontsize)
-            axes.yaxis.set_major_formatter(FuncFormatter(lambda x, pos: f"{x:1.2f}"))
+            axes.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:1.2f}"))
             for ax in (axes.xaxis, axes.yaxis):
                 ax.set_tick_params(labelsize=self._axis_fontsize)
         self.set_title()
@@ -287,7 +287,7 @@ class SimulationPlot:
         n_dil_mfs = len(dil_mfs)
         if n_dil_mfs > 1:
             raise RuntimeError(f"Data does not have a unique `dil_mf`: {dil_mfs}")
-        elif n_dil_mfs < 1:
+        if n_dil_mfs < 1:
             raise RuntimeError("Data does not have any `dil_mf`")
         self.set_dil_mf(dil_mfs[0])
 
@@ -299,12 +299,12 @@ class SimulationPlot:
         t_max = plot_data["time"].max()
         if induction_window:
             # we want windowed plots to go below zero
-            induction_time = 0
+            # induction_time = 0
             t_min = -induction_window * time_scale
             t_max = 0  # not centered
         else:
             t_min = 0
-            induction_time = conditions.t_ind * time_scale
+            # induction_time = conditions.t_ind * time_scale
 
         # Prevent post-induction data from throwing off my y-axis scaling.
         # I'm not worried about t_min since that's a flat tail anyway.
@@ -359,10 +359,9 @@ class SimulationPlot:
         ylabel = data_column.plot_name
         if data_column.units:
             ylabel += (
-                r" $\left("
-                + f"{data_column.units}"
-                + r"\right)$"
-                + (f"\nx{1/data_column.offset:1.1e}" if data_column.offset else "")
+                r" $\left(" f"{data_column.units}" r"\right)$" f"\nx{1/data_column.offset:1.1e}"
+                if data_column.offset
+                else ""
             )
         self.results.legend(lines, labels, fontsize=self._legend_fontsize)
         self.results.set_ylabel(ylabel, fontsize=self._axis_fontsize)
@@ -591,12 +590,12 @@ class SimulationPlots:
         is_species_data = "species" in data.columns
         if is_reaction_data and is_species_data:
             raise RuntimeError("Data contains both reaction and species columns!")
-        elif not (is_reaction_data or is_species_data):
+        if not (is_reaction_data or is_species_data):
             raise RuntimeError("Data doesn't contain reaction or species columns!")
         result_designator_column = "reaction" if is_reaction_data else "species"
         if data_column.data_type == "reaction" and is_species_data:
             raise RuntimeError("Reaction plots were requested but species data was provided!")
-        elif data_column.data_type == "species" and is_reaction_data:
+        if data_column.data_type == "species" and is_reaction_data:
             raise RuntimeError("Species plots were requested but reaction data was provided!")
 
         if self.diff is not None:
@@ -883,7 +882,7 @@ def co2_minus_tad_matched_n2(
 ) -> pd.DataFrame:
     subtracted = []
     for group_label, grouped in data.groupby(group_column):
-        for (co2_conditions, n2_conditions) in (
+        for co2_conditions, n2_conditions in (
             (conditions.co2.dil_low, conditions.n2.dil_low),
             (conditions.co2.dil_high, conditions.n2.dil_high),
         ):
@@ -892,8 +891,8 @@ def co2_minus_tad_matched_n2(
             for column in (data_column, "pressure", "temperature"):
                 fit = interp1d(
                     # Extend interp range to accommodate induction time shift
-                    [-np.inf, *n2.time.sub(n2_conditions.t_ind).values, np.inf],
-                    [n2[column].values[0], *n2[column].values, n2[column].values[-1]],
+                    [-np.inf, *n2.time.sub(n2_conditions.t_ind).to_numpy(), np.inf],
+                    [n2[column].iloc[0], *n2[column].to_numpy(), n2[column].iloc[-1]],
                 )
                 co2[column] = co2[column] - fit(co2.time - co2_conditions.t_ind)
             # columns are no longer relevant, but used in later grouping
@@ -912,12 +911,7 @@ def main():
     db_path = "/home/mick/DetResearch/scripts/final_manuscript/co2_reaction_study.sqlite"
     show_plots = False
     induction_window = 1e-7
-    plot_args = PlotArgs(
-        save_plots=True,
-        show_title=True,
-        n2_row=NitrogenRow.tad,
-        con=sqlite3.connect(db_path)
-    )
+    plot_args = PlotArgs(save_plots=True, show_title=True, n2_row=NitrogenRow.tad, con=sqlite3.connect(db_path))
 
     # full_window_plots(plot_args)
     # induction_time_centered_plots(plot_args, induction_window)

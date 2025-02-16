@@ -10,18 +10,19 @@ import cantera as ct
 from tqdm import tqdm
 
 import funcs.simulation.sensitivity.detonation.database as db
-from funcs.simulation.sensitivity.detonation import analysis
 from funcs.simulation import thermo
+from funcs.simulation.sensitivity.detonation import analysis
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import warnings
-    warnings.simplefilter('ignore')
+
+    warnings.simplefilter("ignore")
 
     # Inputs
     perturbation_fraction = 1e-2
     max_step_znd = 1e-4  # default 1e-4
     db_path = "sensitivity_3.sqlite"
-    mechanism = "gri30_highT.cti"
+    mechanism = "gri30_highT.yaml"
     initial_temp = 300
     initial_press = 101325
     equivalence = 1
@@ -45,7 +46,7 @@ if __name__ == '__main__':
             diluent_mol_frac_to_match,
             diluent,
             initial_temp,
-            initial_press
+            initial_press,
         )
     print("Initializing study... ", end="", flush=True)
     test_conditions = analysis.initialize_study(
@@ -71,48 +72,50 @@ if __name__ == '__main__':
 
     n_errors = 0
     error_log = f"error_log_{datetime.datetime.now().isoformat()}"
-    with futures.ProcessPoolExecutor(initializer=analysis.init, initargs=(_lock,)) as executor:
-        with tqdm(total=n_rxns, unit="calc", file=sys.stdout, colour="green", desc="Running") as counter:
-            futures = []
-            inputs = []  # track these for exception logs
-            for reaction_number in range(n_rxns):
-                kwargs = dict(
-                    test_conditions=test_conditions,
-                    perturbation_fraction=perturbation_fraction,
-                    perturbed_reaction_no=reaction_number,
-                    db_path=db_path,
-                    max_step_znd=max_step_znd,
-                    overwrite_existing=overwrite_existing_perturbed_results,
-                )
-                future = executor.submit(analysis.perform_study, **kwargs)
-                futures.append(future)
-                inputs.append(kwargs)
+    with (
+        futures.ProcessPoolExecutor(initializer=analysis.init, initargs=(_lock,)) as executor,
+        tqdm(total=n_rxns, unit="calc", file=sys.stdout, colour="green", desc="Running") as counter,
+    ):
+        futures = []
+        inputs = []  # track these for exception logs
+        for reaction_number in range(n_rxns):
+            kwargs = {
+                "test_conditions": test_conditions,
+                "perturbation_fraction": perturbation_fraction,
+                "perturbed_reaction_no": reaction_number,
+                "db_path": db_path,
+                "max_step_znd": max_step_znd,
+                "overwrite_existing": overwrite_existing_perturbed_results,
+            }
+            future = executor.submit(analysis.perform_study, **kwargs)
+            futures.append(future)
+            inputs.append(kwargs)
 
-            while len(futures):
-                for i, future in enumerate(futures):
-                    if future.done():
-                        # noinspection PyBroadException
-                        try:
-                            # There aren't results, but we try anyway so that we can catch and log any exceptions
-                            # that pop up.
-                            future.result()
-                        except Exception:
-                            with open(error_log, "a") as f:
-                                n_errors += 1
-                                f.write(
-                                    f"Error logged at {datetime.datetime.now().isoformat()}\n"
-                                    "Inputs:\n"
-                                    f"{pprint.pformat(kwargs, indent=4, width=120)}\n\n"
-                                    "Stack Trace:\n"
-                                    f"{traceback.format_exc()}\n==================================================\n\n"
-                                )
-                                f.flush()
-                        inputs.pop(i)
-                        futures.pop(i)
-                        counter.update()
+        while len(futures):
+            for i, future in enumerate(futures):
+                if future.done():
+                    # noinspection PyBroadException
+                    try:
+                        # There aren't results, but we try anyway so that we can catch and log any exceptions
+                        # that pop up.
+                        future.result()
+                    except Exception:
+                        with open(error_log, "a") as f:
+                            n_errors += 1
+                            f.write(
+                                f"Error logged at {datetime.datetime.now().isoformat()}\n"
+                                "Inputs:\n"
+                                f"{pprint.pformat(kwargs, indent=4, width=120)}\n\n"
+                                "Stack Trace:\n"
+                                f"{traceback.format_exc()}\n==================================================\n\n"
+                            )
+                            f.flush()
+                    inputs.pop(i)
+                    futures.pop(i)
+                    counter.update()
 
-                time.sleep(1.0)
-            counter.set_description_str("Done")
+            time.sleep(1.0)
+        counter.set_description_str("Done")
 
     if n_errors:
         print(f"Encountered {n_errors} errors -- see f{error_log}")

@@ -15,11 +15,13 @@ def test_grayscale():
 
 def test_fspecial_gauss():
     # check against octave output
-    good = np.array([
-        [1.134373655849507e-02, 8.381950580221061e-02, 1.134373655849507e-02],
-        [8.381950580221061e-02, 6.193470305571772e-01, 8.381950580221061e-02],
-        [1.134373655849507e-02, 8.381950580221061e-02, 1.134373655849507e-02]
-    ])
+    good = np.array(
+        [
+            [1.134373655849507e-02, 8.381950580221061e-02, 1.134373655849507e-02],
+            [8.381950580221061e-02, 6.193470305571772e-01, 8.381950580221061e-02],
+            [1.134373655849507e-02, 8.381950580221061e-02, 1.134373655849507e-02],
+        ]
+    )
     assert np.allclose(good, image.fspecial_gauss())
 
 
@@ -44,10 +46,7 @@ class TestFix:
 def test_get_radial_intensity():
     img = np.zeros((7, 7))
     img[:, 3] = 1
-    good = (
-        np.arange(img.shape[0]),
-        np.ones(img.shape[0])
-    )
+    good = (np.arange(img.shape[0]), np.ones(img.shape[0]))
     result = image.get_radial_intensity(img, 90)
     assert np.allclose(result, good)
 
