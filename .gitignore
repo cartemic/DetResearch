@@ -257,3 +257,5 @@ error_log_*
 scripts/final_manuscript/plots/
 notes/
 
+db.sql
+
