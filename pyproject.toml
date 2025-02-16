@@ -26,7 +26,6 @@ scikit-image = "^0.25.0"
 scipy = "^1.15.0"
 tables = "^3.10.2"
 uncertainties = "^3.2.2"
-numba = "^0.60.0"
 
 [tool.poetry.group.docs.dependencies]
 nbsphinx = "^0.9.6"

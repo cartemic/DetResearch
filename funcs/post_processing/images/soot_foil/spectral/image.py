@@ -2,7 +2,6 @@ from warnings import catch_warnings, simplefilter
 
 import numpy as np
 from matplotlib import pyplot as plt
-from numba import jit, njit
 from skimage.transform import rotate
 
 
@@ -40,14 +39,12 @@ def calc_psd(img):
     return grayscale(final)
 
 
-@jit
 def get_center(psd):
     cols = psd.shape[1]
     max_loc = np.argmax(psd)
     return max_loc % cols, max_loc // cols
 
 
-@njit
 def fix(n):
     sign = np.ones_like(n)
     sign[n < 0] = -1
@@ -55,7 +52,6 @@ def fix(n):
     return (np.floor(np.abs(n)) * sign).astype(np.int64)
 
 
-@njit
 def get_angular_intensity(psd, radius, window, n_steps=1024):
     half_steps = n_steps // 2
     intensity = np.zeros(n_steps)
