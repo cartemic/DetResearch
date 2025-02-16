@@ -34,6 +34,7 @@ Tested with:
 Under these operating systems:
     Windows 8.1, Windows 10, Linux (Debian 9)
 """
+import typing
 from typing import Optional
 
 import cantera as ct
@@ -193,16 +194,18 @@ def zndsolve(
     
     output = {}
 
-    # noinspection PyTypeChecker
-    out: OdeResult = solve_ivp(
-        ZNDSys(gas, U1, r1),
-        tel,
-        y0,
-        method='Radau',
-        atol=absTol,
-        rtol=relTol,
-        max_step=max_step,
-        t_eval=t_eval,
+    out: OdeResult = typing.cast(
+        OdeResult,
+        solve_ivp(
+            ZNDSys(gas, U1, r1),
+            tel,
+            y0,
+            method='Radau',
+            atol=absTol,
+            rtol=relTol,
+            max_step=max_step,
+            t_eval=t_eval,
+        )
     )
     
     output['time'] = out.t    
@@ -255,6 +258,8 @@ def zndsolve(
                     temperature=gas.T,
                     pressure=gas.P,
                     velocity=U,
+                    cp=gas.cp_mass,
+                    cv=gas.cv_mass,
                 ), commit=False)
             if spec_indices is not None:
                 for idx_spec in spec_indices:

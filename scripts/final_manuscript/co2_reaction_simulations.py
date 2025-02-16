@@ -5,6 +5,8 @@ from concurrent.futures import ProcessPoolExecutor
 from typing import Optional
 
 import cantera as ct
+import numpy as np
+
 import simulation.thermo
 from rich.pretty import install
 from tqdm import tqdm
@@ -83,6 +85,7 @@ def simulate(
             db_path=db_path,
             cv_config=CvConfig(max_tries=1, max_step=1e-6, end_time=12e-6, solver_method="Radau"),
             # znd_config=ZndConfig(max_tries=1, max_step=1e-4, end_time=3e-5),
+            phi_nom=np.nan,
         )
 
 

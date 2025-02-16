@@ -26,6 +26,7 @@ dependencies:
     - pandas
     - pint
     - plotly
+    - pyjac
     - pytest
     - pytest-cov
     - pytz

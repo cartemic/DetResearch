@@ -9,9 +9,16 @@ from scripts.final_manuscript.plot_settings import set_palette, set_style, PlotK
 
 
 SCRIPT_DIR = os.path.dirname(__file__)
+# CELL_SIZE_DATA_PATH = os.path.join(
+#     os.path.dirname(SCRIPT_DIR), "simulation_measurement_comparison", "simulated_and_measured_2024_03_02.h5"
+# )
+# CELL_SIZE_DATA_PATH = os.path.join(
+#     os.path.dirname(SCRIPT_DIR), "simulation_measurement_comparison", "simulated_and_measured_mevel2015.h5"
+# )
 CELL_SIZE_DATA_PATH = os.path.join(
-    os.path.dirname(SCRIPT_DIR), "simulation_measurement_comparison", "simulated_and_measured_2024_03_02.h5"
+    os.path.dirname(SCRIPT_DIR), "simulation_measurement_comparison", "simulated_and_measured_inert_co2.h5"
 )
+CO2 = "CO2i"
 WAVE_SPEED_DATA_PATH = os.path.join(os.path.dirname(SCRIPT_DIR), "cj_study", "cj_tad_ss_results.csv")
 
 
@@ -98,19 +105,19 @@ def plot_cell_size(data: pd.DataFrame, show_title: bool, save_plot: bool):
         alpha=0.4,
     )
     grid.axes[0][0].errorbar(
-        **plot_args, data=measurements[(measurements["phi_nom"] == 0.4) & (measurements["diluent"] == "CO2")]
+        **plot_args, data=measurements[(measurements["phi_nom"] == 0.4) & (measurements["diluent"] == CO2)]
     )
     grid.axes[0][0].errorbar(
         **plot_args, data=measurements[(measurements["phi_nom"] == 0.4) & (measurements["diluent"] == "N2")]
     )
     grid.axes[0][1].errorbar(
-        **plot_args, data=measurements[(measurements["phi_nom"] == 0.7) & (measurements["diluent"] == "CO2")]
+        **plot_args, data=measurements[(measurements["phi_nom"] == 0.7) & (measurements["diluent"] == CO2)]
     )
     grid.axes[0][1].errorbar(
         **plot_args, data=measurements[(measurements["phi_nom"] == 0.7) & (measurements["diluent"] == "N2")]
     )
     grid.axes[0][2].errorbar(
-        **plot_args, data=measurements[(measurements["phi_nom"] == 1.0) & (measurements["diluent"] == "CO2")]
+        **plot_args, data=measurements[(measurements["phi_nom"] == 1.0) & (measurements["diluent"] == CO2)]
     )
     grid.axes[0][2].errorbar(
         **plot_args, data=measurements[(measurements["phi_nom"] == 1.0) & (measurements["diluent"] == "N2")]
@@ -164,7 +171,7 @@ def plot_cell_size(data: pd.DataFrame, show_title: bool, save_plot: bool):
 def plot_wave_speed(data: pd.DataFrame, show_title: bool, save_plot: bool):
     data["measured_cj_ratio"] = data["wave_speed"] / data["cj_speed"]
     data["measured_mach"] = data["wave_speed"] / data["sound_speed"]
-    hue_order = ["CO2", "N2"]
+    hue_order = [CO2, "N2"]
     # CJ
     grid = sns.displot(data, x="measured_cj_ratio", hue="diluent", kind="kde", hue_order=hue_order)
     grid.fig.set_size_inches((7, 2))
@@ -197,9 +204,9 @@ def plot_wave_speed(data: pd.DataFrame, show_title: bool, save_plot: bool):
 
 
 def main():
-    show_plot = False
-    save_plot = True
-    show_title = False
+    show_plot = True
+    save_plot = False
+    show_title = True
 
     set_palette(plot_kind=PlotKind.CONDITION)
     set_style()

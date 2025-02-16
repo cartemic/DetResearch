@@ -33,6 +33,8 @@ Tested with:
 Under these operating systems:
     Windows 8.1, Windows 10, Linux (Debian 9)
 """
+import dataclasses
+import typing
 from typing import Optional
 
 import cantera as ct
@@ -42,6 +44,42 @@ from scipy.integrate._ivp.ivp import OdeResult
 
 from sdtoolbox.config import Solver
 from sdtoolbox.output import SimulationDatabase, ReactionData, SpeciesData, BulkPropertiesData
+
+
+@dataclasses.dataclass(frozen=True)
+class CvCalculationParameters:
+    """
+    Calculate a, b, dT/dt, and dY/dt from a cantera solution object at a given simulation time step.
+    Kept separate from ``CVSys`` to allow for re-use in data export.
+    """
+    a: Optional[np.ndarray[typing.Any, np.dtype[np.float64]]]
+    b: Optional[np.ndarray[typing.Any, np.dtype[np.float64]]]
+    dT_dt: float
+    dY_dt: np.ndarray[typing.Any, np.dtype[np.float64]]
+
+    @staticmethod
+    def from_gas(gas: ct.Solution, with_intermediates: bool = False) -> "CvCalculationParameters":
+        """
+        Solution is not mutated, and is assumed to already be at the appropriate state
+        """
+        # Energy/temperature equation (terms separated for clarity)
+        a = gas.standard_enthalpies_RT - np.ones(gas.n_species)
+        b = gas.net_production_rates / (gas.density * gas.cv_mass)
+
+        dT_dt = -gas.T * ct.gas_constant * np.dot(a, b)
+
+        # Species equations
+        dY_dt = gas.net_production_rates * gas.molecular_weights / gas.density
+
+        return CvCalculationParameters(
+            a=a if with_intermediates else None,
+            b=b if with_intermediates else None,
+            dT_dt=dT_dt,
+            dY_dt=dY_dt,
+        )
+
+    def to_solution_vector(self) -> np.ndarray[typing.Any, np.dtype[np.float64]]:
+        return np.hstack((self.dT_dt, self.dY_dt))
 
 
 class CVSys(object):
@@ -70,16 +108,7 @@ class CVSys(object):
         """
         # Set the state of the gas, based on the current solution vector.
         self.gas.TDY = y[0], self.gas.density, y[1:]
-        
-        # Energy/temperature equation (terms separated for clarity)  
-        a = self.gas.standard_enthalpies_RT - np.ones(self.gas.n_species)
-        b = self.gas.net_production_rates / (self.gas.density * self.gas.cv_mass)
-        dTdt = -self.gas.T * ct.gas_constant * np.dot(a, b)
-        
-        # Species equations
-        dYdt = self.gas.net_production_rates*self.gas.molecular_weights/self.gas.density
-
-        return np.hstack((dTdt, dYdt))
+        return CvCalculationParameters.from_gas(self.gas, with_intermediates=False).to_solution_vector()
 
 
 def cvsolve(
@@ -149,16 +178,18 @@ def cvsolve(
 
     output = {}
 
-    # noinspection PyTypeChecker
-    out: OdeResult = solve_ivp(
-        CVSys(gas),
-        tel,
-        y0,
-        method=method,
-        atol=absTol,
-        rtol=relTol,
-        max_step=max_step,
-        t_eval=t_eval,
+    out: OdeResult = typing.cast(
+        OdeResult,
+        solve_ivp(
+            CVSys(gas),
+            tel,
+            y0,
+            method=method,
+            atol=absTol,
+            rtol=relTol,
+            max_step=max_step,
+            t_eval=t_eval,
+        )
     )
 
     output['time'] = out.t
@@ -193,6 +224,8 @@ def cvsolve(
         output['P'][i] = gas.P
         output['speciesX'][:, i] = gas.X
 
+        calc_parameters = CvCalculationParameters.from_gas(gas, with_intermediates=True)
+
         if db is not None:
             db.bulk_properties.insert_or_update(
                 BulkPropertiesData(
@@ -200,7 +233,10 @@ def cvsolve(
                     run_no=run_no,
                     time=output["time"][i],
                     temperature=gas.T,
+                    temperature_gradient=calc_parameters.dT_dt,
                     pressure=gas.P,
+                    cp=gas.cp_mass,
+                    cv=gas.cv_mass,
                 ), commit=False)
             if spec_indices is not None:
                 for idx_spec in spec_indices:
@@ -215,6 +251,9 @@ def cvsolve(
                         creation_rate=gas.net_production_rates[idx_spec],
                         destruction_rate=gas.destruction_rates[idx_spec],
                         net_production_rate=gas.net_production_rates[idx_spec],
+                        a=calc_parameters.a[idx_spec],
+                        b=calc_parameters.b[idx_spec],
+                        dy_dt=calc_parameters.dY_dt[idx_spec],
                     ), commit=False)
             if rxn_indices is not None:
                 for idx_rxn in rxn_indices:

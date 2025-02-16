@@ -1,7 +1,9 @@
 import dataclasses
 import sqlite3
 from enum import Enum
-from typing import Optional
+from functools import cached_property
+from pathlib import Path
+from typing import Optional, Union
 
 from cantera import Species
 from retry import retry
@@ -24,7 +26,7 @@ class SimulationType(Enum):
 
 
 class SqliteDataBase:
-    def __init__(self, path: str, timeout: float = 600):
+    def __init__(self, path: Union[str, Path], timeout: float = 600):
         self.path = path
         self.timeout = timeout
         self.con = self.connect()
@@ -73,6 +75,7 @@ class Conditions:
     fuel: str
     oxidizer: str
     equivalence: float
+    phi_nom: float
     diluent: Optional[str]
     dil_mf: float
 
@@ -100,6 +103,7 @@ class ConditionTable(SqliteTable):
                 fuel TEXT NOT NULL,
                 oxidizer TEXT NOT NULL,
                 equivalence REAL NOT NULL,
+                phi_nom REAL NOT NULL,
                 diluent TEXT,
                 dil_mf REAL NOT NULL,
                 temp_vn REAL,
@@ -133,6 +137,7 @@ class ConditionTable(SqliteTable):
                 :fuel,
                 :oxidizer,
                 :equivalence,
+                :phi_nom,
                 :diluent,
                 :dil_mf,
                 Null,
@@ -156,7 +161,14 @@ class BulkPropertiesData:
     time: float
     temperature: float
     pressure: float
+    cp: float
+    cv: float
+    temperature_gradient: Optional[float] = None
     velocity: Optional[float] = None
+
+    @cached_property
+    def gamma(self) -> float:
+        return self.cp / self.cv
 
 
 class BulkPropertiesTable(SqliteTable):
@@ -174,7 +186,11 @@ class BulkPropertiesTable(SqliteTable):
                 run_no INTEGER NOT NULL,
                 time REAL NOT NULL,
                 temperature REAL NOT NULL,
+                temperature_gradient REAL,
                 pressure REAL NOT NULL,
+                cp REAL NOT NULL,
+                cv REAL NOT NULL,
+                gamma REAL NOT NULL,
                 velocity REAL,
                 PRIMARY KEY (condition_id, run_no, time),
                 FOREIGN KEY(condition_id) REFERENCES {TableName.Conditions.value}(id)
@@ -192,7 +208,11 @@ class BulkPropertiesTable(SqliteTable):
                 :run_no,
                 :time,
                 :temperature,
+                :temperature_gradient,
                 :pressure,
+                :cp,
+                :cp,
+                :gamma,
                 :velocity
             )
             ON CONFLICT(condition_id, run_no, time) DO UPDATE SET
@@ -205,7 +225,11 @@ class BulkPropertiesTable(SqliteTable):
                 "run_no": data.run_no,
                 "time": data.time,
                 "temperature": data.temperature,
+                "temperature_gradient": data.temperature_gradient,
                 "pressure": data.pressure,
+                "cp": data.cp,
+                "cv": data.cv,
+                "gamma": data.gamma,
                 "velocity": data.velocity,
             },
         )
@@ -302,6 +326,9 @@ class SpeciesData:
     creation_rate: float
     destruction_rate: float
     net_production_rate: float
+    a: Optional[float] = None
+    b: Optional[float] = None
+    dy_dt: Optional[float] = None
 
 
 class SpeciesTable(SqliteTable):
@@ -324,6 +351,9 @@ class SpeciesTable(SqliteTable):
                 creation_rate REAL NOT NULL,
                 destruction_rate REAL NOT NULL,
                 net_production_rate REAL NOT NULL,
+                a REAL,
+                b REAL,
+                dy_dt REAL,
                 PRIMARY KEY (condition_id, run_no, time, species),
                 FOREIGN KEY(condition_id) REFERENCES {TableName.Conditions.value}(id)
                 ON UPDATE CASCADE ON DELETE CASCADE
@@ -344,7 +374,10 @@ class SpeciesTable(SqliteTable):
                 :concentration,
                 :creation_rate,
                 :destruction_rate,
-                :net_production_rate
+                :net_production_rate,
+                :a,
+                :b,
+                :dy_dt
             )
             ON CONFLICT(condition_id, run_no, time, species) DO UPDATE SET
                 mole_frac=excluded.mole_frac,
@@ -363,6 +396,9 @@ class SpeciesTable(SqliteTable):
                 "creation_rate": data.creation_rate,
                 "destruction_rate": data.destruction_rate,
                 "net_production_rate": data.net_production_rate,
+                "a": data.a,
+                "b": data.b,
+                "dy_dt": data.dy_dt,
             }
         )
         if commit:
@@ -392,7 +428,7 @@ class SimulationDatabase:
         self.bulk_properties = BulkPropertiesTable(self.db)
 
 
-def clear_simulation_database(path: str):
+def clear_simulation_database(path: Union[str, Path]):
     """
     Convenience function to make resets easier between simulation re-runs
     """

@@ -133,7 +133,6 @@ def wrapped_cvsolve(
                     method=config.solver_method
                 )
             except:
-                print(f"\nCV Simulation failed\ntries:    {tries}\nend time: {t_end}\nmax step: {max_step}\n")
                 raise
 
     if induction_time_only:
@@ -475,6 +474,7 @@ def calculate_westbrook_only(
     fuel: str,
     oxidizer: str,
     equivalence: float,
+    phi_nom: float,
     cv_config: CvConfig,
     diluent: Optional[str],
     match: Optional[str],
@@ -533,6 +533,7 @@ def calculate_westbrook_only(
             fuel=fuel,
             oxidizer=oxidizer,
             equivalence=equivalence,
+            phi_nom=phi_nom,
             diluent=diluent,
             dil_mf=diluent_mol_frac,
         )
