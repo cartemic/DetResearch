@@ -1,16 +1,20 @@
-[tool.poetry]
+[project]
 name = "funcs"
 version = "0.1.0"
 description = ""
-authors = ["Mick <cartemic@proton.me>"]
+authors = [{ name = "Mick", email = "cartemic@proton.me" }]
 readme = "README.md"
+classifiers = ["Private :: Do not Upload"]
+dynamic = ["dependencies"]
+requires-python = "=3.13.*"
+
+[tool.poetry]
 packages = [
     { include = "sdtoolbox" },
     { include = "scripts" }
 ]
 
 [tool.poetry.dependencies]
-python = "=3.12.*"
 pip = "^24.3.1"
 cantera = "^3.1.0"
 h5py = "^3.12.1"
@@ -22,7 +26,6 @@ scikit-image = "^0.25.0"
 scipy = "^1.15.0"
 tables = "^3.10.2"
 uncertainties = "^3.2.2"
-retry = "^0.9.2"
 numba = "^0.60.0"
 
 [tool.poetry.group.docs.dependencies]
@@ -56,6 +59,8 @@ ruff = "^0.8.6"
 [tool.poetry.group.sims.dependencies]
 rich = "^13.9.4"
 tqdm = "^4.67.1"
+backoff = "^2.2.1"
+psycopg = {version = "^3.2.4", extras = ["binary"]}
 
 [build-system]
 requires = ["poetry-core"]
