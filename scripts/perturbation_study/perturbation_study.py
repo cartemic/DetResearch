@@ -12,12 +12,15 @@ import cantera as ct
 from tqdm import tqdm
 
 from funcs.simulation.cell_size import calculate_westbrook_only, CvConfig
+from funcs.simulation.thermo import diluted_species_dict, match_adiabatic_temp
 from sdtoolbox.output import clear_simulation_database
 from sdtoolbox.postshock import CJspeed
-from simulation.thermo import diluted_species_dict, match_adiabatic_temp
 
 if TYPE_CHECKING:
     from concurrent.futures import Future
+
+# noinspection PyUnresolvedReferences
+ct.add_directory(Path(__file__).parents[2] / "mechanisms")
 
 PHI = 1
 FUEL = "CH4"

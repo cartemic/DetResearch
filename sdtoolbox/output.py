@@ -337,6 +337,7 @@ class ReactionData:
     rev_rate_constant: float
     rev_rate_of_progress: float
     net_rate_of_progress: float
+    relative_chemical_contribution: float
 
 
 class ReactionTable(SqliteTable):
@@ -364,6 +365,7 @@ class ReactionTable(SqliteTable):
                 rev_rate_constant REAL NOT NULL,
                 rev_rate_of_progress REAL NOT NULL,
                 net_rate_of_progress REAL NOT NULL,
+                relative_chemical_contribution REAL NOT NULL,
                 PRIMARY KEY (condition_id, run_no, time, reaction),
                 FOREIGN KEY(condition_id) REFERENCES {TableName.Conditions.value}(id)
                 ON UPDATE CASCADE ON DELETE CASCADE
@@ -389,14 +391,16 @@ class ReactionTable(SqliteTable):
                 %(fwd_rate_of_progress)s,
                 %(rev_rate_constant)s,
                 %(rev_rate_of_progress)s,
-                %(net_rate_of_progress)s
+                %(net_rate_of_progress)s,
+                %(relative_chemical_contribution)s
             )
             ON CONFLICT(condition_id, run_no, time, reaction) DO UPDATE SET
                 fwd_rate_constant=excluded.fwd_rate_constant,
                 fwd_rate_of_progress=excluded.fwd_rate_of_progress,
                 rev_rate_constant=excluded.rev_rate_constant,
                 rev_rate_of_progress=excluded.rev_rate_of_progress,
-                net_rate_of_progress=excluded.net_rate_of_progress;
+                net_rate_of_progress=excluded.net_rate_of_progress,
+                relative_chemical_contribution=excluded.relative_chemical_contribution;
             """.encode("utf-8"),
             {
                 "condition_id": data.condition_id,
@@ -408,6 +412,7 @@ class ReactionTable(SqliteTable):
                 "rev_rate_constant": data.rev_rate_constant,
                 "rev_rate_of_progress": data.rev_rate_of_progress,
                 "net_rate_of_progress": data.net_rate_of_progress,
+                "relative_chemical_contribution": data.relative_chemical_contribution,
             },
         )
         if commit:
