@@ -259,19 +259,20 @@ def cvsolve(
                 rxn_eqns = gas.reaction_equations()
                 net_rates_of_progress = gas.net_rates_of_progress
                 for idx_rxn in rxn_indices:
-                    this_net_rate_of_prigress = net_rates_of_progress[idx_rxn]
+                    this_net_rate_of_progress = net_rates_of_progress[idx_rxn]
                     db.reactions.insert_or_update(ReactionData(
                         condition_id=db.conditions_id,
                         run_no=run_no,
                         time=output["time"][i],
+                        rxn_no=idx_rxn,
                         reaction=rxn_eqns[idx_rxn],
                         fwd_rate_constant=gas.forward_rate_constants[idx_rxn],
                         fwd_rate_of_progress=gas.forward_rates_of_progress[idx_rxn],
                         rev_rate_constant=gas.reverse_rate_constants[idx_rxn],
                         rev_rate_of_progress=gas.reverse_rates_of_progress[idx_rxn],
-                        net_rate_of_progress=this_net_rate_of_prigress,
+                        net_rate_of_progress=this_net_rate_of_progress,
                         relative_chemical_contribution=(
-                                np.abs(this_net_rate_of_prigress) / np.sum(np.abs(net_rates_of_progress))
+                                np.abs(this_net_rate_of_progress) / np.sum(np.abs(net_rates_of_progress))
                         ),
                     ), commit=False)
 

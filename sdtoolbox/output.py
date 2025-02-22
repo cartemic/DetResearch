@@ -335,6 +335,7 @@ class ReactionData:
     condition_id: int
     run_no: int
     time: float
+    rxn_no: int
     reaction: str
     fwd_rate_constant: float
     fwd_rate_of_progress: float
@@ -363,6 +364,7 @@ class ReactionTable(SqliteTable):
                 condition_id INTEGER NOT NULL,
                 run_no INTEGER NOT NULL,
                 time REAL NOT NULL,
+                rxn_no INT NOT NULL,
                 reaction TEXT NOT NULL,
                 fwd_rate_constant REAL NOT NULL,
                 fwd_rate_of_progress REAL NOT NULL,
@@ -390,6 +392,7 @@ class ReactionTable(SqliteTable):
                 %(condition_id)s,
                 %(run_no)s,
                 %(time)s,
+                %(rxn_no)s,
                 %(reaction)s,
                 %(fwd_rate_constant)s,
                 %(fwd_rate_of_progress)s,
@@ -410,6 +413,7 @@ class ReactionTable(SqliteTable):
                 "condition_id": data.condition_id,
                 "run_no": data.run_no,
                 "time": data.time,
+                "rxn_no": data.rxn_no,
                 "reaction": data.reaction,
                 "fwd_rate_constant": data.fwd_rate_constant,
                 "fwd_rate_of_progress": data.fwd_rate_of_progress,
