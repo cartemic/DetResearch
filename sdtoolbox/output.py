@@ -100,6 +100,7 @@ class Conditions:
     diluent: Optional[str]
     dil_mf: float
     perturbed_rxn: int
+    perturbation_fraction: float
 
 
 class ConditionTable(SqliteTable):
@@ -139,7 +140,8 @@ class ConditionTable(SqliteTable):
                 u_cj REAL,
                 cell_size REAL,
                 cell_size_2 REAL,
-                perturbed_rxn INTEGER
+                perturbed_rxn INTEGER,
+                perturbation_fraction REAL
             )
             """.encode("utf-8")
         )
@@ -155,6 +157,7 @@ class ConditionTable(SqliteTable):
         Stores a row of test data in the current table.
         """
 
+        # noinspection PyTypeChecker
         self.cur.execute(
             f"""
             INSERT INTO {self.name} VALUES (
@@ -179,7 +182,8 @@ class ConditionTable(SqliteTable):
                 Null,
                 Null,
                 Null,
-                %(perturbed_rxn)s
+                %(perturbed_rxn)s,
+                %(perturbation_fraction)s
             )
             RETURNING id;
             """.encode("utf-8"),

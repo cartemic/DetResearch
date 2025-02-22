@@ -532,6 +532,7 @@ def calculate_westbrook_only(
             diluent=diluent,
             dil_mf=diluent_mol_frac,
             perturbed_rxn=perturbed_reaction,
+            perturbation_fraction=perturbation_fraction,
         )
         sim_db = None  # instantiating a SimulationDatabase here will add unnecessary ZND rows to the database
         # sim_db = sdtoolbox.output.SimulationDatabase(db=db, conditions=conditions)
