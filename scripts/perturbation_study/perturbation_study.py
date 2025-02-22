@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 import cantera as ct
 from tqdm import tqdm
 
+from funcs.dir import MECH_DIR
 from funcs.simulation.cell_size import calculate_westbrook_only, CvConfig
 from funcs.simulation.thermo import diluted_species_dict, match_adiabatic_temp
 from sdtoolbox.output import clear_simulation_database
@@ -20,7 +21,7 @@ if TYPE_CHECKING:
     from concurrent.futures import Future
 
 # noinspection PyUnresolvedReferences
-ct.add_directory(Path(__file__).parents[2] / "mechanisms")
+ct.add_directory(MECH_DIR)
 
 PHI = 1
 FUEL = "CH4"
