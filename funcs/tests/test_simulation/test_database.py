@@ -5,8 +5,11 @@ import cantera as ct
 import deepdiff
 
 import funcs.simulation.sensitivity.detonation.database as db
+from funcs.dir import MECH_DIR
 
 TEST_DIR = os.path.abspath(os.path.dirname(__file__))
+# noinspection PyUnresolvedReferences
+ct.add_directory(MECH_DIR)
 
 
 def test_database():

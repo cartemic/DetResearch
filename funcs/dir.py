@@ -4,6 +4,10 @@ Functions for converting directory strings between windows and linux
 
 import os
 import platform
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).parents[1]
+MECH_DIR = PROJECT_ROOT / "mechanisms"
 
 
 def get_drive(drive_letter):

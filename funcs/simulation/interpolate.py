@@ -49,5 +49,6 @@ def interpolate(
                 [n2_low, *n2[column].to_numpy(), n2_high],
             )
             n2_new.loc[:, column] = fit(n2_new[time_column].to_numpy())
+
         out = pd.concat((out, co2, n2_new))
     return out
