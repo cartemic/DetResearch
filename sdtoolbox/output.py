@@ -49,12 +49,12 @@ class PostgresDatabase:
         return psycopg.connect(self.conninfo)
 
 
-class SqliteTable:
+class PostgresTable:
     def __init__(
-            self,
-            db: PostgresDatabase,
-            table_name: str,
-            clear_existing_data: bool = False,
+        self,
+        db: PostgresDatabase,
+        table_name: str,
+        clear_existing_data: bool = False,
     ):
         self.db = db
         self.cur = self.db.con.cursor()
@@ -103,7 +103,7 @@ class Conditions:
     perturbation_fraction: float
 
 
-class ConditionTable(SqliteTable):
+class ConditionTable(PostgresTable):
     def __init__(self, db: PostgresDatabase, clear_existing_data: bool = False):
         super().__init__(db=db, table_name=TableName.Conditions.value, clear_existing_data=clear_existing_data)
         if not self.table_exists():
@@ -254,7 +254,7 @@ class BulkPropertiesData:
         return self.cp / self.cv
 
 
-class BulkPropertiesTable(SqliteTable):
+class BulkPropertiesTable(PostgresTable):
     def __init__(self, db: PostgresDatabase, clear_existing_data: bool = False):
         super().__init__(db=db, table_name=TableName.BulkProperties.value, clear_existing_data=clear_existing_data)
         if not self.table_exists():
@@ -345,7 +345,7 @@ class ReactionData:
     relative_chemical_contribution: float
 
 
-class ReactionTable(SqliteTable):
+class ReactionTable(PostgresTable):
     def __init__(self, db: PostgresDatabase, clear_existing_data: bool = False):
         super().__init__(db=db, table_name=TableName.Reactions.value, clear_existing_data=clear_existing_data)
         if not self.table_exists():
@@ -443,7 +443,7 @@ class SpeciesData:
     dy_dt: Optional[float] = None
 
 
-class SpeciesTable(SqliteTable):
+class SpeciesTable(PostgresTable):
     def __init__(self, db: PostgresDatabase, clear_existing_data: bool = False):
         super().__init__(db=db, table_name=TableName.Species.value, clear_existing_data=clear_existing_data)
         if not self.table_exists():
