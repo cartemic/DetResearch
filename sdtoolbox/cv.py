@@ -209,7 +209,11 @@ def cvsolve(
     #############################################################################
     # Extract PRESSURE and TEMPERATURE GRADIENT
     #############################################################################
-    
+
+    if db is not None:
+        for reaction_no in rxn_indices or []:
+            for species_no in spec_indices or []:
+                db.clear_results(reaction_no, species_no)
     # Have to loop for operations involving the working gas object
     for i, T in enumerate(output['T']):
         gas.TDY = T, r0, output['speciesY'][:, i]
@@ -227,10 +231,9 @@ def cvsolve(
         calc_parameters = CvCalculationParameters.from_gas(gas, with_intermediates=True)
 
         if db is not None:
-            db.bulk_properties.insert_or_update(
+            db.bulk_properties.insert(
                 BulkPropertiesData(
                     condition_id=db.conditions_id,
-                    run_no=run_no,
                     time=output["time"][i],
                     temperature=gas.T,
                     temperature_gradient=calc_parameters.dT_dt,
@@ -241,10 +244,10 @@ def cvsolve(
             if spec_indices is not None:
                 for idx_spec in spec_indices:
                     species = gas.species()[idx_spec]
-                    db.species.insert_or_update(SpeciesData(
+                    db.species.insert(SpeciesData(
                         condition_id=db.conditions_id,
-                        run_no=run_no,
                         time=output["time"][i],
+                        species_no=idx_spec,
                         species=species,
                         mole_frac=gas.mole_fraction_dict().get(species.name, 0),
                         concentration=gas.concentrations[idx_spec],
@@ -260,11 +263,10 @@ def cvsolve(
                 net_rates_of_progress = gas.net_rates_of_progress
                 for idx_rxn in rxn_indices:
                     this_net_rate_of_progress = net_rates_of_progress[idx_rxn]
-                    db.reactions.insert_or_update(ReactionData(
+                    db.reactions.insert(ReactionData(
                         condition_id=db.conditions_id,
-                        run_no=run_no,
                         time=output["time"][i],
-                        rxn_no=idx_rxn,
+                        reaction_no=idx_rxn,
                         reaction=rxn_eqns[idx_rxn],
                         fwd_rate_constant=gas.forward_rate_constants[idx_rxn],
                         fwd_rate_of_progress=gas.forward_rates_of_progress[idx_rxn],

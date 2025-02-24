@@ -82,7 +82,7 @@ class PostgresTable:
         jitter=BACKOFF_JITTER,
     )
     def __clear(self):
-        self.cur.execute(f"DROP TABLE IF EXISTS {self.name} CASCADE;".encode("utf-8"))
+        self.cur.execute(f"DROP TABLE IF EXISTS {self.name} CASCADE;".encode())
 
 
 @dataclasses.dataclass
@@ -126,24 +126,24 @@ class ConditionTable(PostgresTable):
                 mech TEXT NOT NULL,
                 match TEXT,
                 dil_condition TEXT NOT NULL,
-                initial_temp REAL NOT NULL,
-                initial_press REAL NOT NULL,
+                initial_temp DOUBLE PRECISION NOT NULL,
+                initial_press DOUBLE PRECISION NOT NULL,
                 fuel TEXT NOT NULL,
                 oxidizer TEXT NOT NULL,
-                equivalence REAL NOT NULL,
-                phi_nom REAL NOT NULL,
+                equivalence DOUBLE PRECISION NOT NULL,
+                phi_nom DOUBLE PRECISION NOT NULL,
                 diluent TEXT,
-                dil_mf REAL NOT NULL,
-                temp_vn REAL,
-                t_ind REAL,
-                u_znd REAL,
-                u_cj REAL,
-                cell_size REAL,
-                cell_size_2 REAL,
+                dil_mf DOUBLE PRECISION NOT NULL,
+                temp_vn DOUBLE PRECISION,
+                t_ind DOUBLE PRECISION,
+                u_znd DOUBLE PRECISION,
+                u_cj DOUBLE PRECISION,
+                cell_size DOUBLE PRECISION,
+                cell_size_2 DOUBLE PRECISION,
                 perturbed_rxn INTEGER,
-                perturbation_fraction REAL
+                perturbation_fraction DOUBLE PRECISION
             )
-            """.encode("utf-8")
+            """.encode()
         )
 
     @backoff.on_exception(
@@ -186,7 +186,7 @@ class ConditionTable(PostgresTable):
                 %(perturbation_fraction)s
             )
             RETURNING id;
-            """.encode("utf-8"),
+            """.encode(),
             dataclasses.asdict(test_conditions),
         )
         self.cur.connection.commit()
@@ -240,7 +240,6 @@ class ConditionTable(PostgresTable):
 @dataclasses.dataclass
 class BulkPropertiesData:
     condition_id: int
-    run_no: int
     time: float
     temperature: float
     pressure: float
@@ -271,20 +270,19 @@ class BulkPropertiesTable(PostgresTable):
             f"""
             CREATE TABLE IF NOT EXISTS {self.name} (
                 condition_id INTEGER NOT NULL,
-                run_no INTEGER NOT NULL,
-                time REAL NOT NULL,
-                temperature REAL NOT NULL,
-                temperature_gradient REAL,
-                pressure REAL NOT NULL,
-                cp REAL NOT NULL,
-                cv REAL NOT NULL,
-                gamma REAL NOT NULL,
-                velocity REAL,
-                PRIMARY KEY (condition_id, run_no, time),
+                time DOUBLE PRECISION NOT NULL,
+                temperature DOUBLE PRECISION NOT NULL,
+                temperature_gradient DOUBLE PRECISION,
+                pressure DOUBLE PRECISION NOT NULL,
+                cp DOUBLE PRECISION NOT NULL,
+                cv DOUBLE PRECISION NOT NULL,
+                gamma DOUBLE PRECISION NOT NULL,
+                velocity DOUBLE PRECISION,
+                PRIMARY KEY (condition_id, time),
                 FOREIGN KEY(condition_id) REFERENCES {TableName.Conditions.value}(id)
                 ON UPDATE CASCADE ON DELETE CASCADE
             );
-            """.encode("utf-8")
+            """.encode()
         )
 
     @backoff.on_exception(
@@ -293,12 +291,29 @@ class BulkPropertiesTable(PostgresTable):
         max_tries=BACKOFF_MAX_RETRIES,
         jitter=BACKOFF_JITTER,
     )
-    def insert_or_update(self, data: BulkPropertiesData, commit: bool = True):
+    def clear(self, condition_id: int) -> None:
+        self.cur.connection.rollback()
+        self.cur.execute(
+            f"""
+            DELETE
+            FROM {self.name}
+            WHERE condition_id = %(condition_id)s;
+            """.encode(),
+            {"condition_id": condition_id}
+        )
+        self.cur.connection.commit()
+
+    @backoff.on_exception(
+        BACKOFF_STRATEGY,
+        sqlite3.OperationalError,
+        max_tries=BACKOFF_MAX_RETRIES,
+        jitter=BACKOFF_JITTER,
+    )
+    def insert(self, data: BulkPropertiesData, commit: bool = True):
         self.cur.execute(
             f"""
             INSERT INTO {self.name} VALUES (
                 %(condition_id)s,
-                %(run_no)s,
                 %(time)s,
                 %(temperature)s,
                 %(temperature_gradient)s,
@@ -307,15 +322,10 @@ class BulkPropertiesTable(PostgresTable):
                 %(cv)s,
                 %(gamma)s,
                 %(velocity)s
-            )
-            ON CONFLICT(condition_id, run_no, time) DO UPDATE SET
-                temperature=excluded.temperature,
-                pressure=excluded.pressure,
-                velocity=excluded.velocity;
-            """.encode("utf-8"),
+            );
+            """.encode(),
             {
                 "condition_id": data.condition_id,
-                "run_no": data.run_no,
                 "time": data.time,
                 "temperature": data.temperature,
                 "temperature_gradient": data.temperature_gradient,
@@ -333,9 +343,8 @@ class BulkPropertiesTable(PostgresTable):
 @dataclasses.dataclass
 class ReactionData:
     condition_id: int
-    run_no: int
     time: float
-    rxn_no: int
+    reaction_no: int
     reaction: str
     fwd_rate_constant: float
     fwd_rate_of_progress: float
@@ -362,21 +371,20 @@ class ReactionTable(PostgresTable):
             f"""
             CREATE TABLE IF NOT EXISTS {self.name} (
                 condition_id INTEGER NOT NULL,
-                run_no INTEGER NOT NULL,
-                time REAL NOT NULL,
-                rxn_no INT NOT NULL,
+                time DOUBLE PRECISION NOT NULL,
+                reaction_no INT NOT NULL,
                 reaction TEXT NOT NULL,
-                fwd_rate_constant REAL NOT NULL,
-                fwd_rate_of_progress REAL NOT NULL,
-                rev_rate_constant REAL NOT NULL,
-                rev_rate_of_progress REAL NOT NULL,
-                net_rate_of_progress REAL NOT NULL,
-                relative_chemical_contribution REAL NOT NULL,
-                PRIMARY KEY (condition_id, run_no, time, reaction),
+                fwd_rate_constant DOUBLE PRECISION NOT NULL,
+                fwd_rate_of_progress DOUBLE PRECISION NOT NULL,
+                rev_rate_constant DOUBLE PRECISION NOT NULL,
+                rev_rate_of_progress DOUBLE PRECISION NOT NULL,
+                net_rate_of_progress DOUBLE PRECISION NOT NULL,
+                relative_chemical_contribution DOUBLE PRECISION NOT NULL,
+                PRIMARY KEY (condition_id, reaction_no, time),
                 FOREIGN KEY(condition_id) REFERENCES {TableName.Conditions.value}(id)
                 ON UPDATE CASCADE ON DELETE CASCADE
             );
-            """.encode("utf-8")
+            """.encode()
         )
 
     @backoff.on_exception(
@@ -385,14 +393,31 @@ class ReactionTable(PostgresTable):
         max_tries=BACKOFF_MAX_RETRIES,
         jitter=BACKOFF_JITTER,
     )
-    def insert_or_update(self, data: ReactionData, commit: bool = True):
+    def clear(self, condition_id: int, reaction_no: int) -> None:
+        self.cur.connection.rollback()
+        self.cur.execute(
+            f"""
+            DELETE
+            FROM {self.name}
+            WHERE condition_id = %(condition_id)s AND reaction_no = %(reaction_no)s;
+            """.encode(),
+            {"condition_id": condition_id, "reaction_no": reaction_no}
+        )
+        self.cur.connection.commit()
+
+    @backoff.on_exception(
+        BACKOFF_STRATEGY,
+        sqlite3.OperationalError,
+        max_tries=BACKOFF_MAX_RETRIES,
+        jitter=BACKOFF_JITTER,
+    )
+    def insert(self, data: ReactionData, commit: bool = True):
         self.cur.execute(
             f"""
             INSERT INTO {self.name} VALUES (
                 %(condition_id)s,
-                %(run_no)s,
                 %(time)s,
-                %(rxn_no)s,
+                %(reaction_no)s,
                 %(reaction)s,
                 %(fwd_rate_constant)s,
                 %(fwd_rate_of_progress)s,
@@ -400,20 +425,12 @@ class ReactionTable(PostgresTable):
                 %(rev_rate_of_progress)s,
                 %(net_rate_of_progress)s,
                 %(relative_chemical_contribution)s
-            )
-            ON CONFLICT(condition_id, run_no, time, reaction) DO UPDATE SET
-                fwd_rate_constant=excluded.fwd_rate_constant,
-                fwd_rate_of_progress=excluded.fwd_rate_of_progress,
-                rev_rate_constant=excluded.rev_rate_constant,
-                rev_rate_of_progress=excluded.rev_rate_of_progress,
-                net_rate_of_progress=excluded.net_rate_of_progress,
-                relative_chemical_contribution=excluded.relative_chemical_contribution;
-            """.encode("utf-8"),
+            );
+            """.encode(),
             {
                 "condition_id": data.condition_id,
-                "run_no": data.run_no,
                 "time": data.time,
-                "rxn_no": data.rxn_no,
+                "reaction_no": data.reaction_no,
                 "reaction": data.reaction,
                 "fwd_rate_constant": data.fwd_rate_constant,
                 "fwd_rate_of_progress": data.fwd_rate_of_progress,
@@ -430,8 +447,8 @@ class ReactionTable(PostgresTable):
 @dataclasses.dataclass
 class SpeciesData:
     condition_id: int
-    run_no: int
     time: float
+    species_no: int
     species: Species
     mole_frac: float
     concentration: float
@@ -460,22 +477,22 @@ class SpeciesTable(PostgresTable):
             f"""
             CREATE TABLE IF NOT EXISTS {self.name} (
                 condition_id INTEGER NOT NULL,
-                run_no INTEGER NOT NULL,
-                time REAL NOT NULL,
+                time DOUBLE PRECISION NOT NULL,
+                species_no INT NOT NULL,
                 species TEXT NOT NULL,
-                mole_frac REAL NOT NULL,
-                concentration REAL NOT NULL,
-                creation_rate REAL NOT NULL,
-                destruction_rate REAL NOT NULL,
-                net_production_rate REAL NOT NULL,
-                a REAL,
-                b REAL,
-                dy_dt REAL,
-                PRIMARY KEY (condition_id, run_no, time, species),
+                mole_frac DOUBLE PRECISION NOT NULL,
+                concentration DOUBLE PRECISION NOT NULL,
+                creation_rate DOUBLE PRECISION NOT NULL,
+                destruction_rate DOUBLE PRECISION NOT NULL,
+                net_production_rate DOUBLE PRECISION NOT NULL,
+                a DOUBLE PRECISION,
+                b DOUBLE PRECISION,
+                dy_dt DOUBLE PRECISION,
+                PRIMARY KEY (condition_id, species_no, time),
                 FOREIGN KEY(condition_id) REFERENCES {TableName.Conditions.value}(id)
                 ON UPDATE CASCADE ON DELETE CASCADE
             );
-            """.encode("utf-8")
+            """.encode()
         )
 
     @backoff.on_exception(
@@ -484,13 +501,31 @@ class SpeciesTable(PostgresTable):
         max_tries=BACKOFF_MAX_RETRIES,
         jitter=BACKOFF_JITTER,
     )
-    def insert_or_update(self, data: SpeciesData, commit: bool = True):
+    def clear(self, condition_id: int, species_no: int) -> None:
+        self.cur.connection.rollback()
+        self.cur.execute(
+            f"""
+            DELETE
+            FROM {self.name}
+            WHERE condition_id = %(condition_id)s AND species_no = %(species_no)s;
+            """.encode(),
+            {"condition_id": condition_id, "species_no": species_no}
+        )
+        self.cur.connection.commit()
+
+    @backoff.on_exception(
+        BACKOFF_STRATEGY,
+        sqlite3.OperationalError,
+        max_tries=BACKOFF_MAX_RETRIES,
+        jitter=BACKOFF_JITTER,
+    )
+    def insert(self, data: SpeciesData, commit: bool = True):
         self.cur.execute(
             f"""
             INSERT INTO {self.name} VALUES (
                 %(condition_id)s,
-                %(run_no)s,
                 %(time)s,
+                %(species_no)s,
                 %(species)s,
                 %(mole_frac)s,
                 %(concentration)s,
@@ -500,18 +535,12 @@ class SpeciesTable(PostgresTable):
                 %(a)s,
                 %(b)s,
                 %(dy_dt)s
-            )
-            ON CONFLICT(condition_id, run_no, time, species) DO UPDATE SET
-                mole_frac=excluded.mole_frac,
-                concentration=excluded.concentration,
-                creation_rate=excluded.creation_rate,
-                destruction_rate=excluded.destruction_rate,
-                net_production_rate=excluded.net_production_rate;
-            """.encode("utf-8"),
+            );
+            """.encode(),
             {
                 "condition_id": data.condition_id,
-                "run_no": data.run_no,
                 "time": data.time,
+                "species_no": data.species_no,
                 "species": data.species.name,
                 "mole_frac": data.mole_frac,
                 "concentration": data.concentration,
@@ -536,6 +565,7 @@ class SimulationDatabase:
 
     def __init__(self, db: PostgresDatabase, conditions: Conditions):
         self.db = db
+        self.this_run = conditions
         self.conditions = ConditionTable(db)
         self.conditions_id = self.conditions.insert(conditions)
         self.reactions = ReactionTable(db)
@@ -553,6 +583,11 @@ class SimulationDatabase:
         self.bulk_properties.cur.connection.commit()
         self.species.cur.connection.commit()
         self.reactions.cur.connection.commit()
+
+    def clear_results(self, reaction_no: int, species_no: int) -> None:
+        self.reactions.clear(self.conditions_id, reaction_no)
+        self.species.clear(self.conditions_id, species_no)
+        self.bulk_properties.clear(self.conditions_id)
 
 
 def clear_simulation_database(conninfo: str):
