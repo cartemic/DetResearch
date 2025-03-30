@@ -217,14 +217,10 @@ def calculate_normalized_sensitivity_coefficients(
 
     # rates
     output["dl/dmul"] = output["delta_cell_size"] / output["perturbation_fraction"]
-    output["dl/dmul_magnitude"] = output["dl/dmul"].abs()  # for sorting
     output["dl/dRCC"] = output["delta_cell_size"] / output["delta_RCC"]
 
     # normalized coefficients
-    # todo: double check that the math for dpf is correct, and write it down. We don't necessarily want pf - pf, we want
-    #  multiplier - multiplier and also /multiplier, which is 1 for unperturbed and 1 + pf for perturbed
     output["c_mul"] = output["dl/dmul"] / output["cell_size"]
-    output["c_mul_magnitude"] = output["c_mul"].abs()  # for sorting
     output["c_RCC"] = output["dl/dRCC"] * output["RCC"] / output["cell_size"]
 
     return output
