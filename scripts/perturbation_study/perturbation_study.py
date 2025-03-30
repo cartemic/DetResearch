@@ -154,6 +154,17 @@ def main() -> None:
 
     gas = ct.Solution(mech)
 
+    rxn_pert_frac = {
+        7: -0.025,
+        77: -0.025,
+        86: -0.025,
+        180: -0.025,
+        281: -0.025,
+        249: -0.025,
+        237: -0.025,
+        298: -0.025,
+    }
+
     equations_of_interest: list[int | None] = [None, *range(len(gas.reactions()))]
     simulation_inputs = []
     co2_low = 0.1
@@ -193,7 +204,7 @@ def main() -> None:
     ):
         for rxn_no in equations_of_interest:
             # these are finicky
-            perturbation_fraction = -0.025 if rxn_no == 77 else -0.05
+            perturbation_fraction = rxn_pert_frac.get(rxn_no, -0.05)
             simulation_inputs.append(
                 SimulationInputs(
                     diluent=diluent,
