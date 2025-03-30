@@ -83,6 +83,8 @@ def plot_inert_diffs(plot_data: "DataFrame") -> None:
             for ax in grid.axes.flatten():
                 condition = ax.get_title().replace("dil_condition = ", "").capitalize()
                 ax.set_title(f"{condition} Dilution")
+                ax.grid(alpha=0.5)
+                ax.set_axisbelow(True)
 
 
 def main():
