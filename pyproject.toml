@@ -9,10 +9,7 @@ dynamic = ["dependencies"]
 requires-python = ">=3.13,<3.14"
 
 [tool.poetry]
-packages = [
-    { include = "sdtoolbox" },
-    { include = "scripts" }
-]
+packages = [{ include = "sdtoolbox" }, { include = "scripts" }]
 
 [tool.poetry.dependencies]
 pip = "^24.3.1"
@@ -39,14 +36,16 @@ seaborn = "^0.13.2"
 pyqt6 = "^6.8.0"
 
 [tool.poetry.group.notebook.dependencies]
+jupyter-contrib-nbextensions = "^0.7.0"
 ipywidgets = "^8.1.5"
 jupyter = "^1.1.1"
-jupyter-contrib-nbextensions = "^0.7.0"
 jupyterlab = "^4.3.4"
 nbconvert = "^7.16.5"
 nbformat = "^5.10.4"
 plotly = "^5.24.1"
 voila = "^0.5.8"
+bqplot = "^0.12.44"
+ipympl = "^0.9.7"
 
 [tool.poetry.group.dev.dependencies]
 ipython = "^8.31.0"
@@ -59,7 +58,7 @@ ruff = "^0.8.6"
 rich = "^13.9.4"
 tqdm = "^4.67.1"
 backoff = "^2.2.1"
-psycopg = {version = "^3.2.4", extras = ["binary"]}
+psycopg = { version = "^3.2.4", extras = ["binary"] }
 
 [build-system]
 requires = ["poetry-core"]
@@ -69,39 +68,39 @@ build-backend = "poetry.core.masonry.api"
 line-length = 120
 extend-exclude = ["sdtoolbox", "sd_matlab_test", "*.ipynb"]
 lint.select = [
-    "A",  # Prevent builtin shadowing
-#    "ANN",  # Check for missing type annotations and `typing.Any`
-    "ARG",  # Check for unused args
-    "C4",  # flake8-comprehension checks
-    "COM818",  # Comma police, arrest this man
-    "COM819",  # He talks in maths, he buzzes like a fridge
-    "E",  # Check for syntax errors
-    "ERA",  # Prevent commented-out code
-    "F",  # Pyflakes
-    "I",  # Isort
+    "A", # Prevent builtin shadowing
+    #    "ANN",  # Check for missing type annotations and `typing.Any`
+    "ARG",    # Check for unused args
+    "C4",     # flake8-comprehension checks
+    "COM818", # Comma police, arrest this man
+    "COM819", # He talks in maths, he buzzes like a fridge
+    "E",      # Check for syntax errors
+    "ERA",    # Prevent commented-out code
+    "F",      # Pyflakes
+    "I",      # Isort
     # Note: ISC001 is left out because formatter runs may leave lines that look like "some" "thing", which is an ISC001
     # violation. We still want to check for that, but it has been moved to the lint script in order to avoid unnecessary
     # warnings.
-    "ISC002",  # Avoid string concatenation goofs
-    "ISC003",  # Avoid string concatenation goofs
-    "N",  # Enforce pep8 naming conventions
-    "NPY",  # Numpy-specific lints
-    "PD",  # Pandas-specific lints
-    "PERF",  # Perormance-conscious lints
-    "PIE",  # Checks for unnecessary placeholders, duplicate enum values, unnecessary spreads, etc.
-    "PL",  # Pylint checks
-    "Q",  # Flake8 quote checks
-    "RET",  # Make sure returns are excellent
-    "RUF",  # Apply ruff-specific rules
-    "S101",  # Keep `assert` out of production code
-    "S102",  # Avoid abritrary code execution via `exec()`
-    "SIM",  # Check for simplifications
-    "SLF",  # Avoid private member access
-    "TID",  # Keep imports tidy
-    "TRY002",  # Avoid `Exception`, `BaseException`
-    "TRY300",  # Avoid returns in try blocks
-    "TRY400",  # Prefer `logging.exception` to `logging.error` for traceback preservation
-    "W",  # Code style warnings
+    "ISC002", # Avoid string concatenation goofs
+    "ISC003", # Avoid string concatenation goofs
+    "N",      # Enforce pep8 naming conventions
+    "NPY",    # Numpy-specific lints
+    "PD",     # Pandas-specific lints
+    "PERF",   # Perormance-conscious lints
+    "PIE",    # Checks for unnecessary placeholders, duplicate enum values, unnecessary spreads, etc.
+    "PL",     # Pylint checks
+    "Q",      # Flake8 quote checks
+    "RET",    # Make sure returns are excellent
+    "RUF",    # Apply ruff-specific rules
+    "S101",   # Keep `assert` out of production code
+    "S102",   # Avoid abritrary code execution via `exec()`
+    "SIM",    # Check for simplifications
+    "SLF",    # Avoid private member access
+    "TID",    # Keep imports tidy
+    "TRY002", # Avoid `Exception`, `BaseException`
+    "TRY300", # Avoid returns in try blocks
+    "TRY400", # Prefer `logging.exception` to `logging.error` for traceback preservation
+    "W",      # Code style warnings
 
 ]
 lint.ignore = [
@@ -109,21 +108,25 @@ lint.ignore = [
     "RET504",  # Allow unnecessary assignment before return, which can make debugging nicer
     "RET505",  # Allow early returns
     "ERA001",  # todo: temporarily allow commented-out code :(
-    "PLR0913",  # todo: temporarily allow piles of function arguments
-    "ANN10",  # Allow untyped `self`, `cls`
-    "PD002",  # Not worth removing inplace at this point
-    "PLR0915",  # Not worth refactoring long things at this point
-    "PLR0912",  # Same goes for overly branched things
-    "PD008",  # Allow DataFrame.at()
+    "PLR0913", # todo: temporarily allow piles of function arguments
+    "ANN10",   # Allow untyped `self`, `cls`
+    "PD002",   # Not worth removing inplace at this point
+    "PLR0915", # Not worth refactoring long things at this point
+    "PLR0912", # Same goes for overly branched things
+    "PD008",   # Allow DataFrame.at()
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = [
-    "E402",  # Allow interesting imports in __init__, e.g. for version checks
-    "F401",  # Unused imports can be used to define the shape of the API and are therefore okay in __init__
+    "E402", # Allow interesting imports in __init__, e.g. for version checks
+    "F401", # Unused imports can be used to define the shape of the API and are therefore okay in __init__
 ]
 "**/test_*.py" = [
-    "S101",  # Allow `assert` in tests
-    "PLR2004",  # Allow direct comparison with values in tests
+    "S101",    # Allow `assert` in tests
+    "PLR2004", # Allow direct comparison with values in tests
     "SLF001",  # Allow private member access in tests
 ]
+
+[tool.pyright]
+venvPath = ".venv"
+venv = "funcs-py3.13"
