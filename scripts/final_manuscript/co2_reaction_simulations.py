@@ -6,11 +6,11 @@ from typing import Optional
 
 import cantera as ct
 import numpy as np
-import simulation.thermo
 from rich.pretty import install
 from tqdm import tqdm
 
 import sdtoolbox as sdt
+from funcs.simulation import thermo
 from funcs.simulation.cell_size import CvConfig, build_gas_object, calculate_westbrook_only
 from sdtoolbox.output import clear_simulation_database
 
@@ -236,7 +236,7 @@ def match_dil_mf_aft(
     t0: float,
     p0: float,
 ) -> float:
-    return simulation.thermo.match_adiabatic_temp(
+    return thermo.match_adiabatic_temp(
         mech=mech,
         fuel=fuel,
         oxidizer=oxidizer,
