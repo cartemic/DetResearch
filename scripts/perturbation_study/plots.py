@@ -78,7 +78,7 @@ def plot_inert_diffs(plot_data: "DataFrame") -> None:
             grid.despine()
             grid.fig.suptitle(f"Change in {target_title} Sensitivity ({diluent_fmt})", weight="bold")
             grid.fig.subplots_adjust(top=0.875)
-            grid.set_xlabels(f"$k_{{active,{coefficient_subscript}}} - k_{{inert,{coefficient_subscript}}}$")
+            grid.set_xlabels(f"$c_{{s,active,{coefficient_subscript}}} - c_{{s,inert,{coefficient_subscript}}}$")
             grid.set_ylabels("Reaction")
             for ax in grid.axes.flatten():
                 condition = ax.get_title().replace("dil_condition = ", "").capitalize()
@@ -90,7 +90,7 @@ def plot_inert_diffs(plot_data: "DataFrame") -> None:
 def main():
     plot_data = load_data()
 
-    plot_all(plot_data)
+    # plot_all(plot_data)
     plot_inert_diffs(plot_data)
 
     plt.show()
