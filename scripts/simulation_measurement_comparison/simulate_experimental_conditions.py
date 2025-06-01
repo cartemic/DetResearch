@@ -16,10 +16,10 @@ import tqdm
 from pandas.errors import PerformanceWarning
 from scipy.stats import t
 
-from simulation.cell_size import CvConfig
 from uncertainties import unumpy as unp
 
 from funcs.simulation import cell_size as cs
+from funcs.simulation.cell_size import CvConfig
 from funcs.simulation import thermo
 from scripts.final_manuscript.co2_reaction_simulations import (
     get_important_reaction_indices,
@@ -42,16 +42,15 @@ def main(with_inerts: bool = False, westbrook_only: bool = True):
     maybe_inerts = "_inerts" if with_inerts else ""
     df_measured = read_in_measured_data()
 
-    mech_name = Path(mech).name
-    output_base = THIS_SCRIPT_DIR / f"simulated_and_measured_{TODAY}_{mech_name}{maybe_inerts}"
+    conn_info = f"postgresql://postgres@localhost:5432/simulated_and_measured_{TODAY}_{mech}{maybe_inerts}"
     df_result = simulate_measured_conditions(
         df_measured,
         mech=mech,
         with_inerts=with_inerts,
         westbrook_only=westbrook_only,
-        db_path=output_base.with_suffix(".sqlite") if westbrook_only else None,
+        conn_info=conn_info if westbrook_only else None,
     )
-    h5_path = output_base.with_suffix(".h5")
+    h5_path = (THIS_SCRIPT_DIR / conn_info.split("/")[-1]).with_suffix(".h5")
     with warnings.catch_warnings():
         # Yes, yes, PyTables will pickle stuff, I really don't care here
         warnings.simplefilter("ignore", PerformanceWarning)
@@ -129,10 +128,10 @@ def simulate_measured_conditions(
     mech: str,
     with_inerts: bool,
     westbrook_only: bool,
-    db_path: Optional[Path],
+    conn_info: Optional[str],
 ):
-    if westbrook_only and db_path is not None and db_path.exists():
-        output.clear_simulation_database(db_path)
+    if westbrook_only and conn_info is not None:
+        output.clear_simulation_database(conn_info)
 
     base_gas = ct.Solution(mech)
     rxn_indices = get_important_reaction_indices(gas=base_gas)
@@ -143,7 +142,7 @@ def simulate_measured_conditions(
         mech=mech,
         with_inerts=with_inerts,
         westbrook_only=westbrook_only,
-        db_path=db_path,
+        conn_info=conn_info,
         rxn_indices=rxn_indices,
         spec_indices=spec_indices,
     )
@@ -168,7 +167,7 @@ def simulate_single_condition(
     mech: str,
     with_inerts: bool,
     westbrook_only: bool,
-    db_path: Optional[Path],
+    conn_info: Optional[str],
     rxn_indices: list[int],
     spec_indices: list[int],
 ):
@@ -221,7 +220,7 @@ def simulate_single_condition(
                     dil_condition=dil_condition,
                     rxn_indices=rxn_indices,
                     spec_indices=spec_indices,
-                    db_path=db_path,
+                    conninfo=conn_info,
                     phi_nom=phi_nom,
                 )
             else:
@@ -275,4 +274,4 @@ def simulate_single_condition(
 
 
 if __name__ == "__main__":
-    main(with_inerts=True)
+    main(with_inerts=False)
