@@ -1,4 +1,4 @@
-import sqlite3
+import psycopg
 
 import numpy as np
 import pandas as pd
@@ -81,44 +81,31 @@ def calculate_simulated_measured_ratio(simulated: pd.DataFrame, measured: pd.Dat
 
 
 def load_cp_cv_sim_bulk_properties() -> pd.DataFrame:
-    db_path = directory.SIM_MEAS_COMPARISON / "simulated_and_measured_2024-11-16_gri30_highT.sqlite"
-    with sqlite3.connect(db_path) as con:
+    conn_str = "postgresql://postgres@localhost:5432/simulated_and_measured_2025-06-01_gri30_highT.yaml"
+    with psycopg.connect(conn_str) as con:
         bulk_properties = pd.read_sql_query(
             """
             select
-                jcon.diluent,
-                jcon.dil_condition,
+                diluent,
+                dil_condition,
                 "time",
-                (bp."time" / jcon.t_ind) progress,
+                progress,
                 phi_nom,
                 cp,
                 cv,
                 gamma
             from
+                (select *, (bp."time" / c.t_ind) progress
+                from 
                 bulk_properties bp
-            join (
-                select
-                    *
-                from
-                    conditions c
-                join (
-                    select
-                        condition_id,
-                        max(run_no) mrn
-                    from
-                        bulk_properties
-                    group by
-                        condition_id
-                ) maxes on
-                    c.id = maxes.condition_id
-            ) jcon on
-                bp.condition_id = jcon.condition_id
+                join conditions c
+                on bp.condition_id = c.id
+                )
             where
                 sim_type = 'cv'
                 and mech = 'gri30_highT.yaml'
                 and match = 'tad'
                 and progress <= 1
-                and bp.run_no = jcon.mrn
                 and dil_condition != 'medium'
                 and not phi_nom = 0.4
             order by
@@ -159,8 +146,8 @@ def calculate_cp_cv_gamma_ratios(data: pd.DataFrame) -> pd.DataFrame:
 
 
 def load_sim_conditions() -> pd.DataFrame:
-    db_path = directory.SIM_MEAS_COMPARISON / "simulated_and_measured_2024-11-16_gri30_highT.sqlite"
-    with sqlite3.connect(db_path) as con:
+    conn_str = "postgresql://postgres@localhost:5432/simulated_and_measured_2025-06-01_gri30_highT.yaml"
+    with psycopg.connect(conn_str) as con:
         conditions = pd.read_sql_query(
             """
             select
@@ -185,7 +172,7 @@ def load_sim_conditions() -> pd.DataFrame:
             con=con,
         )
     test_data = pd.read_hdf(
-        db_path.with_suffix(".h5"),
+        (directory.SIM_MEAS_COMPARISON / conn_str.split("/")[-1]).with_suffix(".h5"),
         key="data_fixed_uncert",
     )[["diluent", "phi_nom", "dil_mf_nom", "wave_speed", "u_wave_speed"]]
     mach_data = pd.read_csv(directory.SCRIPTS / "cj_study" / "cj_tad_ss_results.csv")[[
@@ -217,8 +204,8 @@ def load_sim_conditions() -> pd.DataFrame:
 
 
 def load_sim_inert() -> pd.DataFrame:
-    data_base = directory.SIM_MEAS_COMPARISON / "simulated_and_measured_2025-01-25_gri30_highT_inerts"
-    with sqlite3.connect(data_base.with_suffix(".sqlite")) as con:
+    conn_str = "postgresql://postgres@localhost:5432/simulated_and_measured_2025-06-01_gri30_highT_inerts.yaml_inerts"
+    with psycopg.connect(conn_str) as con:
         conditions = pd.read_sql_query(
             """
             select
@@ -242,7 +229,7 @@ def load_sim_inert() -> pd.DataFrame:
             con=con,
         )
     test_data = pd.read_hdf(
-        data_base.with_suffix(".h5"),
+        (directory.SIM_MEAS_COMPARISON / conn_str.split("/")[-1]).with_suffix(".h5"),
         key="data_fixed_uncert",
     )[["diluent", "phi_nom", "dil_mf_nom", "wave_speed", "u_wave_speed"]]
     conditions = conditions.join(

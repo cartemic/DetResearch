@@ -52,7 +52,7 @@ def simulate(
     p0: float,
     phi: float,
     dil_mf: float,
-    db_path: str,
+    conn_info: str,
 ) -> None:
     base_gas = build_gas_object(
         mechanism=mech,
@@ -83,7 +83,7 @@ def simulate(
             cj_speed=cj_speed,
             rxn_indices=get_important_reaction_indices(gas=base_gas),
             spec_indices=get_important_species_indices(gas=base_gas),
-            db_path=db_path,
+            conninfo=conn_info,
             cv_config=CvConfig(max_tries=1, max_step=1e-6, end_time=12e-6, solver_method="Radau"),
             # znd_config=ZndConfig(max_tries=1, max_step=1e-4, end_time=3e-5),
             phi_nom=np.nan,
@@ -101,7 +101,7 @@ def cell_size_serial(
     t0: float,
     p0: float,
     phi: float,
-    db_path: str,
+    conn_info: str,
     counter: tqdm,
 ):
     for dil_mf, dil_condition in zip(co2_dil_mfs, dil_conditions):
@@ -116,7 +116,7 @@ def cell_size_serial(
             p0=p0,
             phi=phi,
             dil_mf=dil_mf,
-            db_path=db_path,
+            conn_info=conn_info,
         )
         counter.update()
     for dil_mf, match, dil_condition in zip(n2_dil_mfs, n2_match, dil_conditions * 2):
@@ -131,7 +131,7 @@ def cell_size_serial(
             p0=p0,
             phi=phi,
             dil_mf=dil_mf,
-            db_path=db_path,
+            conn_info=conn_info,
         )
         counter.update()
 
@@ -147,7 +147,7 @@ def cell_size_parallel(
     t0: float,
     p0: float,
     phi: float,
-    db_path: str,
+    conn_info: str,
     counter: tqdm,
 ):
     with ProcessPoolExecutor() as executor:
@@ -166,7 +166,7 @@ def cell_size_parallel(
                 p0=p0,
                 phi=phi,
                 dil_mf=dil_mf,
-                db_path=db_path,
+                conn_info=conn_info,
             )
             futures.add(f)
         for dil_mf, match, dil_condition in zip(n2_dil_mfs, n2_match, dil_conditions * 2):
@@ -183,7 +183,7 @@ def cell_size_parallel(
                 p0=p0,
                 phi=phi,
                 dil_mf=dil_mf,
-                db_path=db_path,
+                conn_info=conn_info,
             )
             futures.add(f)
         results = []
@@ -256,11 +256,11 @@ def main():
     t0 = 300
     p0 = 101325
     phi = 1.0
-    db_path = "/home/mick/DetResearch/scripts/final_manuscript/co2_reaction_study.sqlite"
+    conn_info = "postgresql://postgres@localhost:5432/co2_reaction_study"
     clear_existing_data = True
 
     if clear_existing_data:
-        clear_simulation_database(path=db_path)
+        clear_simulation_database(conn_info)
 
     parallelize = True
     parallel_or_series = "parallel" if parallelize else "series"
@@ -313,7 +313,7 @@ def main():
                 p0=p0,
                 phi=phi,
                 counter=counter,
-                db_path=db_path,
+                conn_info=conn_info,
             )
         else:
             cell_size_serial(
@@ -328,7 +328,7 @@ def main():
                 p0=p0,
                 phi=phi,
                 counter=counter,
-                db_path=db_path,
+                conn_info=conn_info,
             )
         counter.set_description_str("Done")
 
