@@ -258,7 +258,7 @@ def _calc_rcc_by_condition(conditions: ConditionsDataframe, reactions: Reactions
         cast(
             pd.Series,
             reactions.groupby(["condition_id", "reaction_no", "reaction"]).apply(
-                _calc_single_rcc, include_groups=False
+                 _calc_single_rcc, include_groups=False
             ),
         )
         .rename("RCC")
@@ -300,9 +300,24 @@ class NormalizedSensitivityCoefficientModel(_BaseDataframeModel):
     rcc: _RccType = _RccField
     delta_rcc: _DeltaRccType = _DeltaRccField
     dl_dmul: _DlType = _DlDmulField
+    """
+    Corresponds to C_s (eq. 6)
+    """
+
     dl_drcc: _DlType = _DlDrccField
+    """
+    Corresponds to C_s (eq. 6)
+    """
+
     c_mul: _CType = _CMulField
+    """
+    Corresponds to c_s (eq. 8)
+    """
+
     c_rcc: _CType = _CRccField
+    """
+    Corresponds to c_s (eq. 8)
+    """
 
 
 type NormalizedSensitivityCoefficientDataframe = DataFrame[NormalizedSensitivityCoefficientModel]
@@ -337,8 +352,10 @@ def calculate_normalized_sensitivity_coefficients(
     output["dl/dRCC"] = output["delta_cell_size"] / output["delta_RCC"]
 
     # normalized coefficients
+    # cell_size is unperturbed
+    rcc_numerator = 1
     output["c_mul"] = output["dl/dmul"] / output["cell_size"]
-    output["c_RCC"] = output["dl/dRCC"] * output["RCC"] / output["cell_size"]
+    output["c_RCC"] = output["dl/dRCC"] * rcc_numerator / output["cell_size"]
 
     return NormalizedSensitivityCoefficientModel.validate(output)
 
