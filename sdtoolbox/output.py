@@ -351,7 +351,8 @@ class ReactionData:
     rev_rate_constant: float
     rev_rate_of_progress: float
     net_rate_of_progress: float
-    relative_chemical_contribution: float
+    abs_rate_of_progress_rxn: float
+    abs_rate_of_progress_total: float
 
 
 class ReactionTable(PostgresTable):
@@ -379,7 +380,8 @@ class ReactionTable(PostgresTable):
                 rev_rate_constant DOUBLE PRECISION NOT NULL,
                 rev_rate_of_progress DOUBLE PRECISION NOT NULL,
                 net_rate_of_progress DOUBLE PRECISION NOT NULL,
-                relative_chemical_contribution DOUBLE PRECISION NOT NULL,
+                abs_rate_of_progress_rxn DOUBLE PRECISION NOT NULL,
+                abs_rate_of_progress_total DOUBLE PRECISION NOT NULL,
                 PRIMARY KEY (condition_id, reaction_no, time),
                 FOREIGN KEY(condition_id) REFERENCES {TableName.Conditions.value}(id)
                 ON UPDATE CASCADE ON DELETE CASCADE
@@ -424,7 +426,8 @@ class ReactionTable(PostgresTable):
                 %(rev_rate_constant)s,
                 %(rev_rate_of_progress)s,
                 %(net_rate_of_progress)s,
-                %(relative_chemical_contribution)s
+                %(abs_rate_of_progress_rxn)s,
+                %(abs_rate_of_progress_total)s
             );
             """.encode(),
             {
@@ -437,7 +440,8 @@ class ReactionTable(PostgresTable):
                 "rev_rate_constant": data.rev_rate_constant,
                 "rev_rate_of_progress": data.rev_rate_of_progress,
                 "net_rate_of_progress": data.net_rate_of_progress,
-                "relative_chemical_contribution": data.relative_chemical_contribution,
+                "abs_rate_of_progress_rxn": data.abs_rate_of_progress_rxn,
+                "abs_rate_of_progress_total": data.abs_rate_of_progress_total,
             },
         )
         if commit:

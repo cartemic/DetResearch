@@ -273,9 +273,8 @@ def cvsolve(
                         rev_rate_constant=gas.reverse_rate_constants[idx_rxn],
                         rev_rate_of_progress=gas.reverse_rates_of_progress[idx_rxn],
                         net_rate_of_progress=this_net_rate_of_progress,
-                        relative_chemical_contribution=(
-                                np.abs(this_net_rate_of_progress) / np.sum(np.abs(net_rates_of_progress))
-                        ),
+                        abs_rate_of_progress_rxn = np.abs(this_net_rate_of_progress),
+                        abs_rate_of_progress_total = np.sum(np.abs(net_rates_of_progress)),
                     ), commit=False)
 
     if db is not None:

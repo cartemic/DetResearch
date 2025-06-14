@@ -52,7 +52,8 @@ def load_reactions(condition_ids: tuple[int]) -> SimulationResults[pd.DataFrame]
                     phi_nom,
                     reaction_no,
                     reaction,
-                    relative_chemical_contribution
+                    abs_rate_of_progress_total,
+                    (abs_rate_of_progress_rxn / abs_rate_of_progress_total) as relative_chemical_contribution
                 from
                     combined
                 )
@@ -126,17 +127,13 @@ def analyze_cell_sizes(conditions: SimulationResults) -> pd.DataFrame:
     index = ["diluent", "dil_condition"]
     main_cols = ["cell_size"]
     unperturbed = conditions.unperturbed.set_index(index)[main_cols]
-    perturbed = conditions.perturbed.set_index(index)[["perturbed_rxn", "perturbation_fraction"] + main_cols]
+    perturbed = conditions.perturbed.set_index(index)[["perturbed_rxn", "perturbation_fraction", *main_cols]]
     result = unperturbed.join(perturbed, rsuffix="_p")
     for column in main_cols:
         pert_col = f"{column}_p"
         result[f"delta_{column}"] = result[column] - result[pert_col]
         result = result.drop(pert_col, axis=1)
-    return (
-        result
-        .reset_index()
-        .set_index(index + ["perturbed_rxn"])
-    )
+    return result.reset_index().set_index([*index, "perturbed_rxn"])
 
 
 def calculate_rcc(
@@ -160,7 +157,9 @@ def _calc_rcc_by_condition(conditions: pd.DataFrame, reactions: pd.DataFrame) ->
     return (
         cast(
             pd.Series,
-            reactions.groupby(["condition_id", "reaction_no", "reaction"]).apply(_calc_single_rcc, include_groups=False),
+            reactions.groupby(["condition_id", "reaction_no", "reaction"]).apply(
+                _calc_single_rcc, include_groups=False
+            ),
         )
         .rename("RCC")
         .to_frame()
@@ -227,10 +226,12 @@ def calculate_normalized_sensitivity_coefficients(
 
 
 def group_coefficients_by_diluent(coefficients: pd.DataFrame) -> pd.DataFrame:
-    return pd.concat((
-        _group_coefficients_by_diluent(coefficients, "CO2"),
-        _group_coefficients_by_diluent(coefficients, "N2"),
-    ))
+    return pd.concat(
+        (
+            _group_coefficients_by_diluent(coefficients, "CO2"),
+            _group_coefficients_by_diluent(coefficients, "N2"),
+        )
+    )
 
 
 def _group_coefficients_by_diluent(coefficients: pd.DataFrame, diluent: str) -> pd.DataFrame:
@@ -262,9 +263,10 @@ def top_n_by_method(grouped: pd.DataFrame, target: str, n: int) -> pd.DataFrame:
 
 def top_n_inert_diffs(grouped: pd.DataFrame, target: str, n: int) -> pd.DataFrame:
     grouped = (
-        grouped.loc[grouped["method"] == "active", target]
-        - grouped.loc[grouped["method"] == "inert", target]
-    ).to_frame().reset_index()
+        (grouped.loc[grouped["method"] == "active", target] - grouped.loc[grouped["method"] == "inert", target])
+        .to_frame()
+        .reset_index()
+    )
     result = pd.DataFrame()
     for dil_condition, group in grouped.groupby("dil_condition"):
         group["target_abs"] = group[target].abs()
