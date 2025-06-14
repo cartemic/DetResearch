@@ -5,7 +5,9 @@ from typing import Generic, TypeVar, cast
 
 import numpy as np
 import pandas as pd
+import pandera.pandas as pa
 import psycopg
+from pandera.typing.pandas import DataFrame, Index
 from scipy.integrate import simpson
 
 CONN_INFO = "postgresql://postgres@localhost:5432/perturbation_study"
@@ -21,7 +23,65 @@ class SimulationResults(Generic[T]):
     unperturbed: T
 
 
-def load_reactions(condition_ids: tuple[int]) -> SimulationResults[pd.DataFrame]:
+_DiluentType = str
+_DiluentField = pa.Field(isin=["CO2", "CO2i", "N2", "N2i"], nullable=True)
+
+_DilConditionType = str
+_DilConditionField = pa.Field(isin=["low", "high", "undiluted"])
+
+_PerturbedRxnType = int
+_PerturbedRxnField = pa.Field(nullable=True)
+
+_CellSizeType = float
+_CellSizeField = pa.Field(gt=0)
+
+_PerturbationFractionType = float
+_PerturbationFractionField = pa.Field(coerce=True)
+
+_ReactionNoType = int
+_ReactionNoField = pa.Field(ge=0)
+
+_ReactionType = str
+_ReactionField = pa.Field()
+
+_RccType = float
+_RccField = pa.Field(alias="RCC")
+
+_DeltaRccType = float
+_DeltaRccField =  pa.Field(alias="delta_RCC")
+
+_DlType = float
+_DlDmulField = pa.Field(alias="dl/dmul")
+_DlDrccField = pa.Field(alias="dl/dRCC")
+
+_CType = float
+_CMulField = pa.Field(alias="c_mul")
+_CRccField = pa.Field(alias="c_RCC")
+
+
+class _BaseDataframeModel(pa.DataFrameModel):
+    class Config:
+        strict = True
+
+
+class ReactionsDataframeModel(_BaseDataframeModel):
+    condition_id: Index[int] = pa.Field(ge=0)
+    reaction_no: Index[_ReactionNoType] = _ReactionNoField
+    diluent: _DiluentType = _DiluentField
+    dil_condition: _DilConditionType = _DilConditionField
+    perturbed_rxn: _PerturbedRxnType = _PerturbedRxnField
+    time: float = pa.Field(ge=0)
+    progress: float = pa.Field(ge=0, le=1)
+    phi_nom: float = pa.Field(gt=0)
+    reaction: _ReactionType = _ReactionField
+    abs_rate_of_progress_total: float = pa.Field(ge=0)
+    relative_chemical_contribution: float = pa.Field(ge=0, le=1)
+
+
+type ReactionsDataframe = DataFrame[ReactionsDataframeModel]
+
+
+def load_reactions(condition_ids: tuple[int]) -> SimulationResults[ReactionsDataframe]:
     index = ["condition_id", "reaction_no"]
     with psycopg.connect(CONN_INFO) as con, warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
@@ -74,8 +134,8 @@ def load_reactions(condition_ids: tuple[int]) -> SimulationResults[pd.DataFrame]
         )
     reactions["reaction"] = reactions.apply(to_chemical_string, axis=1)
     perturbed_mask = pd.notna(reactions.perturbed_rxn)
-    unperturbed = reactions[~perturbed_mask].set_index(index)
-    perturbed = reactions[perturbed_mask].set_index(index)
+    unperturbed = ReactionsDataframeModel.validate(reactions[~perturbed_mask].set_index(index))
+    perturbed = ReactionsDataframeModel.validate(reactions[perturbed_mask].set_index(index))
 
     return SimulationResults(perturbed=perturbed, unperturbed=unperturbed)
 
@@ -86,7 +146,22 @@ def to_chemical_string(row: pd.Series) -> str:
     return f"{rxn} - [{r_no:03}]"
 
 
-def load_conditions() -> SimulationResults[pd.DataFrame]:
+class ConditionsDataframeModel(_BaseDataframeModel):
+    condition_id: Index[int] = pa.Field(ge=0)
+    dil_condition: str = pa.Field(isin=["low", "high", "undiluted"])
+    phi_nom: float = pa.Field(gt=0)
+    diluent: str | None = pa.Field(isin=["CO2", "CO2i", "N2", "N2i"], nullable=True)
+    equivalence: float = pa.Field(gt=0)
+    dil_mf: float = pa.Field(ge=0, coerce=True)
+    cell_size: _CellSizeType = _CellSizeField
+    perturbed_rxn: _PerturbedRxnType = _PerturbedRxnField
+    perturbation_fraction: _PerturbationFractionType = _PerturbationFractionField
+
+
+type ConditionsDataframe = DataFrame[ConditionsDataframeModel]
+
+
+def load_conditions() -> SimulationResults[ConditionsDataframe]:
     index = ["condition_id"]
     with psycopg.connect(CONN_INFO) as con, warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
@@ -116,14 +191,26 @@ def load_conditions() -> SimulationResults[pd.DataFrame]:
             con,
             dtype={"perturbed_rxn": pd.Int64Dtype(), "diluent": pd.StringDtype(), "cell_size": pd.Float64Dtype()},
         )
-        perturbed = pd.notna(conditions.perturbed_rxn)
-        unperturbed = conditions[~perturbed].set_index(index)
-        perturbed = conditions[perturbed].set_index(index)
+        perturbed_mask = pd.notna(conditions.perturbed_rxn)
+        unperturbed = ConditionsDataframeModel.validate(conditions[~perturbed_mask].set_index(index))
+        perturbed = ConditionsDataframeModel.validate(conditions[perturbed_mask].set_index(index))
 
     return SimulationResults(perturbed=perturbed, unperturbed=unperturbed)
 
 
-def analyze_cell_sizes(conditions: SimulationResults) -> pd.DataFrame:
+class CellSizeDataframeModel(_BaseDataframeModel):
+    diluent: Index[_DiluentType] = _DiluentField
+    dil_condition: Index[_DilConditionType] = _DilConditionField
+    perturbed_rxn: Index[_PerturbedRxnType] = _PerturbedRxnField
+    cell_size: _CellSizeType = _CellSizeField
+    perturbation_fraction: _PerturbationFractionType = _PerturbationFractionField
+    delta_cell_size: float = pa.Field()
+
+
+type CellSizeDataframe = DataFrame[CellSizeDataframeModel]
+
+
+def analyze_cell_sizes(conditions: SimulationResults[ConditionsDataframe]) -> CellSizeDataframe:
     index = ["diluent", "dil_condition"]
     main_cols = ["cell_size"]
     unperturbed = conditions.unperturbed.set_index(index)[main_cols]
@@ -133,13 +220,26 @@ def analyze_cell_sizes(conditions: SimulationResults) -> pd.DataFrame:
         pert_col = f"{column}_p"
         result[f"delta_{column}"] = result[column] - result[pert_col]
         result = result.drop(pert_col, axis=1)
-    return result.reset_index().set_index([*index, "perturbed_rxn"])
+    result = result.reset_index().set_index([*index, "perturbed_rxn"])
+    return CellSizeDataframeModel.validate(result)
+
+
+class RccDataframeModel(_BaseDataframeModel):
+    reaction_no: Index[_ReactionNoType] = _ReactionNoField
+    diluent: Index[_DiluentType] = _DiluentField
+    dil_condition: Index[_DilConditionType] = _DilConditionField
+    reaction: Index[_ReactionType] = _ReactionField
+    rcc: _RccType = _RccField
+    delta_rcc: _DeltaRccType = _DeltaRccField
+
+
+type RccDataframe = DataFrame[RccDataframeModel]
 
 
 def calculate_rcc(
-    conditions: SimulationResults[pd.DataFrame],
-    reactions: SimulationResults[pd.DataFrame],
-) -> pd.DataFrame:
+    conditions: SimulationResults[ConditionsDataframe],
+    reactions: SimulationResults[ReactionsDataframe],
+) -> RccDataframe:
     r"""
     Assumes reaction data is ordered by ``progress``, which should happen on database read. ``values`` are unperturbed.
 
@@ -150,10 +250,10 @@ def calculate_rcc(
     perturbed = _calc_rcc_by_condition(conditions.perturbed, reactions.perturbed)
     result = unperturbed.copy().to_frame()
     result["delta_RCC"] = unperturbed - perturbed
-    return result
+    return RccDataframeModel.validate(result)
 
 
-def _calc_rcc_by_condition(conditions: pd.DataFrame, reactions: pd.DataFrame) -> pd.Series:
+def _calc_rcc_by_condition(conditions: ConditionsDataframe, reactions: ReactionsDataframe) -> pd.Series:
     return (
         cast(
             pd.Series,
@@ -190,10 +290,28 @@ def _calc_single_rcc(rxn_data: pd.DataFrame) -> float:
     return result
 
 
+class NormalizedSensitivityCoefficientModel(_BaseDataframeModel):
+    diluent: Index[_DiluentType] = _DiluentField
+    dil_condition: Index[_DilConditionType] = _DilConditionField
+    reaction_no: Index[_ReactionNoType] = _ReactionNoField
+    cell_size: _CellSizeType = _CellSizeField
+    perturbation_fraction: _PerturbationFractionType = _PerturbationFractionField
+    delta_cell_size: _CellSizeType = pa.Field()
+    rcc: _RccType = _RccField
+    delta_rcc: _DeltaRccType = _DeltaRccField
+    dl_dmul: _DlType = _DlDmulField
+    dl_drcc: _DlType = _DlDrccField
+    c_mul: _CType = _CMulField
+    c_rcc: _CType = _CRccField
+
+
+type NormalizedSensitivityCoefficientDataframe = DataFrame[NormalizedSensitivityCoefficientModel]
+
+
 def calculate_normalized_sensitivity_coefficients(
-    cell_sizes: pd.DataFrame,
-    rcc: pd.DataFrame,
-) -> pd.DataFrame:
+    cell_sizes: CellSizeDataframe,
+    rcc: RccDataframe,
+) -> NormalizedSensitivityCoefficientDataframe:
     r"""
     .. math::
         c_{i} = \frac{\lambda_{i,u} - \lambda_{_i,p}}{k_{i,u} - k_{i,p}} \frac{k_{i,u}}{\lambda_{i, u}}
@@ -222,19 +340,43 @@ def calculate_normalized_sensitivity_coefficients(
     output["c_mul"] = output["dl/dmul"] / output["cell_size"]
     output["c_RCC"] = output["dl/dRCC"] * output["RCC"] / output["cell_size"]
 
-    return output
+    return NormalizedSensitivityCoefficientModel.validate(output)
 
 
-def group_coefficients_by_diluent(coefficients: pd.DataFrame) -> pd.DataFrame:
-    return pd.concat(
+class NSCByDiluentDataframeModel(_BaseDataframeModel):
+    diluent: Index[str] = pa.Field(isin=("CO2", "N2"))  # diluted only, inert subscript removed
+    dil_condition: Index[_DilConditionType] = _DilConditionField
+    reaction_no: Index[_ReactionNoType] = _ReactionNoField
+    reaction: Index[_ReactionType] = _ReactionField
+    cell_size: _CellSizeType = _CellSizeField
+    perturbation_fraction: _PerturbationFractionType = _PerturbationFractionField
+    delta_cell_size: _CellSizeType = pa.Field()
+    rcc: _RccType = _RccField
+    delta_rcc: _DeltaRccType = _DeltaRccField
+    dl_dmul: _DlType = _DlDmulField
+    dl_drcc: _DlType = _DlDrccField
+    c_mul: _CType = _CMulField
+    c_rcc: _CType = _CRccField
+    method: str = pa.Field(isin=("active", "inert"))
+
+
+type NSCByDiluentDataframe = DataFrame[NSCByDiluentDataframeModel]
+
+
+def group_coefficients_by_diluent(coefficients: NormalizedSensitivityCoefficientDataframe) -> NSCByDiluentDataframe:
+    result = pd.concat(
         (
             _group_coefficients_by_diluent(coefficients, "CO2"),
             _group_coefficients_by_diluent(coefficients, "N2"),
         )
     )
+    return NSCByDiluentDataframeModel.validate(result)
 
 
-def _group_coefficients_by_diluent(coefficients: pd.DataFrame, diluent: str) -> pd.DataFrame:
+def _group_coefficients_by_diluent(
+    coefficients: NormalizedSensitivityCoefficientDataframe,
+    diluent: str,
+) -> pd.DataFrame:
     grouped = coefficients[coefficients.index.get_level_values("diluent").str.startswith(diluent)].copy()
     index = grouped.index.names
     grouped = grouped.reset_index()

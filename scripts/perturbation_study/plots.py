@@ -1,10 +1,5 @@
-from typing import TYPE_CHECKING
-
 import seaborn as sns
 from matplotlib import pyplot as plt
-
-if TYPE_CHECKING:
-    from pandas import DataFrame
 
 from scripts.perturbation_study import data
 
@@ -13,14 +8,10 @@ COEFFICIENT_NAMES = {
     "c_RCC": "Relative Chemical Contribution",
 }
 
-def load_data() -> "DataFrame":
+
+def load_data() -> data.NSCByDiluentDataframe:
     conditions = data.load_conditions()
-    # noinspection PyTypeChecker
-    condition_ids: tuple[int] = tuple(
-        set(conditions.perturbed.index.get_level_values("condition_id")).union(
-            conditions.unperturbed.index.get_level_values("condition_id")
-        )
-    )
+    condition_ids: tuple[int] = tuple(conditions.perturbed.index.union(conditions.unperturbed.index))
     reactions = data.load_reactions(condition_ids)
     cell_sizes = data.analyze_cell_sizes(conditions)
     rcc = data.calculate_rcc(conditions, reactions)
@@ -31,7 +22,7 @@ def load_data() -> "DataFrame":
 
 
 
-def plot_all(plot_data: "DataFrame") -> None:
+def plot_all(plot_data: data.NSCByDiluentDataframe) -> None:
     diluent: str
     for diluent, grouped_data in plot_data.groupby("diluent"):
         for target, target_title in COEFFICIENT_NAMES.items():
@@ -59,7 +50,10 @@ def plot_all(plot_data: "DataFrame") -> None:
                 ax.set_title(f"{condition} Dilution")
 
 
-def plot_inert_diffs(plot_data: "DataFrame") -> None:
+def plot_inert_diffs(plot_data: data.NSCByDiluentDataframe) -> None:
+    """
+    eq. 8
+    """
     diluent: str
     for diluent, grouped_data in plot_data.groupby("diluent"):
         for target, target_title in COEFFICIENT_NAMES.items():
@@ -85,6 +79,18 @@ def plot_inert_diffs(plot_data: "DataFrame") -> None:
                 ax.set_title(f"{condition} Dilution")
                 ax.grid(alpha=0.5)
                 ax.set_axisbelow(True)
+
+
+def plot_non_normalized_coefficients(plot_data: data.NSCByDiluentDataframe) -> None:
+    """
+    eq. 6
+    """
+
+
+def plot_normalized_coefficients(plot_data: data.NSCByDiluentDataframe) -> None:
+    """
+    eq. 7
+    """
 
 
 def main():
