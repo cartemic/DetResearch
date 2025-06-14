@@ -1,7 +1,7 @@
 import re
 import warnings
 from dataclasses import dataclass
-from typing import Generic, TypeVar, cast
+from typing import Generic, Literal, TypeVar, cast
 
 import numpy as np
 import pandas as pd
@@ -81,7 +81,7 @@ class ReactionsDataframeModel(_BaseDataframeModel):
 type ReactionsDataframe = DataFrame[ReactionsDataframeModel]
 
 
-def load_reactions(condition_ids: tuple[int]) -> SimulationResults[ReactionsDataframe]:
+def load_reactions(condition_ids: tuple[int, ...]) -> SimulationResults[ReactionsDataframe]:
     index = ["condition_id", "reaction_no"]
     with psycopg.connect(CONN_INFO) as con, warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
@@ -433,3 +433,95 @@ def top_n_inert_diffs(grouped: pd.DataFrame, target: str, n: int) -> pd.DataFram
         result = pd.concat((result, group[group["reaction_no"].isin(this_top_n["reaction_no"])]))
 
     return result.sort_values("target_abs")
+
+
+SpeciesDataColumn = Literal[
+    "mole_frac",
+    "concentration",
+    "creation_rate",
+    "destruction_rate",
+    "net_production_rate",
+    "a",
+    "b",
+    "dy_dt",
+]
+SpeciesTimeseriesSchema = pa.DataFrameSchema(
+    {
+        "diluent": pa.Column(str),
+        "dil_condition": pa.Column(str),
+        "method": pa.Column(str, checks=pa.Check.isin(("active", "inert"))),
+        "species": pa.Column(str),
+        "time": pa.Column(float, checks=pa.Check.ge(0)),
+        "progress": pa.Column(float, checks=pa.Check.ge(0).le(1)),
+        "|".join(SpeciesDataColumn.__dict__["__args__"]): pa.Column(float, coerce=True, regex=True)
+    },
+    strict=True,
+)
+type SpeciesTimeseriesDataframe = DataFrame[SpeciesTimeseriesSchema]
+
+
+def load_species_timeseries(
+    data_column: SpeciesDataColumn,
+    species: tuple[str, ...],
+    dil_conditions: tuple[str, ...],
+) -> SpeciesTimeseriesDataframe:
+    with psycopg.connect(CONN_INFO) as con, warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        # direct substitution is bad sql practice, but it's fine here
+        ts_data = pd.read_sql(
+            f"""
+                with combined as (
+                    select
+                        s.condition_id condition_id_,
+                        *
+                    from
+                        species s
+                    join
+                        conditions c
+                    on
+                        s.condition_id = c.id
+                    where
+                        c.perturbation_fraction = 0
+                        and c.sim_type = 'cv'
+                        and c.dil_condition in {dil_conditions}
+                        and c.phi_nom = 1
+                        and (c.diluent like 'CO2%' or c.diluent like 'N2%')
+                ),
+                results as (
+                    select
+                        case when diluent like '%i' then 'inert' else 'active' end as "method",
+                        replace(diluent, 'i', '') as diluent,
+                        dil_condition,
+                        "time",
+                        ("time" / t_ind) as progress,
+                        species,
+                        {data_column}
+                    from
+                        combined
+                    where species in {species}
+                )
+                select
+                    *
+                from
+                    results
+                where
+                    progress <= 1
+                order by
+                    diluent,
+                    method,
+                    species,
+                    dil_condition,
+                    progress
+                ;
+            """,
+            con,
+        )
+    return (
+        SpeciesTimeseriesSchema
+        .update_columns(
+            {
+                "species": {"checks": pa.Check.isin(species)},
+                "dil_condition": {"checks": pa.Check.isin(dil_conditions)}
+            }
+        )
+        .validate(ts_data))
