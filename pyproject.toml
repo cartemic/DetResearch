@@ -23,6 +23,7 @@ scikit-image = "^0.25.0"
 scipy = "^1.15.2"
 tables = "^3.10.2"
 uncertainties = "^3.2.2"
+pandera = {version = "^0.24.0", extras = ["pandas"]}
 
 [tool.poetry.group.docs.dependencies]
 nbsphinx = "^0.9.6"
