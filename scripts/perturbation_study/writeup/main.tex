@@ -1,0 +1,103 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage[margin=1in]{geometry}
+\usepackage{nopageno}
+\usepackage{parskip}
+
+\title{\vspace{-4em}What is a sensitivity coefficient anyway?}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section*{Introduction}
+
+Everyone has a scalar value, $k$, for chemical sensitivity.
+I do not have one.
+I need one.
+Often these factors are provided by the simulation framework, however in the case of detonation studies we must calculate them ourselves.
+
+In order to assess the sensitivity of a given chemical pathway, we must run a number of simulations: a single unperturbed simulation (i.e.\ where reaction rates are not modified), and one simulation for each equation in our chemical mechanism in which the equation's reaction rate is perturbed.
+In this case, we are applying a multiplication factor, $f_{i}$, to the calculated reaction rate of the $i^{th}$ reaction pathway at each simulated instant in time.
+Although this sounds straightforward, attempting to apply the same factor to all reactions does not necessarily work, and may in some cases result in nonphysical solutions (e.g.\ a negative temperature) causing a premature end to the simulation.
+Therefore, it cannot be assumed that all perturbation factors are identical.
+
+There are a couple possible approaches that I could take to derive a sensitivity coefficient from this perturbation: a naive approach based on the multiplication factor applied to a given equation, or a more in-depth approach using the results of the multiplication factor's application.
+In both cases we begin by calculating a sensitivity coefficient $C$, which we then normalize by the unperturbed cell size (denoted by the subscript $u$) to nondimensionalize the sensitivity coefficient and allow it to be compared across conditions.
+
+\begin{equation}
+    \label{eq:nsc_base}
+    \overrightarrow{c} = \frac{\overrightarrow{C}}{\lambda_{u}}
+\end{equation}
+
+The change in this normalized sensitivity coefficient can then be used to determine the change in a reaction's sensitivity when a particular diluent is forced to be chemically inert.
+
+\begin{equation}
+    \label{eq:delta_nsc_inert}
+    \overrightarrow{\Delta c} = \overrightarrow{c}_{active} - \overrightarrow{c}_{inert}
+\end{equation}
+
+\section*{A Naive Approach: Multiplication Factor (mul)}
+
+In the unperturbed simulation, all multiplication factors are equal to 1, and we use the change in multiplication factor, or perturbation fraction, as a basis for our sensitivity coefficient $C_{mul}$,
+
+\begin{equation}
+    \label{eq:delta_k_mul}
+    \overrightarrow{\Delta k}_{mul} = 1 - \overrightarrow{f}
+\end{equation}
+\begin{equation}
+    \label{eq:delta_lambda}
+    \overrightarrow{\Delta \lambda} = \lambda_{u} - \overrightarrow{\lambda}_{p}
+\end{equation}
+\begin{equation}
+    \label{eq:sc_mul}
+    \overrightarrow{C}_{mul} = \frac{\overrightarrow{\Delta \lambda}}{\overrightarrow{\Delta k}_{mul}}
+\end{equation}
+
+where the subscripts $u$ and $p$ correspond to unperturbed and perturbed simulations.
+
+\section*{A More In-depth Approach: Relative Chemical Contribution (RCC)}
+
+Unlike the naive approach where we have a scalar value in hand, the more in-depth approach must contend with the full simulation time series.
+How do you get a scalar from a time series?
+You integrate it.
+So I'm going to integrate across the induction zone, i.e.\ from $t=0$ to $t=t_{ind}$.
+
+\begin{equation}
+    \label{eq:k_rcc_base}
+    \overrightarrow{k}_{RCC, base} = \int_0^{t_{ind}} \overrightarrow{\left [ \text{something} \right ]} dt
+\end{equation}
+
+What do I integrate?
+I don't want to use rate constants because I don't care about the constants, I care about what's actually happening, or, in other words, the \textit{effects} of the constants.
+Net production rate, $R$ ($kmol/m^{3}/s$), is something that gives us an idea of how much the current reaction is contributing to the chemical makeup of the next time step.
+I think magnitude is probably more important than direction here (i.e.\ how much the reaction is contributing to the state change is more important than whether it's forward or backward), so the absolute value of the net reaction rate seems like a good idea.
+
+\begin{equation}
+    \label{eq:k_rcc_net}
+    \overrightarrow{k}_{RCC, net} = \int_0^{t_{ind}} \left | \overrightarrow{R}_{net} \right | dt
+\end{equation}
+
+\noindent However, the rate by itself isn't important without the context of all of the reactions at a particular instant in time.
+What \textit{is} important is the \textit{relative} magnitude of chemical contribution of the reaction in question, so I probably want to divide by the sum of all of them at a given time step.
+
+\begin{equation}
+    \label{eq:k_rcc}
+    \overrightarrow{k}_{RCC} = \frac{1}{t_{ind}} \int_0^{t_{ind}} \frac{\left | \overrightarrow{R}_{net} \right |}{\sum_{j=0}^{N} \left | R_{net, j} \right |} dt
+\end{equation}
+
+\noindent where we have normalized by the induction time, making the coefficient unitless and more relevant for comparison between simulations, whose induction times will necessarily differ.
+
+So now I can get the change in integrated relative contribution between the perturbed and unperturbed state for a given equivalence ratio, diluent, and amount of dilution, and relate it to the corresponding change in cell size, $\Delta \lambda$, to get the sensitivity coefficient of the $i^{th}$ reaction, $C_{i, RCC}$.
+
+\begin{equation}
+    \label{eq:delta_k_rcc}
+\overrightarrow{\Delta k}_{RCC} = \overrightarrow{k}_{RCC, u} - \overrightarrow{k}_{RCC, p}
+\end{equation}
+\begin{equation}
+    \label{eq:sc_rcc}
+    \overrightarrow{C}_{RCC} = \frac{\overrightarrow{\Delta \lambda}}{\overrightarrow{\Delta k}_{RCC}}
+\end{equation}
+
+\end{document}

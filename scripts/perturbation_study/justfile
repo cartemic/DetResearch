@@ -1,0 +1,17 @@
+set fallback := true
+
+[private]
+default:
+    just --list
+
+[working-directory: 'writeup']
+build-pdf:
+    latexmk -pdf main.tex
+    mv main.pdf 'perturbation_study.pdf'
+
+build-plots:
+    poetry run python -m plots
+
+build:
+    @just build-plots
+    @just build-pdf
