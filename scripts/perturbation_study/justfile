@@ -5,9 +5,16 @@ default:
     just --list
 
 [working-directory: 'writeup']
+clean-tex:
+    @latexmk -C
+    @rm *.bbl
+
+
+[working-directory: 'writeup']
 build-pdf:
     latexmk -pdf main.tex
     mv main.pdf 'perturbation_study.pdf'
+    just clean-tex
 
 build-plots:
     poetry run python -m plots
