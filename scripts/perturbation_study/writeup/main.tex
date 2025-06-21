@@ -3,6 +3,9 @@
 \usepackage[margin=1in]{geometry}
 \usepackage{nopageno}
 \usepackage{parskip}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{mhchem}
 
 \title{\vspace{-4em}What is a sensitivity coefficient anyway?}
 \date{}
@@ -11,7 +14,8 @@
 
 \maketitle
 
-\section*{Introduction}
+\section{Introduction}
+\label{sec:introduction}
 
 Everyone has a scalar value, $k$, for chemical sensitivity.
 I do not have one.
@@ -24,7 +28,16 @@ Although this sounds straightforward, attempting to apply the same factor to all
 Therefore, it cannot be assumed that all perturbation factors are identical.
 
 There are a couple possible approaches that I could take to derive a sensitivity coefficient from this perturbation: a naive approach based on the multiplication factor applied to a given equation, or a more in-depth approach using the results of the multiplication factor's application.
-In both cases we begin by calculating a sensitivity coefficient $C$, which we then normalize by the unperturbed cell size (denoted by the subscript $u$) to nondimensionalize the sensitivity coefficient and allow it to be compared across conditions.
+In both cases we begin by calculating a sensitivity coefficient $C$, which is generally computed as
+
+\begin{equation}
+    \label{eq:sc_base}
+    \overrightarrow{C} = \frac{\lambda_{u} - \overrightarrow{\lambda}_{p}}{\overrightarrow{\Delta k}}
+\end{equation}
+
+\noindent where the subscripts $u$ and $p$ correspond to unperturbed and perturbed simulations, and $k$ corresponds to some per-reaction value which we use as a basis for calculating sensitivity.
+The derivation of $\overrightarrow{\Delta k}$ is discussed in sections~\ref{sec:mul_approach} and~\ref{sec:rcc_approach}.
+The coefficient is then normalized by the unperturbed cell size to nondimensionalize it, allowing it to be compared across conditions.
 
 \begin{equation}
     \label{eq:nsc_base}
@@ -38,7 +51,12 @@ The change in this normalized sensitivity coefficient can then be used to determ
     \overrightarrow{\Delta c} = \overrightarrow{c}_{active} - \overrightarrow{c}_{inert}
 \end{equation}
 
-\section*{A Naive Approach: Multiplication Factor (mul)}
+\section{Multiplication Factor (mul)}
+\label{sec:mul_approach}
+
+This section discusses the derivation and application of a cell size sensitivity coefficient calculated on the basis of the multiplication factor used as an input to perturb to each reaction pathway.
+
+\subsection{Derivation}\label{subsec:sec:mul_derivation}
 
 In the unperturbed simulation, all multiplication factors are equal to 1, and we use the change in multiplication factor, or perturbation fraction, as a basis for our sensitivity coefficient $C_{mul}$,
 
@@ -47,17 +65,39 @@ In the unperturbed simulation, all multiplication factors are equal to 1, and we
     \overrightarrow{\Delta k}_{mul} = 1 - \overrightarrow{f}
 \end{equation}
 \begin{equation}
-    \label{eq:delta_lambda}
-    \overrightarrow{\Delta \lambda} = \lambda_{u} - \overrightarrow{\lambda}_{p}
-\end{equation}
-\begin{equation}
     \label{eq:sc_mul}
     \overrightarrow{C}_{mul} = \frac{\overrightarrow{\Delta \lambda}}{\overrightarrow{\Delta k}_{mul}}
 \end{equation}
 
-where the subscripts $u$ and $p$ correspond to unperturbed and perturbed simulations.
+\subsection{Application}\label{subsec:mul_application}
 
-\section*{A More In-depth Approach: Relative Chemical Contribution (RCC)}
+Figures~\ref{fig:sc_mul} and~\ref{fig:nsc_mul} show non-normalized and normalized sensitivity coefficients using the multiplication factor as a basis.
+Cell sizes were simulated for a stoichiometric mixture of \ce{CH4}-\ce{N2O} at 300 K and 1 atm using the \texttt{gri30\_highT.yaml} mechanism using Cantera and SDToolbox.
+% todo: citations
+
+\begin{figure}[H]
+    \label{fig:sc_mul}
+    \centering
+    \includegraphics[width=3in]{images/coefficients/mul/CO2/non_normalized}
+    \includegraphics[width=3in]{images/coefficients/mul/N2/non_normalized}
+    \caption{Non-normalized naive sensitivity coefficients (eq. \ref{eq:sc_mul}).}
+\end{figure}
+
+\begin{figure}[H]
+    \label{fig:nsc_mul}
+    \centering
+    \includegraphics[width=3in]{images/coefficients/mul/CO2/non_normalized}
+    \includegraphics[width=3in]{images/coefficients/mul/N2/normalized}
+    \caption{Normalized naive sensitivity coefficients (eq. \ref{eq:nsc_base},~\ref{eq:sc_mul}).}
+\end{figure}
+
+\section{Relative Chemical Contribution (RCC)}
+\label{sec:rcc_approach}
+
+This section discusses the derivation and application of a cell size sensitivity coefficient calculated on the basis of the relative chemical contribution of each reaction pathway as a result of having its reaction rate scaled, after calculation, by a multiplication factor.
+
+\subsection{Derivation}
+\label{subsec:rcc_derivation}
 
 Unlike the naive approach where we have a scalar value in hand, the more in-depth approach must contend with the full simulation time series.
 How do you get a scalar from a time series?
@@ -99,5 +139,28 @@ So now I can get the change in integrated relative contribution between the pert
     \label{eq:sc_rcc}
     \overrightarrow{C}_{RCC} = \frac{\overrightarrow{\Delta \lambda}}{\overrightarrow{\Delta k}_{RCC}}
 \end{equation}
+
+\subsection{Application}
+\label{subsec:rcc_application}
+
+Figures~\ref{fig:sc_rcc} and~\ref{fig:nsc_rcc} show non-normalized and normalized sensitivity coefficients using the relative chemical contribution as a basis.
+Cell sizes were simulated for a stoichiometric mixture of \ce{CH4}-\ce{N2O} at 300 K and 1 atm using the \texttt{gri30\_highT.yaml} mechanism using Cantera and SDToolbox.
+% todo: citations
+
+\begin{figure}[H]
+    \label{fig:sc_rcc}
+    \centering
+    \includegraphics[width=3in]{images/coefficients/RCC/CO2/non_normalized}
+    \includegraphics[width=3in]{images/coefficients/RCC/N2/non_normalized}
+    \caption{Non-normalized RCC sensitivity coefficients (eq. \ref{eq:sc_rcc}).}
+\end{figure}
+
+\begin{figure}[H]
+    \label{fig:nsc_rcc}
+    \centering
+    \includegraphics[width=3in]{images/coefficients/RCC/CO2/non_normalized}
+    \includegraphics[width=3in]{images/coefficients/RCC/N2/normalized}
+    \caption{Normalized RCC sensitivity coefficients (eq. \ref{eq:nsc_base},~\ref{eq:sc_rcc}).}
+\end{figure}
 
 \end{document}
