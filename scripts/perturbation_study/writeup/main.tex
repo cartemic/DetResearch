@@ -6,8 +6,10 @@
 \usepackage{graphicx}
 \usepackage{float}
 \usepackage{mhchem}
+\usepackage{url}
 
-\title{\vspace{-4em}What is a sensitivity coefficient anyway?}
+\title{What is a sensitivity coefficient anyway?}
+\author{Mick Carter}
 \date{}
 
 \begin{document}
@@ -51,7 +53,7 @@ The change in this normalized sensitivity coefficient can then be used to determ
     \overrightarrow{\Delta c} = \overrightarrow{c}_{active} - \overrightarrow{c}_{inert}
 \end{equation}
 
-\section{Multiplication Factor (mul)}
+\section{Reaction Rate Multiplication Factor}
 \label{sec:mul_approach}
 
 This section discusses the derivation and application of a cell size sensitivity coefficient calculated on the basis of the multiplication factor used as an input to perturb to each reaction pathway.
@@ -72,8 +74,7 @@ In the unperturbed simulation, all multiplication factors are equal to 1, and we
 \subsection{Application}\label{subsec:mul_application}
 
 Figures~\ref{fig:sc_mul} and~\ref{fig:nsc_mul} show non-normalized and normalized sensitivity coefficients using the multiplication factor as a basis.
-Cell sizes were simulated for a stoichiometric mixture of \ce{CH4}-\ce{N2O} at 300 K and 1 atm using the \texttt{gri30\_highT.yaml} mechanism using Cantera and SDToolbox.
-% todo: citations
+Cell sizes were simulated for a stoichiometric mixture of \ce{CH4}-\ce{N2O} at 300 K and 1 atm using the \texttt{gri30\_highT.yaml} mechanism~\cite{gri3,caltech_mech_list} using Cantera~\cite{cantera} and SDToolbox~\cite{sdtoolbox}.
 
 \begin{figure}[H]
     \label{fig:sc_mul}
@@ -144,8 +145,7 @@ So now I can get the change in integrated relative contribution between the pert
 \label{subsec:rcc_application}
 
 Figures~\ref{fig:sc_rcc} and~\ref{fig:nsc_rcc} show non-normalized and normalized sensitivity coefficients using the relative chemical contribution as a basis.
-Cell sizes were simulated for a stoichiometric mixture of \ce{CH4}-\ce{N2O} at 300 K and 1 atm using the \texttt{gri30\_highT.yaml} mechanism using Cantera and SDToolbox.
-% todo: citations
+Cell sizes were simulated for a stoichiometric mixture of \ce{CH4}-\ce{N2O} at 300 K and 1 atm using the \texttt{gri30\_highT.yaml} mechanism~\cite{gri3,caltech_mech_list} using Cantera~\cite{cantera} and SDToolbox~\cite{sdtoolbox}.
 
 \begin{figure}[H]
     \label{fig:sc_rcc}
@@ -162,5 +162,8 @@ Cell sizes were simulated for a stoichiometric mixture of \ce{CH4}-\ce{N2O} at 3
     \includegraphics[width=3in]{images/coefficients/RCC/N2/normalized}
     \caption{Normalized RCC sensitivity coefficients (eq. \ref{eq:nsc_base},~\ref{eq:sc_rcc}).}
 \end{figure}
+
+\bibliography{sources}{}
+\bibliographystyle{IEEEtran}
 
 \end{document}
