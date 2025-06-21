@@ -142,7 +142,12 @@ def load_reactions(condition_ids: tuple[int, ...]) -> SimulationResults[Reaction
 
 def to_chemical_string(row: pd.Series) -> str:
     r_no = row["reaction_no"]
-    rxn = re.sub(CHEMICAL_REGEX, r"\1$_{\2}$", row["reaction"]).replace("<=>", "⟺")
+    rxn = (
+        re.sub(CHEMICAL_REGEX, r"\1$_{\2}$", row["reaction"])
+        .replace("<=>", "\u27fa")
+        .replace("=>", "\u27f9")
+        .replace("<=", "\u27f8")
+    )
     return f"{rxn} - [{r_no:03}]"
 
 
