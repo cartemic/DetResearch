@@ -1,22 +1,31 @@
+from dataclasses import dataclass
+from enum import Enum
+from functools import cached_property
+from pathlib import Path
+
 import seaborn as sns
 from matplotlib import pyplot as plt
 
 from scripts.perturbation_study import data
 
-COEFFICIENT_NAMES = {
-    # "c_mul": "Perturbation Fraction",
-    "c_RCC": "Relative Chemical Contribution",
-}
 
-NON_NORMALIZED_COEFFICIENT_EQUATIONS = {
-    "dl/dmul": 5,
-    "dl/dRCC": 10,
-}
+@dataclass
+class CoefficientData:
+    subscript: str
+    title: str
 
-NON_NORMALIZED_COEFFICIENT_NAMES = {
-    # "dl/dmul": "Perturbation Fraction",
-    "dl/dRCC": "Relative Chemical Contribution",
-}
+    @cached_property
+    def normalized_column(self) -> str:
+        return f"c_{self.subscript}"
+
+    @cached_property
+    def non_normalized_column(self) -> str:
+        return f"dl/d{self.subscript}"
+
+
+class Coefficients(Enum):
+    mul = CoefficientData(subscript="mul", title="Perturbation Fraction")
+    rcc = CoefficientData(subscript="RCC", title="Relative Chemical Contribution")
 
 
 def load_coefficient_data() -> data.NSCByDiluentDataframe:
@@ -39,29 +48,29 @@ def load_species_timeseries_data(data_column: data.SpeciesDataColumn) -> tuple[s
     )
 
 
-def plot_normalized_sensitivity_coefficients(plot_data: data.NSCByDiluentDataframe) -> None:
-    """
-    c (eq. 1, using eq. 5 or 10 as the basis)
-    """
+def plot_normalized_sensitivity_coefficients(
+    plot_data: data.NSCByDiluentDataframe,
+    with_title: bool,
+) -> dict[Path, plt.Figure]:
     diluent: str
+    figures = {}
     for diluent, grouped_data in plot_data.groupby("diluent"):
-        for target, target_title in COEFFICIENT_NAMES.items():
+        for coefficient in Coefficients:
+            column = coefficient.value.normalized_column
             diluent_fmt = pretty_species(diluent)
             grid = sns.catplot(
-                x=target,
+                x=column,
                 y="reaction",
                 hue="method",
                 hue_order=["active", "inert"],
                 col="dil_condition",
                 col_order=["low", "high"],
-                data=data.top_n_by_method(grouped_data, target, 10),
+                data=data.top_n_by_method(grouped_data, column, 10),
                 kind="bar",
                 orient="h",
                 sharey=False,
             )
             grid.despine()
-            grid.fig.suptitle(f"{target_title} Sensitivity ({diluent_fmt}) (eq. 1)", weight="bold")
-            grid.fig.subplots_adjust(top=0.875)
             grid.set_xlabels("Normalized Sensitivity Coefficient")
             grid.set_ylabels("Reaction")
             grid.legend.set_title(diluent_fmt)
@@ -69,30 +78,38 @@ def plot_normalized_sensitivity_coefficients(plot_data: data.NSCByDiluentDatafra
                 condition = ax.get_title().replace("dil_condition = ", "").capitalize()
                 ax.set_title(f"{condition} Dilution")
 
+            if with_title:
+                grid.fig.suptitle(f"{coefficient.value.title} Sensitivity ({diluent_fmt})", weight="bold")
+                grid.fig.subplots_adjust(top=0.875)
 
-def plot_inert_diffs(plot_data: data.NSCByDiluentDataframe) -> None:
-    """
-    delta c (eq. 2, using eq. 5 or 10 as the basis)
-    """
+            figures[Path(coefficient.value.subscript) / diluent / "normalized.png"] = grid.figure
+
+    return figures
+
+
+def plot_inert_diffs(
+    plot_data: data.NSCByDiluentDataframe,
+    with_title: bool,
+) -> dict[Path, plt.Figure]:
     diluent: str
+    figures = {}
     for diluent, grouped_data in plot_data.groupby("diluent"):
-        for target, target_title in COEFFICIENT_NAMES.items():
-            coefficient_subscript = target.replace("c_", "")
+        for coefficient in Coefficients:
             diluent_fmt = pretty_species(diluent)
+            column = coefficient.value.normalized_column
+            subscript = coefficient.value.subscript
             grid = sns.catplot(
-                x=target,
+                x=column,
                 y="reaction",
                 col="dil_condition",
                 col_order=["low", "high"],
-                data=data.top_n_inert_diffs(grouped_data, target, 10),
+                data=data.top_n_inert_diffs(grouped_data, column, 10),
                 kind="bar",
                 orient="h",
                 sharey=False,
             )
             grid.despine()
-            grid.fig.suptitle(f"Change in {target_title} Sensitivity ({diluent_fmt}) (eq. 2)", weight="bold")
-            grid.fig.subplots_adjust(top=0.875)
-            grid.set_xlabels(f"$c_{{s,active,{coefficient_subscript}}} - c_{{s,inert,{coefficient_subscript}}}$")
+            grid.set_xlabels(f"$c_{{active,{subscript}}} - c_{{inert,{subscript}}}$")
             grid.set_ylabels("Reaction")
             for ax in grid.axes.flatten():
                 condition = ax.get_title().replace("dil_condition = ", "").capitalize()
@@ -100,41 +117,56 @@ def plot_inert_diffs(plot_data: data.NSCByDiluentDataframe) -> None:
                 ax.grid(alpha=0.5)
                 ax.set_axisbelow(True)
 
+            if with_title:
+                grid.fig.suptitle(f"Change in {coefficient.value.title} Sensitivity ({diluent_fmt})", weight="bold")
+                grid.fig.subplots_adjust(top=0.875)
+
+            figures[Path(coefficient.value.subscript) / diluent / "inert_diffs.png"] = grid.figure
+
+    return figures
+
 
 def pretty_species(diluent: str) -> str:
     return f"${diluent.replace('2', '_{2}')}$"
 
 
-def plot_non_normalized_coefficients(plot_data: data.NSCByDiluentDataframe) -> None:
-    """
-    C (eq 5, 10)
-    """
+def plot_non_normalized_coefficients(
+    plot_data: data.NSCByDiluentDataframe,
+    with_title: bool,
+) -> dict[Path, plt.Figure]:
     diluent: str
+    figures = {}
     for diluent, grouped_data in plot_data.groupby("diluent"):
-        for target, target_title in NON_NORMALIZED_COEFFICIENT_NAMES.items():
-            eq_no = NON_NORMALIZED_COEFFICIENT_EQUATIONS[target]
+        for coefficient in Coefficients:
             diluent_fmt = pretty_species(diluent)
+            column = coefficient.value.non_normalized_column
             grid = sns.catplot(
-                x=target,
+                x=column,
                 y="reaction",
                 hue="method",
                 hue_order=["active", "inert"],
                 col="dil_condition",
                 col_order=["low", "high"],
-                data=data.top_n_by_method(grouped_data, target, 10),
+                data=data.top_n_by_method(grouped_data, column, 10),
                 kind="bar",
                 orient="h",
                 sharey=False,
             )
             grid.despine()
-            grid.fig.suptitle(f"{target_title} Sensitivity ({diluent_fmt}) (eq. {eq_no})", weight="bold")
-            grid.fig.subplots_adjust(top=0.875)
+            if with_title:
+                grid.fig.suptitle(f"{coefficient.value.title} Sensitivity ({diluent_fmt})", weight="bold")
+                grid.fig.subplots_adjust(top=0.875)
+
             grid.set_xlabels("Sensitivity Coefficient")
             grid.set_ylabels("Reaction")
             grid.legend.set_title(diluent_fmt)
             for ax in grid.axes.flatten():
                 condition = ax.get_title().replace("dil_condition = ", "").capitalize()
                 ax.set_title(f"{condition} Dilution")
+
+            figures[Path(coefficient.value.subscript) / diluent / "non_normalized.png"] = grid.figure
+
+    return figures
 
 
 def plot_diluent_species_timeseries_grid(
@@ -144,7 +176,7 @@ def plot_diluent_species_timeseries_grid(
     data_column: str,
     data_column_display: str,
     diluent_data: data.SpeciesTimeseriesDataframe,
-) -> None:
+) -> plt.Figure:
     method: str
     fig = plt.figure(figsize=(6, 6), layout="constrained")
     plot_row = fig.subfigures(2, 1, wspace=0.1)
@@ -169,6 +201,7 @@ def plot_diluent_species_timeseries_grid(
                 data_column_display=data_column_display if show_y_label else None,
                 show_legend=show_legend,
             )
+    return fig
 
 
 def plot_diluent_species_timeseries(
@@ -203,48 +236,80 @@ def plot_diluent_species_timeseries(
 
 
 def plot_all_species_timeseries(
-    time_basis_column: str,
-    time_basis_display: str,
     data_column: str,
     data_column_display: str,
     species_data: data.SpeciesTimeseriesDataframe,
-) -> None:
+) -> dict[Path, plt.Figure]:
     diluent: str
-    for diluent, diluent_data in species_data.groupby("diluent"):
-        plot_diluent_species_timeseries_grid(
-            diluent=diluent,
-            time_basis_column=time_basis_column,
-            time_basis_display=time_basis_display,
-            data_column=data_column,
-            data_column_display=data_column_display,
-            diluent_data=diluent_data,
-        )
-
-
-def main():
-    plot_data = load_coefficient_data()
-    data_column, species_data = load_species_timeseries_data("mole_frac")
-    data_column_display = "Mole Fraction"
-    minimum_progress = 0.9
-
-    plot_non_normalized_coefficients(plot_data)
-    plot_normalized_sensitivity_coefficients(plot_data)
-    # plot_inert_diffs(plot_data)
+    figures = {}
     time_basis = {
         "time": "Time (sec)",
         "progress": "Induction Progress",
     }
     for time_basis_column, time_basis_display in time_basis.items():
-        plot_all_species_timeseries(
-            time_basis_column=time_basis_column,
-            time_basis_display=time_basis_display,
-            data_column=data_column,
-            data_column_display=data_column_display,
-            species_data=species_data[species_data["progress"] >= minimum_progress],
-        )
+        for diluent, diluent_data in species_data.groupby("diluent"):
+            fig = plot_diluent_species_timeseries_grid(
+                diluent=diluent,
+                time_basis_column=time_basis_column,
+                time_basis_display=time_basis_display,
+                data_column=data_column,
+                data_column_display=data_column_display,
+                diluent_data=diluent_data,
+            )
+            figures[Path(time_basis_column) / f"{diluent}.png"] = fig
 
-    plt.show()
+    return figures
+
+
+def main(show: bool, save: bool):
+    with_title = not save
+
+    plot_data = load_coefficient_data()
+    data_column, species_data = load_species_timeseries_data("mole_frac")
+    data_column_display = "Mole Fraction"
+    minimum_progress = 0.9
+
+    non_normalized = plot_non_normalized_coefficients(plot_data, with_title)
+    normalized = plot_normalized_sensitivity_coefficients(plot_data, with_title)
+    species = plot_all_species_timeseries(
+        data_column=data_column,
+        data_column_display=data_column_display,
+        species_data=species_data[species_data["progress"] >= minimum_progress],
+    )
+    if save:
+        output_dir = Path(__file__).parent / "writeup" / "images"
+        coefficients_dir = output_dir / "coefficients"
+        timeseries_dir = output_dir / "timeseries"
+        if output_dir.exists():
+            rm_rf(output_dir)
+
+        for coefficient_plots in (normalized, non_normalized):
+            for pth, fig in coefficient_plots.items():
+                fig_path = coefficients_dir / pth
+                fig_path.parent.mkdir(parents=True, exist_ok=True)
+                fig.savefig(fig_path)
+
+        for pth, fig in species.items():
+            fig_path = timeseries_dir / pth
+            fig_path.parent.mkdir(parents=True, exist_ok=True)
+            fig.savefig(fig_path)
+
+
+    if show:
+        plt.show()
+
+
+def rm_rf(path: Path) -> None:
+    for thing in path.iterdir():
+        if thing.is_file():
+            thing.unlink()
+        else:
+            rm_rf(thing)
+            thing.rmdir()
 
 
 if __name__ == "__main__":
-    main()
+    main(
+        show=False,
+        save=True,
+    )
