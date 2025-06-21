@@ -7,7 +7,7 @@ default:
 [working-directory: 'writeup']
 clean-tex:
     @latexmk -C
-    @rm *.bbl
+    @rm *.bbl | true
 
 
 [working-directory: 'writeup']
