@@ -1,5 +1,6 @@
 import concurrent
 import datetime as dt
+import itertools
 import sys
 import traceback
 import zoneinfo
@@ -12,7 +13,7 @@ import cantera as ct
 from tqdm import tqdm
 
 from funcs.dir import MECH_DIR
-from funcs.simulation.cell_size import calculate_westbrook_only, CvConfig
+from funcs.simulation.cell_size import CvConfig, calculate_westbrook_only
 from funcs.simulation.thermo import diluted_species_dict, match_adiabatic_temp
 from sdtoolbox.output import clear_simulation_database
 from sdtoolbox.postshock import CJspeed
@@ -45,6 +46,7 @@ class SimulationInputs:
     dil_condition: str
     mech: str
     perturbation: Perturbation | None
+    species: set[str]
 
     def error_header(self) -> str:
         # noinspection PyTypeChecker
@@ -100,7 +102,7 @@ def simulate_single_condition(inputs: SimulationInputs) -> None:
         cj_speed=cj_speed,
         perturbed_reaction=perturbed_reaction,
         perturbation_fraction=perturbation_fraction,
-        spec_indices=[i for i, spec in enumerate(gas.species()) if spec.name in ("H", "OH", "NO", "CO2", "N2")],
+        spec_indices=[i for i, spec in enumerate(gas.species()) if spec.name in inputs.species],
         rxn_indices=list(range(len(gas.reactions()))) if perturbed_reaction is None else [perturbed_reaction],
         conninfo=CONN_INFO,
     )
@@ -165,7 +167,31 @@ def main() -> None:
         298: -0.025,
     }
 
-    equations_of_interest: list[int | None] = [None, *range(len(gas.reactions()))]
+    equations_to_track: list[int | None] = [None, *range(len(gas.reactions()))]
+    equations_in_top_5: set[int] = {
+        # N2 RCC high dilution
+        *(108, 88, 184, 41, 242),
+        # N2 RCC low dilution
+        *(289, 257, 184, 88, 242),
+        # CO2 RCC high dilution
+        *(154, 88, 257, 184, 242),
+        # CO2 RCC low dilution
+        *(154, 289, 88, 257, 184),
+        # N2 mul high dilution
+        *(157, 52, 158, 182, 184),
+        # N2 mul low dilution
+        *(157, 52, 158, 182, 184),
+        # CO2 mul high dilution
+        *(157, 52, 158, 182, 184),
+        # CO2 mul low dilution
+        *(157, 52, 158, 182, 184),
+    }
+    species_in_top_5: set[str] = set(
+        itertools.chain.from_iterable(
+            {*gas.reaction(idx).reactants.keys(), *gas.reaction(idx).products.keys()}
+            for idx in equations_in_top_5
+        )
+    )
     simulation_inputs = []
     co2_low = 0.1
     co2_high = 0.2
@@ -202,7 +228,7 @@ def main() -> None:
         ("N2i", n2_low, "low"),
         ("N2i", n2_high, "high"),
     ):
-        for rxn_no in equations_of_interest:
+        for rxn_no in equations_to_track:
             # these are finicky
             perturbation_fraction = rxn_pert_frac.get(rxn_no, -0.05)
             simulation_inputs.append(
@@ -214,6 +240,7 @@ def main() -> None:
                     perturbation=(
                         None if rxn_no is None else Perturbation(rxn_no=rxn_no, fraction=perturbation_fraction)
                     ),
+                    species={"H", "OH", "NO", "CO2", "N2"}.union(species_in_top_5)
                 )
             )
 

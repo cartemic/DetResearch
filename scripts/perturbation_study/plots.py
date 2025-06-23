@@ -43,7 +43,32 @@ def load_coefficient_data() -> data.NSCByDiluentDataframe:
 def load_species_timeseries_data(data_column: data.SpeciesDataColumn) -> tuple[str, data.SpeciesTimeseriesDataframe]:
     return data_column, data.load_species_timeseries(
         data_column=data_column,
-        species=("H", "OH"),
+        species=(
+            "C2H",
+            "C2H2",
+            "C2H5",
+            "C2H6",
+            "CH2",
+            "CH2(S)",
+            "CH3",
+            "CH3O",
+            "CH4",
+            "CO2",
+            "H",
+            "H2",
+            "H2O",
+            "H2O2",
+            "HCN",
+            "HCNN",
+            "HO2",
+            "N2",
+            "N2O",
+            "NH",
+            "NO",
+            "O",
+            "O2",
+            "OH",
+        ),
         dil_conditions=("low", "high"),
     )
 
@@ -177,30 +202,31 @@ def plot_diluent_species_timeseries_grid(
     data_column_display: str,
     diluent_data: data.SpeciesTimeseriesDataframe,
 ) -> plt.Figure:
-    method: str
+    # method: str
     fig = plt.figure(figsize=(6, 6), layout="constrained")
     plot_row = fig.subfigures(2, 1, wspace=0.1)
     for main_grid_row, (dil_condition, df_dil_condition) in enumerate(diluent_data.groupby("dil_condition")):
         # noinspection PyUnresolvedReferences
         plot_row[main_grid_row].suptitle(f"{dil_condition} dilution".title())
         # noinspection PyUnresolvedReferences
-        plot_col = plot_row[main_grid_row].subfigures(1, 2, hspace=0.1)
-        for dil_grid_col, (method, df_method) in enumerate(df_dil_condition.groupby("method")):
-            show_x_label = main_grid_row == 1
-            show_y_label = dil_grid_col == 0
-            show_legend = (main_grid_row == 0 and dil_grid_col == 0)
-            grid_fig = plot_col[dil_grid_col]
-            plot_diluent_species_timeseries(
-                fig=grid_fig,
-                diluent=diluent,
-                diluent_activity_type=method,
-                diluent_data=df_method,
-                time_basis_column=time_basis_column,
-                time_basis_display=time_basis_display if show_x_label else None,
-                data_column=data_column,
-                data_column_display=data_column_display if show_y_label else None,
-                show_legend=show_legend,
-            )
+        # plot_col = plot_row[main_grid_row].subfigures(1, 2, hspace=0.1)
+        # for dil_grid_col, (method, df_method) in enumerate(df_dil_condition.groupby("method")):
+        dil_grid_col = 0
+        show_x_label = main_grid_row == 1
+        show_y_label = dil_grid_col == 0
+        show_legend = (main_grid_row == 0 and dil_grid_col == 0)
+        grid_fig = plot_row[main_grid_row]
+        plot_diluent_species_timeseries(
+            fig=grid_fig,
+            diluent=diluent,
+            diluent_activity_type=dil_condition,
+            diluent_data=df_dil_condition,
+            time_basis_column=time_basis_column,
+            time_basis_display=time_basis_display if show_x_label else None,
+            data_column=data_column,
+            data_column_display=data_column_display if show_y_label else None,
+            show_legend=show_legend,
+        )
     return fig
 
 
@@ -215,7 +241,7 @@ def plot_diluent_species_timeseries(
     data_column_display: str | None,
     show_legend: bool = True,
 ) -> None:
-    fig.suptitle(f"{diluent_activity_type.title()} {pretty_species(diluent)}")
+    fig.suptitle(f"{diluent_activity_type.title()} {pretty_species(diluent)} Dilution")
     ax = fig.subplots(1, 1)
     sns.lineplot(
         diluent_data,
@@ -223,6 +249,7 @@ def plot_diluent_species_timeseries(
         y=data_column,
         ax=ax,
         hue="species",
+        style="method",
     )
     ax.set(yscale="log")
     ax.set(xlabel=time_basis_display, ylabel=data_column_display)
