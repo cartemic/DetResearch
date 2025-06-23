@@ -12,7 +12,7 @@ from scipy.integrate import simpson
 
 CONN_INFO = "postgresql://postgres@localhost:5432/perturbation_study"
 
-CHEMICAL_REGEX = re.compile(r"([A-Z])+(\d+)")
+CHEMICAL_REGEX = re.compile(r"([A-Z]+)(\d+)")
 
 T = TypeVar("T")
 
