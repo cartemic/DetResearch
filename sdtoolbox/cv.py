@@ -240,6 +240,7 @@ def cvsolve(
                     pressure=gas.P,
                     cp=gas.cp_mass,
                     cv=gas.cv_mass,
+                    heat_release_rate=gas.heat_release_rate,
                 ), commit=False)
             if spec_indices is not None:
                 for idx_spec in spec_indices:
@@ -275,6 +276,7 @@ def cvsolve(
                         net_rate_of_progress=this_net_rate_of_progress,
                         abs_rate_of_progress_rxn = np.abs(this_net_rate_of_progress),
                         abs_rate_of_progress_total = np.sum(np.abs(net_rates_of_progress)),
+                        heat_production_rate=gas.heat_production_rates[idx_rxn],
                     ), commit=False)
 
     if db is not None:

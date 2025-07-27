@@ -245,6 +245,11 @@ class BulkPropertiesData:
     pressure: float
     cp: float
     cv: float
+    heat_release_rate: float
+    """
+    HRR (W/m**3)
+    """
+
     temperature_gradient: Optional[float] = None
     velocity: Optional[float] = None
 
@@ -276,6 +281,7 @@ class BulkPropertiesTable(PostgresTable):
                 pressure DOUBLE PRECISION NOT NULL,
                 cp DOUBLE PRECISION NOT NULL,
                 cv DOUBLE PRECISION NOT NULL,
+                heat_release_rate DOUBLE PRECISION NOT NULL,
                 gamma DOUBLE PRECISION NOT NULL,
                 velocity DOUBLE PRECISION,
                 PRIMARY KEY (condition_id, time),
@@ -320,6 +326,7 @@ class BulkPropertiesTable(PostgresTable):
                 %(pressure)s,
                 %(cp)s,
                 %(cv)s,
+                %(heat_release_rate)s,
                 %(gamma)s,
                 %(velocity)s
             );
@@ -332,6 +339,7 @@ class BulkPropertiesTable(PostgresTable):
                 "pressure": data.pressure,
                 "cp": data.cp,
                 "cv": data.cv,
+                "heat_release_rate": data.heat_release_rate,
                 "gamma": data.gamma,
                 "velocity": data.velocity,
             },
@@ -353,6 +361,10 @@ class ReactionData:
     net_rate_of_progress: float
     abs_rate_of_progress_rxn: float
     abs_rate_of_progress_total: float
+    heat_production_rate: float
+    """
+    Single-reaction HRR (W/m**3)
+    """
 
 
 class ReactionTable(PostgresTable):
@@ -382,6 +394,7 @@ class ReactionTable(PostgresTable):
                 net_rate_of_progress DOUBLE PRECISION NOT NULL,
                 abs_rate_of_progress_rxn DOUBLE PRECISION NOT NULL,
                 abs_rate_of_progress_total DOUBLE PRECISION NOT NULL,
+                heat_production_rate DOUBLE PRECISION NOT NULL,
                 PRIMARY KEY (condition_id, reaction_no, time),
                 FOREIGN KEY(condition_id) REFERENCES {TableName.Conditions.value}(id)
                 ON UPDATE CASCADE ON DELETE CASCADE
@@ -427,7 +440,8 @@ class ReactionTable(PostgresTable):
                 %(rev_rate_of_progress)s,
                 %(net_rate_of_progress)s,
                 %(abs_rate_of_progress_rxn)s,
-                %(abs_rate_of_progress_total)s
+                %(abs_rate_of_progress_total)s,
+                %(heat_production_rate)s
             );
             """.encode(),
             {
@@ -442,6 +456,7 @@ class ReactionTable(PostgresTable):
                 "net_rate_of_progress": data.net_rate_of_progress,
                 "abs_rate_of_progress_rxn": data.abs_rate_of_progress_rxn,
                 "abs_rate_of_progress_total": data.abs_rate_of_progress_total,
+                "heat_production_rate": data.heat_production_rate,
             },
         )
         if commit:
