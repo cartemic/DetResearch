@@ -53,7 +53,7 @@ ipython = "^8.31.0"
 pytest = "^8.3.4"
 pytest-cov = "^6.0.0"
 deepdiff = "^8.1.1"
-ruff = "^0.8.6"
+ruff = "^0.12.7"
 
 [tool.poetry.group.sims.dependencies]
 rich = "^13.9.4"
@@ -79,11 +79,7 @@ lint.select = [
     "ERA",    # Prevent commented-out code
     "F",      # Pyflakes
     "I",      # Isort
-    # Note: ISC001 is left out because formatter runs may leave lines that look like "some" "thing", which is an ISC001
-    # violation. We still want to check for that, but it has been moved to the lint script in order to avoid unnecessary
-    # warnings.
-    "ISC002", # Avoid string concatenation goofs
-    "ISC003", # Avoid string concatenation goofs
+    "ISC", # Avoid string concatenation goofs
     "N",      # Enforce pep8 naming conventions
     "NPY",    # Numpy-specific lints
     "PD",     # Pandas-specific lints
