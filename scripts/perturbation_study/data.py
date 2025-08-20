@@ -470,6 +470,10 @@ def load_species_timeseries(
     species: tuple[str, ...],
     dil_conditions: tuple[str, ...],
 ) -> SpeciesTimeseriesDataframe:
+    if len(species) == 1:
+        # postgres does not love the trailing comma
+        species = f"('{species[0]}')"
+
     with psycopg.connect(CONN_INFO) as con, warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
         # direct substitution is bad sql practice, but it's fine here
