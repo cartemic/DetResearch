@@ -1,23 +1,23 @@
 [project]
-name = "perturbation-study"
+name = "final-manuscript"
 version = "0.1.0"
-requires-python = ">=3.12"
+requires-python = "==3.13.*"
 dependencies = [
+    "cantera>=3.1.0",
+    "file-utils",
     "funcs",
-    "file_utils",
     "matplotlib>=3.10.5",
-    "pandera[pandas]>=0.24.0",
-    "psycopg>=3.2.9",
-    "pypbomb",
-    "scipy>=1.16.1",
+    "numpy>=2.3.2",
+    "pandas>=2.3.1",
+    "rich>=14.1.0",
     "sdtoolbox",
     "seaborn>=0.13.2",
     "tqdm>=4.67.1",
     "typer>=0.16.1",
+    "uncertainties>=3.2.3",
 ]
 
 [tool.uv.sources]
-file_utils = { workspace = true }
 funcs = { workspace = true }
 sdtoolbox = { workspace = true }
-pypbomb = { path="../../../pypbomb" }
+file-utils = { workspace = true }

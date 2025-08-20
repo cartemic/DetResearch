@@ -50,5 +50,5 @@ def interpolate(
             )
             n2_new.loc[:, column] = fit(n2_new[time_column].to_numpy())
 
-        out = pd.concat((out, co2, n2_new))
+        out = pd.concat((co2, n2_new) if out.empty else (out, co2, n2_new))
     return out

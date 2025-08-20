@@ -1,8 +1,9 @@
+import warnings
 from typing import TYPE_CHECKING
 
 import seaborn as sns
 
-from scripts.final_manuscript.plotting.plots import formatting
+from plotting.plots import formatting
 
 if TYPE_CHECKING:
     from pandas import DataFrame
@@ -44,9 +45,11 @@ def __plot_gamma(
     return grid
 
 
-def plot(data: "DataFrame") -> None:
-    __plot_gamma(data, y="gamma", title="Specific Heat Ratios Through Induction Zone", hue="diluent")
+def plot(data: "DataFrame") -> sns.FacetGrid:
+    return __plot_gamma(data, y="gamma", title="Specific Heat Ratios Through Induction Zone", hue="diluent")
 
 
-def plot_ratios(data: "DataFrame") -> None:
-    __plot_gamma(data, y="gamma", title="CO$_{2}$/N$_{2}$ Gamma Ratio Through Induction Zone", color=formatting.BLACK)
+def plot_ratios(data: "DataFrame") -> sns.FacetGrid:
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)  # yea, we're not assigning hue
+        return __plot_gamma(data, y="gamma", title="CO$_{2}$/N$_{2}$ Gamma Ratio Through Induction Zone", color=formatting.BLACK)

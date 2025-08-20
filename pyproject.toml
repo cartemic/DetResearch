@@ -7,20 +7,24 @@ readme = "README.md"
 classifiers = ["Private :: Do not Upload"]
 requires-python = ">=3.13,<3.14"
 dependencies = [
+    "file_utils",
     "funcs",
     "sdtoolbox",
 ]
 
 [tool.uv.sources]
+file_utils = { workspace = true }
 funcs = { workspace = true }
 sdtoolbox = { workspace = true }
 
 [tool.uv.workspace]
 members = [
+    "file_utils",
     "funcs",
     "sdtoolbox",
     "scripts/perturbation_study",
     "scripts/measurement_paper",
+    "scripts/final_manuscript",
 ]
 
 [tool.ruff]

@@ -5,6 +5,8 @@ requires-python = "==3.13.*"
 [manifest]
 members = [
     "det-research-workspace",
+    "file-utils",
+    "final-manuscript",
     "funcs",
     "measurement-paper",
     "perturbation-study",
@@ -314,12 +316,14 @@ name = "det-research-workspace"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "file-utils" },
     { name = "funcs" },
     { name = "sdtoolbox" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "file-utils", editable = "file_utils" },
     { name = "funcs", editable = "funcs" },
     { name = "sdtoolbox", editable = "sdtoolbox" },
 ]
@@ -349,6 +353,46 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/20/b5/23b216d9d985a956623b6bd12d4086b60f0059b27799f23016af04a74ea1/fastjsonschema-2.21.2.tar.gz", hash = "sha256:b1eb43748041c880796cd077f1a07c3d94e93ae84bba5ed36800a33554ae05de", size = 374130, upload-time = "2025-08-14T18:49:36.666Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/cb/a8/20d0723294217e47de6d9e2e40fd4a9d2f7c4b6ef974babd482a59743694/fastjsonschema-2.21.2-py3-none-any.whl", hash = "sha256:1c797122d0a86c5cace2e54bf4e819c36223b552017172f32c5c024a6b77e463", size = 24024, upload-time = "2025-08-14T18:49:34.776Z" },
+]
+
+[[package]]
+name = "file-utils"
+version = "0.1.0"
+source = { editable = "file_utils" }
+
+[[package]]
+name = "final-manuscript"
+version = "0.1.0"
+source = { virtual = "scripts/final_manuscript" }
+dependencies = [
+    { name = "cantera" },
+    { name = "file-utils" },
+    { name = "funcs" },
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "rich" },
+    { name = "sdtoolbox" },
+    { name = "seaborn" },
+    { name = "tqdm" },
+    { name = "typer" },
+    { name = "uncertainties" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cantera", specifier = ">=3.1.0" },
+    { name = "file-utils", editable = "file_utils" },
+    { name = "funcs", editable = "funcs" },
+    { name = "matplotlib", specifier = ">=3.10.5" },
+    { name = "numpy", specifier = ">=2.3.2" },
+    { name = "pandas", specifier = ">=2.3.1" },
+    { name = "rich", specifier = ">=14.1.0" },
+    { name = "sdtoolbox", editable = "sdtoolbox" },
+    { name = "seaborn", specifier = ">=0.13.2" },
+    { name = "tqdm", specifier = ">=4.67.1" },
+    { name = "typer", specifier = ">=0.16.1" },
+    { name = "uncertainties", specifier = ">=3.2.3" },
 ]
 
 [[package]]
@@ -1111,6 +1155,7 @@ name = "perturbation-study"
 version = "0.1.0"
 source = { virtual = "scripts/perturbation_study" }
 dependencies = [
+    { name = "file-utils" },
     { name = "funcs" },
     { name = "matplotlib" },
     { name = "pandera", extra = ["pandas"] },
@@ -1125,6 +1170,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "file-utils", editable = "file_utils" },
     { name = "funcs", editable = "funcs" },
     { name = "matplotlib", specifier = ">=3.10.5" },
     { name = "pandera", extras = ["pandas"], specifier = ">=0.24.0" },

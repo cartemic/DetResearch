@@ -3,16 +3,17 @@ from typing import TYPE_CHECKING
 import numpy as np
 import seaborn as sns
 
-from scripts.final_manuscript.plotting.data import combine_inert_and_active
-from scripts.final_manuscript.plotting.plots import formatting
-from scripts.final_manuscript.plotting.plots.formatting import DiluentColor
+from plotting.data import combine_inert_and_active
+from plotting.plots import formatting
+from plotting.plots.formatting import DiluentColor
+from seaborn import FacetGrid
 
 if TYPE_CHECKING:
     from matplotlib.legend import Legend
     from pandas import DataFrame
 
 
-def vs_active(data: "DataFrame"):
+def vs_active(data: "DataFrame") -> sns.FacetGrid:
     col = "dil_mf_nom"
     x = "phi_nom"
     y = "cell_size"
@@ -48,9 +49,10 @@ def vs_active(data: "DataFrame"):
     grid.fig.suptitle(title)
     grid.fig.subplots_adjust(top=0.9)
     grid.despine()
+    return grid
 
 
-def vs_active_2(data: "DataFrame"):
+def vs_active_2(data: "DataFrame") -> FacetGrid:
     col = "dil_mf_nom"
     x = "phi_nom"
     y = "cell_size"
@@ -86,6 +88,7 @@ def vs_active_2(data: "DataFrame"):
     grid.fig.suptitle(title)
     grid.fig.subplots_adjust(top=0.9)
     grid.despine()
+    return grid
 
 
 # Matplotlib sometimes requires access to private members
@@ -103,7 +106,7 @@ def _format_legend(leg: "Legend") -> None:
             t.set_text(t._text.replace("2", "$_{2}$").replace("active", "Active").replace("inert", "Inert"))
 
 
-def vs_measured(active: "DataFrame", inert: "DataFrame") -> None:
+def vs_measured(active: "DataFrame", inert: "DataFrame") -> sns.FacetGrid:
     data = combine_inert_and_active(inert, active)
     col = "dil_mf_nom"
     x = "phi"
@@ -169,3 +172,4 @@ def vs_measured(active: "DataFrame", inert: "DataFrame") -> None:
     grid.fig.suptitle(title)
     grid.fig.subplots_adjust(top=0.9)
     grid.despine()
+    return grid

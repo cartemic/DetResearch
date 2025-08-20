@@ -2,8 +2,8 @@ from typing import TYPE_CHECKING
 
 import seaborn as sns
 
-from scripts.final_manuscript.plotting.plots import formatting
-from scripts.final_manuscript.plotting.plots.formatting import DiluentColor
+from plotting.plots import formatting
+from plotting.plots.formatting import DiluentColor
 
 if TYPE_CHECKING:
     from pandas import DataFrame

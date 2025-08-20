@@ -8,6 +8,7 @@ import data
 import seaborn as sns
 from matplotlib import pyplot as plt
 from typer import Option, Typer
+from file_utils import rm_rf
 
 
 @dataclass
@@ -55,6 +56,7 @@ def load_species_timeseries_data(
 def plot_normalized_sensitivity_coefficients(
     plot_data: data.NSCByDiluentDataframe,
     with_title: bool,
+    filetype: str,
 ) -> dict[Path, plt.Figure]:
     diluent: str
     figures = {}
@@ -86,7 +88,7 @@ def plot_normalized_sensitivity_coefficients(
                 grid.fig.suptitle(f"{coefficient.value.title} Sensitivity ({diluent_fmt})", weight="bold")
                 grid.fig.subplots_adjust(top=0.875)
 
-            figures[Path(coefficient.value.subscript) / f"{diluent}.png"] = grid.figure
+            figures[Path(coefficient.value.subscript) / f"{diluent}.{filetype}"] = grid.figure
 
     return figures
 
@@ -94,6 +96,7 @@ def plot_normalized_sensitivity_coefficients(
 def plot_inert_diffs(
     plot_data: data.NSCByDiluentDataframe,
     with_title: bool,
+    filetype: str,
 ) -> dict[Path, plt.Figure]:
     diluent: str
     figures = {}
@@ -125,7 +128,7 @@ def plot_inert_diffs(
                 grid.fig.suptitle(f"Change in {coefficient.value.title} Sensitivity ({diluent_fmt})", weight="bold")
                 grid.fig.subplots_adjust(top=0.875)
 
-            figures[Path(coefficient.value.subscript) / diluent / "inert_diffs.png"] = grid.figure
+            figures[Path(coefficient.value.subscript) / diluent / f"inert_diffs.{filetype}"] = grid.figure
 
     return figures
 
@@ -137,6 +140,7 @@ def pretty_species(diluent: str) -> str:
 def plot_non_normalized_coefficients(
     plot_data: data.NSCByDiluentDataframe,
     with_title: bool,
+    filetype: str,
 ) -> dict[Path, plt.Figure]:
     diluent: str
     figures = {}
@@ -168,7 +172,7 @@ def plot_non_normalized_coefficients(
                 condition = ax.get_title().replace("dil_condition = ", "").capitalize()
                 ax.set_title(f"{condition} Dilution")
 
-            figures[Path(coefficient.value.subscript) / diluent / "non_normalized.png"] = grid.figure
+            figures[Path(coefficient.value.subscript) / diluent / f"non_normalized.{filetype}"] = grid.figure
 
     return figures
 
@@ -245,6 +249,7 @@ def plot_all_species_timeseries(
     data_column: str,
     data_column_display: str,
     species_data: data.SpeciesTimeseriesDataframe,
+    filetype: str,
 ) -> dict[Path, plt.Figure]:
     diluent: str
     figures = {}
@@ -262,7 +267,7 @@ def plot_all_species_timeseries(
                 data_column_display=data_column_display,
                 diluent_data=diluent_data,
             )
-            figures[Path(time_basis_column) / f"{diluent}.png"] = fig
+            figures[Path(time_basis_column) / f"{diluent}.{filetype}"] = fig
 
     return figures
 
@@ -277,8 +282,10 @@ def main(
     species: Annotated[str, Option(help="Comma-separated list of species to plot")] = "H",
     out_dir: Annotated[
         Path,
-        Option(help="Directory where plots will be saved, WILL BE EMPTIED BEFORE SAVE"),
+        Option(help="Directory where plots will be saved"),
     ] = Path(__file__).parent / "writeup" / "images",
+    out_filetype: str = "png",
+    clean: bool = True,
 ):
     with_title = not save
     species_to_plot = tuple(species.split(","))
@@ -288,16 +295,17 @@ def main(
     data_column_display = "Mole Fraction"
     minimum_progress = 0
 
-    coefficient_plots = plot_normalized_sensitivity_coefficients(plot_data, with_title)
+    coefficient_plots = plot_normalized_sensitivity_coefficients(plot_data, with_title, out_filetype)
     species_plots = plot_all_species_timeseries(
         data_column=data_column,
         data_column_display=data_column_display,
         species_data=species_data[species_data["progress"] >= minimum_progress],
+        filetype=out_filetype,
     )
     if save:
         coefficients_dir = out_dir / "coefficients"
         timeseries_dir = out_dir / "timeseries"
-        if out_dir.exists():
+        if out_dir.exists() and clean:
             rm_rf(out_dir)
 
         for pth, fig in coefficient_plots.items():
@@ -312,15 +320,6 @@ def main(
 
     if show:
         plt.show()
-
-
-def rm_rf(path: Path) -> None:
-    for thing in path.iterdir():
-        if thing.is_file():
-            thing.unlink()
-        else:
-            rm_rf(thing)
-            thing.rmdir()
 
 
 if __name__ == "__main__":

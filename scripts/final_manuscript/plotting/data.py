@@ -1,3 +1,5 @@
+import warnings
+
 import psycopg
 
 import numpy as np
@@ -5,7 +7,7 @@ import pandas as pd
 from uncertainties import unumpy as unp
 
 from funcs.simulation.interpolate import interpolate
-from scripts.final_manuscript.plotting import directory
+from plotting import directory
 
 
 def load_cell_size_data() -> pd.DataFrame:
@@ -82,7 +84,8 @@ def calculate_simulated_measured_ratio(simulated: pd.DataFrame, measured: pd.Dat
 
 def load_cp_cv_sim_bulk_properties() -> pd.DataFrame:
     conn_str = "postgresql://postgres@localhost:5432/simulated_and_measured_2025-06-01_gri30_highT.yaml"
-    with psycopg.connect(conn_str) as con:
+    with psycopg.connect(conn_str) as con, warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)  # SQLAlchemy-only be damned, this works
         bulk_properties = pd.read_sql_query(
             """
             select
@@ -147,7 +150,8 @@ def calculate_cp_cv_gamma_ratios(data: pd.DataFrame) -> pd.DataFrame:
 
 def load_sim_conditions() -> pd.DataFrame:
     conn_str = "postgresql://postgres@localhost:5432/simulated_and_measured_2025-06-01_gri30_highT.yaml"
-    with psycopg.connect(conn_str) as con:
+    with psycopg.connect(conn_str) as con, warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)  # SQLAlchemy-only be damned, this works
         conditions = pd.read_sql_query(
             """
             select
@@ -205,7 +209,8 @@ def load_sim_conditions() -> pd.DataFrame:
 
 def load_sim_inert() -> pd.DataFrame:
     conn_str = "postgresql://postgres@localhost:5432/simulated_and_measured_2025-06-01_gri30_highT_inerts.yaml_inerts"
-    with psycopg.connect(conn_str) as con:
+    with psycopg.connect(conn_str) as con, warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)  # SQLAlchemy-only be damned, this works
         conditions = pd.read_sql_query(
             """
             select

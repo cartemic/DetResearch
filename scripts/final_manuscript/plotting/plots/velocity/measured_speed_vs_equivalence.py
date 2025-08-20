@@ -1,13 +1,14 @@
 from typing import TYPE_CHECKING
 
-from scripts.final_manuscript.plotting.plots import by_diluent
+from plotting.plots import by_diluent
 
 if TYPE_CHECKING:
     from pandas import DataFrame
+    from seaborn import FacetGrid
 
 
-def plot(data: "DataFrame"):
-    by_diluent.scatter_error(
+def plot(data: "DataFrame") -> "FacetGrid":
+    return by_diluent.scatter_error(
         data=data,
         x="phi_nom",
         y="wave_speed",
