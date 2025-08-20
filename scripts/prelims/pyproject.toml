@@ -1,0 +1,19 @@
+[project]
+name = "prelims"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "cantera>=3.1.0",
+    "funcs",
+    "matplotlib>=3.10.5",
+    "numpy>=2.3.2",
+    "palettable>=3.3.3",
+    "pandas>=2.3.1",
+    "pint>=0.24.4",
+    "pypbomb>=2.0.0",
+    "seaborn>=0.13.2",
+    "tqdm>=4.67.1",
+]
+
+[tool.uv.sources]
+funcs = { workspace = true }

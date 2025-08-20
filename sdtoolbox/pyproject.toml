@@ -1,0 +1,19 @@
+[project]
+name = "sdtoolbox"
+version = "0.1.0"
+description = "Add your description here"
+authors = [
+    { name = "Mick", email = "25802574+cartemic@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "backoff>=2.2.1",
+    "cantera>=3.1.0",
+    "numpy>=2.3.2",
+    "psycopg>=3.2.9",
+    "scipy>=1.16.1",
+]
+
+[build-system]
+requires = ["uv_build>=0.8.12,<0.9.0"]
+build-backend = "uv_build"

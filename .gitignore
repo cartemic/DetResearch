@@ -109,7 +109,7 @@ instance/
 .scrapy
 
 # Sphinx documentation
-docs/_build/
+**/_build/
 
 # PyBuilder
 target/
@@ -258,4 +258,4 @@ scripts/final_manuscript/plots/
 notes/
 
 db.sql
-
+*.png

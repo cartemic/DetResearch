@@ -4,11 +4,10 @@ from functools import cached_property
 from pathlib import Path
 from typing import Annotated
 
+import data
 import seaborn as sns
 from matplotlib import pyplot as plt
-from typer import Argument, Option, Typer
-
-from scripts.perturbation_study import data
+from typer import Option, Typer
 
 
 @dataclass

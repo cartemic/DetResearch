@@ -2020,8 +2020,9 @@ def main(
 
 
 if __name__ == "__main__":
-    remove_outliers_from_data = False
-    save_results = True
-    cell_size_estimator = np.median
-    main(remove_outliers_from_data, save_results, cell_size_estimator)
-    plt.show()
+    print("hello")
+    # remove_outliers_from_data = False
+    # save_results = True
+    # cell_size_estimator = np.median
+    # main(remove_outliers_from_data, save_results, cell_size_estimator)
+    # plt.show()
