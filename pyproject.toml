@@ -61,6 +61,10 @@ tqdm = "^4.67.1"
 backoff = "^2.2.1"
 psycopg = { version = "^3.2.4", extras = ["binary"] }
 
+
+[tool.poetry.group.scripts.dependencies]
+typer = "^0.16.1"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

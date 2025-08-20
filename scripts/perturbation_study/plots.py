@@ -2,9 +2,11 @@ from dataclasses import dataclass
 from enum import Enum
 from functools import cached_property
 from pathlib import Path
+from typing import Annotated
 
 import seaborn as sns
 from matplotlib import pyplot as plt
+from typer import Argument, Option, Typer
 
 from scripts.perturbation_study import data
 
@@ -40,39 +42,13 @@ def load_coefficient_data() -> data.NSCByDiluentDataframe:
     return coefficients_by_diluent
 
 
-def load_species_timeseries_data(data_column: data.SpeciesDataColumn) -> tuple[str, data.SpeciesTimeseriesDataframe]:
+def load_species_timeseries_data(
+    data_column: data.SpeciesDataColumn,
+    species: tuple[str, ...],
+) -> tuple[str, data.SpeciesTimeseriesDataframe]:
     return data_column, data.load_species_timeseries(
         data_column=data_column,
-        # RCC + mul
-        # species=(
-        #     "C2H",
-        #     "C2H2",
-        #     "C2H5",
-        #     "C2H6",
-        #     "CH2",
-        #     "CH2(S)",
-        #     "CH3",
-        #     "CH3O",
-        #     "CH4",
-        #     "CO2",
-        #     "H",
-        #     "H2",
-        #     "H2O",
-        #     "H2O2",
-        #     "HCN",
-        #     "HCNN",
-        #     "HO2",
-        #     "N2",
-        #     "N2O",
-        #     "NH",
-        #     "NO",
-        #     "O",
-        #     "O2",
-        #     "OH",
-        # ),
-        # Mul only
-        # species=("C2H5", "C2H6", "CH3", "CH4", "H", "H2", "N2", "N2O", "O", "OH"),
-        species=("H",),
+        species=species,
         dil_conditions=("low", "high"),
     )
 
@@ -218,7 +194,7 @@ def plot_diluent_species_timeseries_grid(
         dil_grid_col = 0
         show_x_label = main_grid_row == 1
         show_y_label = dil_grid_col == 0
-        show_legend = (main_grid_row == 0 and dil_grid_col == 0)
+        show_legend = main_grid_row == 0 and dil_grid_col == 0
         grid_fig = plot_row[main_grid_row]
         plot_diluent_species_timeseries(
             fig=grid_fig,
@@ -292,37 +268,48 @@ def plot_all_species_timeseries(
     return figures
 
 
-def main(show: bool, save: bool):
+app = Typer()
+
+
+@app.command()
+def main(
+    show: bool = False,
+    save: bool = True,
+    species: Annotated[str, Option(help="Comma-separated list of species to plot")] = "H",
+    out_dir: Annotated[
+        Path,
+        Option(help="Directory where plots will be saved, WILL BE EMPTIED BEFORE SAVE"),
+    ] = Path(__file__).parent / "writeup" / "images",
+):
     with_title = not save
+    species_to_plot = tuple(species.split(","))
 
     plot_data = load_coefficient_data()
-    data_column, species_data = load_species_timeseries_data("mole_frac")
+    data_column, species_data = load_species_timeseries_data("mole_frac", species_to_plot)
     data_column_display = "Mole Fraction"
     minimum_progress = 0
 
-    normalized = plot_normalized_sensitivity_coefficients(plot_data, with_title)
-    species = plot_all_species_timeseries(
+    coefficient_plots = plot_normalized_sensitivity_coefficients(plot_data, with_title)
+    species_plots = plot_all_species_timeseries(
         data_column=data_column,
         data_column_display=data_column_display,
         species_data=species_data[species_data["progress"] >= minimum_progress],
     )
     if save:
-        output_dir = Path(__file__).parent / "writeup" / "images"
-        coefficients_dir = output_dir / "coefficients"
-        timeseries_dir = output_dir / "timeseries"
-        if output_dir.exists():
-            rm_rf(output_dir)
+        coefficients_dir = out_dir / "coefficients"
+        timeseries_dir = out_dir / "timeseries"
+        if out_dir.exists():
+            rm_rf(out_dir)
 
-        for pth, fig in normalized.items():
+        for pth, fig in coefficient_plots.items():
             fig_path = coefficients_dir / pth
             fig_path.parent.mkdir(parents=True, exist_ok=True)
             fig.savefig(fig_path)
 
-        for pth, fig in species.items():
+        for pth, fig in species_plots.items():
             fig_path = timeseries_dir / pth
             fig_path.parent.mkdir(parents=True, exist_ok=True)
             fig.savefig(fig_path)
-
 
     if show:
         plt.show()
@@ -338,7 +325,4 @@ def rm_rf(path: Path) -> None:
 
 
 if __name__ == "__main__":
-    main(
-        show=False,
-        save=True,
-    )
+    app()
