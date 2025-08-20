@@ -43,32 +43,36 @@ def load_coefficient_data() -> data.NSCByDiluentDataframe:
 def load_species_timeseries_data(data_column: data.SpeciesDataColumn) -> tuple[str, data.SpeciesTimeseriesDataframe]:
     return data_column, data.load_species_timeseries(
         data_column=data_column,
-        species=(
-            "C2H",
-            "C2H2",
-            "C2H5",
-            "C2H6",
-            "CH2",
-            "CH2(S)",
-            "CH3",
-            "CH3O",
-            "CH4",
-            "CO2",
-            "H",
-            "H2",
-            "H2O",
-            "H2O2",
-            "HCN",
-            "HCNN",
-            "HO2",
-            "N2",
-            "N2O",
-            "NH",
-            "NO",
-            "O",
-            "O2",
-            "OH",
-        ),
+        # RCC + mul
+        # species=(
+        #     "C2H",
+        #     "C2H2",
+        #     "C2H5",
+        #     "C2H6",
+        #     "CH2",
+        #     "CH2(S)",
+        #     "CH3",
+        #     "CH3O",
+        #     "CH4",
+        #     "CO2",
+        #     "H",
+        #     "H2",
+        #     "H2O",
+        #     "H2O2",
+        #     "HCN",
+        #     "HCNN",
+        #     "HO2",
+        #     "N2",
+        #     "N2O",
+        #     "NH",
+        #     "NO",
+        #     "O",
+        #     "O2",
+        #     "OH",
+        # ),
+        # Mul only
+        # species=("C2H5", "C2H6", "CH3", "CH4", "H", "H2", "N2", "N2O", "O", "OH"),
+        species=("H",),
         dil_conditions=("low", "high"),
     )
 
@@ -96,7 +100,7 @@ def plot_normalized_sensitivity_coefficients(
                 sharey=False,
             )
             grid.despine()
-            grid.set_xlabels("Normalized Sensitivity Coefficient")
+            grid.set_xlabels("Sensitivity Coefficient")
             grid.set_ylabels("Reaction")
             grid.legend.set_title(diluent_fmt)
             for ax in grid.axes.flatten():
@@ -107,7 +111,7 @@ def plot_normalized_sensitivity_coefficients(
                 grid.fig.suptitle(f"{coefficient.value.title} Sensitivity ({diluent_fmt})", weight="bold")
                 grid.fig.subplots_adjust(top=0.875)
 
-            figures[Path(coefficient.value.subscript) / diluent / "normalized.png"] = grid.figure
+            figures[Path(coefficient.value.subscript) / f"{diluent}.png"] = grid.figure
 
     return figures
 
@@ -294,9 +298,8 @@ def main(show: bool, save: bool):
     plot_data = load_coefficient_data()
     data_column, species_data = load_species_timeseries_data("mole_frac")
     data_column_display = "Mole Fraction"
-    minimum_progress = 0.9
+    minimum_progress = 0
 
-    non_normalized = plot_non_normalized_coefficients(plot_data, with_title)
     normalized = plot_normalized_sensitivity_coefficients(plot_data, with_title)
     species = plot_all_species_timeseries(
         data_column=data_column,
@@ -310,11 +313,10 @@ def main(show: bool, save: bool):
         if output_dir.exists():
             rm_rf(output_dir)
 
-        for coefficient_plots in (normalized, non_normalized):
-            for pth, fig in coefficient_plots.items():
-                fig_path = coefficients_dir / pth
-                fig_path.parent.mkdir(parents=True, exist_ok=True)
-                fig.savefig(fig_path)
+        for pth, fig in normalized.items():
+            fig_path = coefficients_dir / pth
+            fig_path.parent.mkdir(parents=True, exist_ok=True)
+            fig.savefig(fig_path)
 
         for pth, fig in species.items():
             fig_path = timeseries_dir / pth
