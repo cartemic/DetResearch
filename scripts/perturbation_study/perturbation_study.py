@@ -169,14 +169,14 @@ def main() -> None:
 
     equations_to_track: list[int | None] = [None, *range(len(gas.reactions()))]
     equations_in_top_5: set[int] = {
-        # N2 RCC high dilution
-        *(108, 88, 184, 41, 242),
-        # N2 RCC low dilution
-        *(289, 257, 184, 88, 242),
-        # CO2 RCC high dilution
-        *(154, 88, 257, 184, 242),
-        # CO2 RCC low dilution
-        *(154, 289, 88, 257, 184),
+        # # N2 RCC high dilution
+        # *(108, 88, 184, 41, 242),
+        # # N2 RCC low dilution
+        # *(289, 257, 184, 88, 242),
+        # # CO2 RCC high dilution
+        # *(154, 88, 257, 184, 242),
+        # # CO2 RCC low dilution
+        # *(154, 289, 88, 257, 184),
         # N2 mul high dilution
         *(157, 52, 158, 182, 184),
         # N2 mul low dilution
