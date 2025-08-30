@@ -21,3 +21,8 @@ file_utils = { workspace = true }
 funcs = { workspace = true }
 sdtoolbox = { workspace = true }
 pypbomb = { path="../../../pypbomb" }
+
+[dependency-groups]
+eda = [
+    "jupyterlab>=4.4.6",
+]
