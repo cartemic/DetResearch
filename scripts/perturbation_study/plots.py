@@ -231,7 +231,7 @@ def plot_diluent_species_timeseries(
         x=time_basis_column,
         y=data_column,
         ax=ax,
-        hue="species",
+        hue="method",
         style="method",
     )
     ax.set(yscale="log")
@@ -293,7 +293,7 @@ def main(
     plot_data = load_coefficient_data()
     data_column, species_data = load_species_timeseries_data("mole_frac", species_to_plot)
     data_column_display = "Mole Fraction"
-    minimum_progress = 0
+    minimum_progress = 0.97
 
     coefficient_plots = plot_normalized_sensitivity_coefficients(plot_data, with_title, out_filetype)
     species_plots = plot_all_species_timeseries(
