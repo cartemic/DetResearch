@@ -1,11 +1,18 @@
 import os
+from pathlib import Path
+from typing import Annotated
 
 import numpy as np
 import pandas as pd
 import seaborn as sns
 from matplotlib import pyplot as plt
 
-from scripts.final_manuscript.plot_settings import PlotKind, set_palette, set_style
+from plot_settings import PlotKind, set_palette, set_style
+from typer import Option, Typer
+
+from file_utils import rm_rf
+
+app = Typer()
 
 SCRIPT_DIR = os.path.dirname(__file__)
 # CELL_SIZE_DATA_PATH = os.path.join(
@@ -15,9 +22,9 @@ SCRIPT_DIR = os.path.dirname(__file__)
 #     os.path.dirname(SCRIPT_DIR), "simulation_measurement_comparison", "simulated_and_measured_mevel2015.h5"
 # )
 CELL_SIZE_DATA_PATH = os.path.join(
-    os.path.dirname(SCRIPT_DIR), "simulation_measurement_comparison", "simulated_and_measured_inert_co2.h5"
+    os.path.dirname(SCRIPT_DIR), "simulation_measurement_comparison", "simulated_and_measured_2025-06-01_gri30_highT.h5"
 )
-CO2 = "CO2i"
+CO2 = "CO2"
 WAVE_SPEED_DATA_PATH = os.path.join(os.path.dirname(SCRIPT_DIR), "cj_study", "cj_tad_ss_results.csv")
 
 
@@ -74,7 +81,7 @@ def load_data():
     return cell_size_data, speed_data
 
 
-def plot_cell_size(data: pd.DataFrame, show_title: bool, save_plot: bool):
+def plot_cell_size(data: pd.DataFrame, show_title: bool, save_plot: bool, out_dir: Path, out_filetype: str):
     grid = sns.relplot(
         x="dil_mf_nom",
         y="cell_size",
@@ -139,7 +146,7 @@ def plot_cell_size(data: pd.DataFrame, show_title: bool, save_plot: bool):
     grid.tight_layout()
 
     if save_plot:
-        grid.fig.savefig("plots/simulated_vs_measured.pdf")
+        grid.fig.savefig(out_dir / f"simulated_vs_measured.{out_filetype}")
 
     ratio = (
         data[data["source"] == "simulation"].set_index(["dil_mf_nom", "phi_nom", "fuel", "oxidizer", "diluent"])[
@@ -165,10 +172,10 @@ def plot_cell_size(data: pd.DataFrame, show_title: bool, save_plot: bool):
     grid.tight_layout()
 
     if save_plot:
-        grid.fig.savefig("plots/simulated_measured_ratio.pdf")
+        grid.fig.savefig(out_dir / f"simulated_measured_ratio.{out_filetype}")
 
 
-def plot_wave_speed(data: pd.DataFrame, show_title: bool, save_plot: bool):
+def plot_wave_speed(data: pd.DataFrame, show_title: bool, save_plot: bool, out_dir: Path, out_filetype: str):
     data["measured_cj_ratio"] = data["wave_speed"] / data["cj_speed"]
     data["measured_mach"] = data["wave_speed"] / data["sound_speed"]
     hue_order = [CO2, "N2"]
@@ -185,7 +192,7 @@ def plot_wave_speed(data: pd.DataFrame, show_title: bool, save_plot: bool):
     grid.tight_layout()
 
     if save_plot:
-        grid.fig.savefig("plots/measured_cj_ratio.pdf")
+        grid.fig.savefig(out_dir / f"measured_cj_ratio.{out_filetype}")
 
     # Mach
     grid = sns.displot(data, x="measured_mach", hue="diluent", kind="kde", hue_order=hue_order)
@@ -200,13 +207,21 @@ def plot_wave_speed(data: pd.DataFrame, show_title: bool, save_plot: bool):
     grid.tight_layout()
 
     if save_plot:
-        grid.fig.savefig("plots/measured_mach.pdf")
+        grid.fig.savefig(out_dir / f"measured_mach.{out_filetype}")
 
 
-def main():
-    show_plot = True
-    save_plot = False
-    show_title = True
+@app.command()
+def main(
+    show: bool = False,
+    save: bool = True,
+    out_dir: Annotated[
+        Path,
+        Option(help="Directory where plots will be saved."),
+    ] = Path(__file__).parent / "plots",
+    out_filetype: str = "png",
+    clean: bool = True,
+):
+    show_title = not save
 
     set_palette(plot_kind=PlotKind.CONDITION)
     set_style()
@@ -218,13 +233,31 @@ def main():
         }
     )
 
-    cell_size_data, wave_speed_data = load_data()
-    plot_cell_size(data=cell_size_data, show_title=show_title, save_plot=save_plot)
-    plot_wave_speed(data=wave_speed_data, show_title=show_title, save_plot=save_plot)
+    if out_dir.exists() and clean:
+        rm_rf(out_dir)
 
-    if show_plot:
+    if save:
+        out_dir.mkdir(exist_ok=True, parents=True)
+
+    cell_size_data, wave_speed_data = load_data()
+    plot_cell_size(
+        data=cell_size_data,
+        show_title=show_title,
+        save_plot=save,
+        out_dir=out_dir,
+        out_filetype=out_filetype,
+    )
+    plot_wave_speed(
+        data=wave_speed_data,
+        show_title=show_title,
+        save_plot=save,
+        out_dir=out_dir,
+        out_filetype=out_filetype,
+    )
+
+    if show:
         plt.show()
 
 
 if __name__ == "__main__":
-    main()
+    app()
